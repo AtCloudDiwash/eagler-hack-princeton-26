@@ -15,7 +15,7 @@ hold the full research notes.
 | `parking_sufficiency` | Code Ch. 26, Art. VIII, §26-492 (Ord. 2013-208): restaurant (Class 7(e)) **10.0**, medical/dental clinic (Class 3(d)) **3.5** spaces per 1,000 sq ft GFA. In a market-based parking area: "Houston Code Ch. 26, §26-471 (market-based parking area)", for EaDo "... as amended by Ord. 2019-0540 (July 2019 expansion)" → no minimum | Austin parking note: minimums eliminated citywide Nov 2, 2023 (ADA accessible-space rules still apply) | "No local parking rule loaded; compared against the spaces your business needs." |
 | `ada_accessibility` | "2010 ADA Standards §404.2.3 (32 in. min clear width)" | same | same |
 | `kitchen_equipment` | "Restaurant build-out standards" | same | same |
-| `grease_interceptor` | "UPC §1014 Grease Interceptors; Austin Water pretreatment program" (registry text, not city-specific; see known issues) | same | same |
+| `grease_interceptor` | Jurisdiction `grease_code` (falls back to the generic "UPC §1014 Grease Interceptors (model code)") | UPC §1014; Austin Water pretreatment program | Houston Code Ch. 47, Art. XI (§47-512(b) quarterly pump-out); annual FOG generator permit |
 | `operatory_plumbing` | "Dental clinic build-out standards" | same | same |
 | `bathroom_count` | "2021 Uniform Plumbing Code with City of Houston amendments (effective Jan 2, 2024), Table 422.1 (simplified)" | "2024 Uniform Plumbing Code as amended by Austin (City Code Ch. 25-12), Table 422.1 (simplified)" | "Model plumbing code fixture table (IPC Table 2902.1 / UPC Table 422.1) (simplified)" |
 | `hvac_capacity` | "Rule of thumb: sq ft per ton by business type" | same | same |
