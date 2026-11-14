@@ -479,3 +479,24 @@ def test_live_boxes_dropped_when_ortho_falls_back(vexcel_live):
     observations, media = gather_observations(la_property(id="la-boxes"))
     assert media.aerial_source == "placeholder" and observations["building_footprint"].live
     assert all(ev.box is None for ev in observations.values() if ev.live)
+
+
+def test_hand_drawn_boxes_dropped_over_live_imagery(monkeypatch):
+    """Fixture boxes were drawn for the placeholder SVG; over the live ortho they would not line up."""
+    from app.providers import vexcel_provider as vp
+
+    live_box = [0.27, 0.25, 0.46, 0.42]
+    fake = {
+        "aerial_url": "/static/vexcel-cache/property-hou-01/ortho.jpg", "oblique_url": None,
+        "aerial_source": "vexcel-live", "aerial_attribution": "© Vexcel Imaging US, Inc.",
+        "observations": {
+            "visible_parking_count": {"value": 24, "confidence": 0.8, "note": "hand-entered", "box": [0.05, 0.6, 0.55, 0.3]},
+            "building_footprint": {"value": 19863, "note": "Snapshot of Vexcel property/extract on 2026-11-14", "box": live_box},
+        },
+        "live_observations": {},
+    }
+    monkeypatch.setattr(vp, "get_aerial", lambda prop: fake)
+    observations, media = gather_observations(costar_provider.get_property("property-hou-01"))
+    assert media.aerial_source == "vexcel-live"
+    assert observations["visible_parking_count"].box is None  # hand-drawn for the SVG -> dropped
+    assert observations["building_footprint"].box == live_box  # positioned on the live ortho -> kept

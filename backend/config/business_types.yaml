@@ -4,7 +4,7 @@
 # capacity_unit            what the user counts ("40 seats", "4 chairs")
 # sqft_per_capacity_unit   rough space need used for the size filter
 # staff                    occupant load = capacity * occupants_per_capacity_unit + staff
-# parking_per_capacity_unit  used only when the user doesn't state a parking number (business guideline, not code)
+# parking_per_capacity_unit  used only when the user states no parking number AND the city sets no minimum (business guideline, not code)
 # restrooms                fixture rule; separate facilities above `single_user_max_occupants`
 # sprinkler_required_if    IBC §903.2 trigger for this occupancy (omit = not triggered by size alone)
 

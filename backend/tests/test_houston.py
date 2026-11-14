@@ -408,3 +408,15 @@ def test_analysis_result_carries_listing_source_and_restrictions(client):
 
     assert AnalysisResult.model_fields["listing_source"].default is None  # older stored runs -> null
     assert AnalysisResult.model_fields["use_restrictions"].default is None
+
+
+def test_grease_check_cites_the_city_rule(client):
+    """The grease interceptor result cites the jurisdiction's grease_code, not another city's."""
+    body = {"business_profile": {"type": "restaurant", "details": "40 seats, kitchen needed", "city": "Houston", "state": "TX"},
+            "property_ids": ["property-hou-02"]}
+    houston = client.post("/api/v1/analyze", json=body).json()["results"][0]["compliance"]["grease_interceptor"]
+    assert "Ch. 47" in houston["source"] and "Austin" not in houston["source"]
+    body["business_profile"].update(city="Austin")
+    body["property_ids"] = ["property-123"]
+    austin = client.post("/api/v1/analyze", json=body).json()["results"][0]["compliance"]["grease_interceptor"]
+    assert "Austin Water" in austin["source"]

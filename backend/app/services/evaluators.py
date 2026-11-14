@@ -408,14 +408,18 @@ def _grease_fallback(ctx: EvalContext) -> list[CostNeed]:
 @evaluator("grease_checker", fallback=_grease_fallback)
 def grease_checker(ctx: EvalContext) -> EvalOutcome:
     evidence = ctx.evidence("grease_interceptor_present")
+    # Cite the city's own grease rule when the jurisdiction config has one (Austin, Houston, ...).
+    local = ctx.jurisdiction.get("grease_code")
+    source = " ".join(str(local).split()) if local else None
     if ctx.value("grease_interceptor_present"):
-        return EvalOutcome("PASS", "Grease interceptor in place.", evidence)
+        return EvalOutcome("PASS", "Grease interceptor in place.", evidence, source=source)
     return EvalOutcome(
         "RISK",
         "No grease interceptor observed; food service needs one before a health permit is issued.",
         evidence,
         [CostNeed("grease_interceptor", 1, "No interceptor observed")],
         ["Is there a grease interceptor on site, and when was it last pumped/inspected?"],
+        source=source,
     )
 
 

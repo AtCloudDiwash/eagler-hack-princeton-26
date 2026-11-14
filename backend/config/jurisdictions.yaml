@@ -52,6 +52,7 @@ austin-tx:
   plumbing_code: "2024 Uniform Plumbing Code as amended by Austin (City Code Ch. 25-12), Table 422.1"
   building_code: "International Building Code as adopted by Austin"
   health_code: "Texas Food Establishment Rules, 25 TAC Chapter 228"
+  grease_code: "UPC §1014 Grease Interceptors; Austin Water pretreatment program"
   zoning_source: "Austin Land Development Code §25-2-491 permitted-use table (simplified — verify per parcel)"
   # Base districts only; suffixes like -MU, -CO, -V are stripped before lookup.
   zoning:

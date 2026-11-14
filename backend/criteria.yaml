@@ -91,7 +91,7 @@
   required_inputs: ["grease_interceptor_present"]
   missing_data_policy: "assume_cost"
   evidence_required: false
-  source: "UPC §1014 Grease Interceptors; Austin Water pretreatment program"
+  source: "UPC §1014 Grease Interceptors (model code); local rule from the jurisdiction's grease_code"
   thresholds: {}
   business_types: ["restaurant"]
   applicable_jurisdictions: ["ALL"]

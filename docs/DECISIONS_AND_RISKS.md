@@ -110,22 +110,19 @@
 
 ## Known issues
 
-Found while writing the docs (not fixed; code owners to decide).
+Found while writing the docs.
 
-1. **Hand-made parking boxes drawn on live imagery** (open). The box rule drops live/snapshot boxes over
-   the placeholder SVG, but not the reverse: in live mode, the Houston fixtures' hand-made
-   `visible_parking_count` boxes (drawn for the 4:3 placeholder SVG) are drawn over the real 800×800
-   ortho, where they don't line up (hou-01, -02, -03, -04). Fix idea: drop non-snapshot fixture boxes
-   when `aerial_source == "vexcel-live"`.
-2. **Grease interceptor citation is Austin-specific** (open). `criteria.yaml` `grease_interceptor.source`
-   cites the "Austin Water pretreatment program" for all cities, including Houston, whose `grease_code`
-   (Code Ch. 47, Art. XI) is recorded in `jurisdictions.yaml` but not read.
-3. **Unused config** (open). `GEOCODING_API_KEY` and the `jurisdictions.yaml` keys `building_code`,
-   `health_code`, `grease_code` and `plumbing_fixture_note` are loaded but not read by any code.
-4. **Stale code comment** (open). `business_types.yaml` says `parking_per_capacity_unit` is "used only
-   when the user doesn't state a parking number"; it is now also skipped when the city sets a minimum.
-5. **`/health` vs `mode.parser`** (intended). `/health` reports the *configured* parser, while
+1. **Unused config** (open). `GEOCODING_API_KEY` and the `jurisdictions.yaml` keys `building_code`,
+   `health_code` and `plumbing_fixture_note` are loaded but not read by any code (`grease_code` is now
+   read by the grease interceptor check).
+2. **`/health` vs `mode.parser`** (intended). `/health` reports the *configured* parser, while
    `AnalyzeResponse.mode.parser` reports the parser *actually used*. Documented in API_CONTRACT.md.
+
+Fixed after the Houston docs pass: overlay boxes now follow the image they were drawn for (hand-made
+fixture boxes are dropped over live Vexcel imagery, snapshot/live boxes over the placeholder SVG); the
+grease interceptor check cites the city's own `grease_code` (Houston Code Ch. 47, Art. XI; Austin Water
+pretreatment program) and the criterion source is generic; the `business_types.yaml` parking comment
+mentions city minimums.
 
 Fixed since the last docs pass: the zoning fallback citation is now generic ("Local zoning / land-use
 rules for the property's city"), with the city citation from `jurisdictions.yaml`; the dental fallback

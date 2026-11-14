@@ -66,13 +66,14 @@ def gather_observations(prop: Property) -> tuple[dict[str, Evidence], Media]:
     observations["size_sqft"] = Evidence(key="size_sqft", value=prop.size_sqft, source="costar", note="Leasable area")
     for key, raw in interior["observations"].items():
         observations[key] = _to_evidence(key, raw, "matterport")
-    # Boxes of live / snapshot Vexcel facts are positioned on the live ortho image. Over the
-    # placeholder SVG they would not line up, so they are dropped there; hand-made fixture boxes
-    # (drawn for the placeholder) are kept.
+    # Boxes only line up with the image they were drawn for. Live / snapshot Vexcel facts are
+    # positioned on the live ortho image, so they are dropped over the placeholder SVG; hand-made
+    # fixture boxes were drawn for the placeholder SVG, so they are dropped over live imagery.
     placeholder = aerial["aerial_source"] == "placeholder"
     for key, raw in aerial["observations"].items():
         ev = _to_evidence(key, raw, "vexcel")
-        if placeholder and ev.box is not None and vexcel_provider.is_snapshot_fact(raw):
+        snapshot = vexcel_provider.is_snapshot_fact(raw)
+        if ev.box is not None and (placeholder == snapshot):
             ev = ev.model_copy(update={"box": None})
         observations[key] = ev
     for key, ev in aerial["live_observations"].items():
