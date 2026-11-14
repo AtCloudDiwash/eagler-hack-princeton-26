@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import uuid
 
@@ -19,6 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 app = FastAPI(title="Turnkey Matchmaker", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
 _running: set[asyncio.Task] = set()
+_TRANSPARENT_PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
 
 @app.on_event("startup")
@@ -41,7 +43,8 @@ def list_business_types() -> list[dict]:
 async def tiles(z: int, x: int, y: int) -> Response:
     data = await vexcel.tile(z, x, y)
     if data is None:
-        return Response(status_code=204, headers={"Cache-Control": "public, max-age=300"})
+        # Transparent PNG (not 204) so map libraries render nothing instead of logging image errors.
+        return Response(content=_TRANSPARENT_PNG, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
     return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 

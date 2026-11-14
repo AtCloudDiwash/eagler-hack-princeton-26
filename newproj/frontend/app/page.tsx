@@ -1,22 +1,27 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
+import { History, Radius, RotateCcw, Scale } from "lucide-react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { BusinessTypeInfo, Candidate, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
-import { type BaseLayer, LayerToggle } from "@/components/map/LayerToggle";
-import SearchBox from "@/components/discovery/SearchBox";
-import IntentBar from "@/components/discovery/IntentBar";
-import CandidateList from "@/components/discovery/CandidateList";
-import PropertyPanel, { AnalyzeBar } from "@/components/discovery/PropertyPanel";
+import { buildingColor, fmtDistance, fmtSqft } from "@/lib/format";
+import { heightFor, type LngLat } from "@/lib/geo";
+import { useMedia } from "@/lib/useMedia";
+import type { MapBuilding } from "@/components/map/TurnkeyMap";
+import { Brand, HealthDots, LayerToggle, Stepper } from "@/components/shell/Shell";
+import SearchDock from "@/components/discovery/SearchDock";
+import ScanOverlay from "@/components/discovery/ScanOverlay";
+import CandidateRail, { candidateTitle } from "@/components/discovery/CandidateRail";
+import PropertySheet from "@/components/discovery/PropertySheet";
 import HistoryDrawer from "@/components/discovery/HistoryDrawer";
-import HealthBadge, { Brand } from "@/components/HealthBadge";
-import { Spinner } from "@/components/ui/primitives";
 
-const DiscoveryMap = dynamic(() => import("@/components/map/DiscoveryMap"), {
+const TurnkeyMap = dynamic(() => import("@/components/map/TurnkeyMap"), {
   ssr: false,
-  loading: () => <div className="grid h-full place-items-center text-sm text-slate-500">Loading map…</div>,
+  loading: () => <div className="absolute inset-0 bg-ink-950" />,
 });
 
 const SESSION_KEY = "turnkey:discovery";
@@ -24,11 +29,13 @@ type Saved = { query: string; result: SearchResponse; selectedId: string | null;
 
 export default function DiscoveryPage() {
   const router = useRouter();
+  const desktop = useMedia("(min-width: 640px)");
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [fitKey, setFitKey] = useState<string | null>(null);
+  const [riseKey, setRiseKey] = useState<string | null>(null);
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Candidate | null>(null);
@@ -40,46 +47,44 @@ export default function DiscoveryPage() {
   const [neighborhood, setNeighborhood] = useState<Neighborhood | null>(null);
   const [nbLoading, setNbLoading] = useState(false);
   const [nbError, setNbError] = useState<string | null>(null);
+  const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null);
 
   const [requirements, setRequirements] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
-  const [layer, setLayer] = useState<BaseLayer>("aerial");
+  const [layer, setLayer] = useState<"aerial" | "map">("aerial");
+  const [tilt, setTilt] = useState(false);
   const [focus, setFocus] = useState<{ lat: number; lon: number; zoom?: number; key: string } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [sheetExpanded, setSheetExpanded] = useState(true);
   const businessTypes = useRef<BusinessTypeInfo[]>([]);
   const searchAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     api
       .businessTypes()
-      .then((b) => {
-        businessTypes.current = b;
-      })
+      .then((b) => (businessTypes.current = b))
       .catch(() => {});
   }, []);
-
-  const defaultRadius = useCallback((businessType: string | undefined) => {
-    return businessTypes.current.find((b) => b.id === businessType)?.default_radius_m ?? 400;
-  }, []);
+  const defaultRadius = useCallback((t: string | undefined) => businessTypes.current.find((b) => b.id === t)?.default_radius_m ?? 400, []);
 
   const selectCandidate = useCallback(
-    (c: Candidate, opts?: { radius?: number; fly?: boolean }) => {
+    (c: Candidate, opts?: { radius?: number }) => {
       setSelected(c);
       setDetail(null);
       setDetailError(null);
       setNeighborhood(null);
+      setVisibleGroups(null);
       setAnalyzeError(null);
       setRadius(opts?.radius ?? defaultRadius(result?.intent.business_type));
-      setSheetExpanded(true);
-      if (opts?.fly !== false) setFocus({ lat: c.lat, lon: c.lon, zoom: 17, key: `${c.id}-${Date.now()}` });
+      const r = opts?.radius ?? defaultRadius(result?.intent.business_type);
+      // Frame the building with its neighborhood ring in view.
+      setFocus({ lat: c.lat, lon: c.lon, zoom: Math.min(17.2, Math.max(14.6, 16.9 - Math.log2(r / 300))), key: `${c.id}-${Date.now()}` });
     },
     [defaultRadius, result?.intent.business_type],
   );
 
-  // Restore the last search when coming back from a dashboard ("Investigate another building").
+  // Restore the last search ("Investigate another building").
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY);
@@ -92,17 +97,16 @@ export default function DiscoveryPage() {
       if (c) {
         setSelected(c);
         setRadius(saved.radius ?? 400);
+        setFocus({ lat: c.lat, lon: c.lon, zoom: 17.2, key: `restore-${c.id}` });
       }
     } catch {
-      /* storage unavailable or corrupt */
+      /* storage unavailable */
     }
   }, []);
-
   useEffect(() => {
     if (!result) return;
     try {
-      const saved: Saved = { query, result, selectedId: selected?.id ?? null, radius };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(saved));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ query, result, selectedId: selected?.id ?? null, radius } satisfies Saved));
     } catch {
       /* ignore */
     }
@@ -121,8 +125,8 @@ export default function DiscoveryPage() {
       const r = await api.search(q, ctrl.signal);
       setResult(r);
       setFitKey(`${q}-${Date.now()}`);
-      if (r.candidates.length === 0 && r.location) setFocus({ lat: r.location.lat, lon: r.location.lon, zoom: 15, key: `loc-${Date.now()}` });
-      if (r.candidates.length === 1) selectCandidate(r.candidates[0], { radius: defaultRadius(r.intent.business_type) });
+      setRiseKey(`${q}-${Date.now()}`);
+      if (r.candidates.length === 0 && r.location) setFocus({ lat: r.location.lat, lon: r.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
     } catch (e) {
       if ((e as Error).name !== "AbortError") setSearchError((e as Error).message);
     } finally {
@@ -130,7 +134,6 @@ export default function DiscoveryPage() {
     }
   }
 
-  // Property detail for the selected candidate.
   useEffect(() => {
     if (!selected) return;
     const ctrl = new AbortController();
@@ -138,16 +141,11 @@ export default function DiscoveryPage() {
     api
       .property(selected.id, ctrl.signal)
       .then(setDetail)
-      .catch((e: Error) => {
-        if (e.name !== "AbortError") setDetailError(e.message);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setDetailLoading(false);
-      });
+      .catch((e: Error) => e.name !== "AbortError" && setDetailError(e.message))
+      .finally(() => !ctrl.signal.aborted && setDetailLoading(false));
     return () => ctrl.abort();
   }, [selected]);
 
-  // Neighborhood, debounced on radius changes.
   useEffect(() => {
     if (!selected) return;
     const ctrl = new AbortController();
@@ -157,12 +155,8 @@ export default function DiscoveryPage() {
       api
         .neighborhood(selected.id, radius, ctrl.signal)
         .then(setNeighborhood)
-        .catch((e: Error) => {
-          if (e.name !== "AbortError") setNbError(e.message);
-        })
-        .finally(() => {
-          if (!ctrl.signal.aborted) setNbLoading(false);
-        });
+        .catch((e: Error) => e.name !== "AbortError" && setNbError(e.message))
+        .finally(() => !ctrl.signal.aborted && setNbLoading(false));
     }, 450);
     return () => {
       clearTimeout(t);
@@ -175,13 +169,7 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const { id } = await api.startAnalysis({
-        query,
-        intent: result.intent,
-        property_id: selected.id,
-        radius_m: radius,
-        requirements: requirements.trim() || undefined,
-      });
+      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);
@@ -189,11 +177,28 @@ export default function DiscoveryPage() {
     }
   }
 
-  function clearAll() {
-    setResult(null);
-    setSelected(null);
+  /** Start over: clear the search, results, selection, filters and saved session; recenter the map. */
+  function resetAll() {
+    searchAbort.current?.abort();
+    setSearching(false);
     setQuery("");
+    setResult(null);
+    setSearchError(null);
+    setSelected(null);
+    setDetail(null);
+    setDetailError(null);
     setNeighborhood(null);
+    setNbError(null);
+    setVisibleGroups(null);
+    setHoveredId(null);
+    setRequirements("");
+    setAnalyzeError(null);
+    setAnalyzing(false);
+    setRadius(400);
+    setFitKey(null);
+    setRiseKey(null);
+    setTilt(false);
+    setFocus({ lat: 29.758, lon: -95.365, zoom: 14.2, key: `reset-${Date.now()}` });
     try {
       sessionStorage.removeItem(SESSION_KEY);
     } catch {
@@ -201,123 +206,209 @@ export default function DiscoveryPage() {
     }
   }
 
-  const candidates = result?.candidates ?? [];
+  const candidates = useMemo(() => result?.candidates ?? [], [result]);
+  const buildings = useMemo<MapBuilding[]>(() => {
+    const list: MapBuilding[] = candidates.map((c) => ({ id: c.id, lat: c.lat, lon: c.lon, footprint: c.footprint, height: heightFor(c.stories_est), kind: "candidate" }));
+    if (selected && neighborhood) {
+      for (const b of neighborhood.buildings) list.push({ id: `nb-${b.id}`, lat: b.lat, lon: b.lon, footprint: b.footprint, height: 7, kind: "neighbor", color: buildingColor(b.building_type) });
+    }
+    return list;
+  }, [candidates, selected, neighborhood]);
+
+  const fitPoints = useMemo<LngLat[]>(() => candidates.map((c) => [c.lon, c.lat]), [candidates]);
+  const hovered = candidates.find((c) => c.id === hoveredId && c.id !== selected?.id);
+  const padding = desktop
+    ? { top: 90, bottom: 130, left: selected ? 60 : 380, right: selected ? 440 : 60 }
+    : { top: 80, bottom: selected ? 420 : 260, left: 20, right: 20 };
+  const step = !result ? 0 : 1;
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-ink-950">
-      <div className="absolute inset-0">
-        <DiscoveryMap
-          layer={layer}
-          candidates={candidates}
-          selectedId={selected?.id ?? null}
-          hoveredId={hoveredId}
-          neighborhood={selected ? neighborhood : null}
-          radius={selected ? radius : null}
-          focus={focus}
-          fitKey={fitKey}
-          onSelect={(c) => selectCandidate(c, { fly: false })}
-          onHover={setHoveredId}
-        />
+      <TurnkeyMap
+        layer={layer}
+        tilt={tilt}
+        buildings={buildings}
+        places={selected ? neighborhood?.places : undefined}
+        visibleGroups={visibleGroups}
+        ring={selected ? { center: [selected.lon, selected.lat], radius, color: "#a78bfa" } : null}
+        ringKey={selected?.id}
+        parcel={selected ? (detail?.parcel ?? selected.parcel) : null}
+        riseKey={riseKey}
+        hoveredId={hoveredId}
+        selectedId={selected?.id ?? null}
+        onHover={setHoveredId}
+        onSelect={(id) => {
+          const c = candidates.find((x) => x.id === id);
+          if (c) selectCandidate(c);
+        }}
+        focus={focus}
+        fit={fitKey && !selected ? { points: fitPoints, key: fitKey } : null}
+        padding={padding}
+        markers={
+          hovered
+            ? [
+                {
+                  id: `hover-${hovered.id}`,
+                  lon: hovered.lon,
+                  lat: hovered.lat,
+                  node: (
+                    <motion.div initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: -14, scale: 1 }} className="glass-strong rounded-xl px-3 py-2 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-teal-300">{Math.round(hovered.match_score)}</span>
+                        <span className="max-w-[200px] truncate text-xs font-medium text-slate-100">{candidateTitle(hovered)}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {fmtSqft(hovered.area_sqft)} · click to inspect
+                      </div>
+                    </motion.div>
+                  ),
+                },
+              ]
+            : []
+        }
+      />
+
+      <ScanOverlay active={searching} />
+
+      {/* Top bar */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 p-4">
+        <div className="pointer-events-auto glass rounded-2xl px-3 py-2">
+          <Brand compact={!desktop} />
+        </div>
+        <div className="pointer-events-auto absolute left-4 top-[70px] sm:left-1/2 sm:top-4 sm:-translate-x-1/2">
+          <Stepper step={step} hint="below" />
+        </div>
+        <div className="pointer-events-auto flex flex-col items-end gap-2">
+          <div className="glass flex items-center gap-1 rounded-2xl p-1.5">
+            <span className="hidden px-2 xl:inline">
+              <HealthDots />
+            </span>
+            <button onClick={() => setHistoryOpen(true)} className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-white" title="Past analyses">
+              <History size={14} /> <span className="hidden lg:inline">History</span>
+            </button>
+            <Link href="/compare" className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-white" title="Compare analyses">
+              <Scale size={14} /> <span className="hidden lg:inline">Compare</span>
+            </Link>
+            <button
+              onClick={resetAll}
+              disabled={!result && !query && !selected && !searching}
+              className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+              title="Start over: clear the search, results and selection"
+            >
+              <RotateCcw size={14} /> <span className="hidden lg:inline">Reset</span>
+            </button>
+          </div>
+          <LayerToggle layer={layer} onChange={setLayer} tilt={tilt} onTilt={setTilt} />
+          <AnimatePresence>
+            {selected && (
+              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className={`glass w-56 rounded-xl px-3 py-2.5 ${desktop ? "mr-[424px]" : "hidden"}`}>
+                <div className="mb-1 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <Radius size={12} className="text-violet-300" /> Neighborhood
+                  </span>
+                  <span className="font-mono text-violet-200">{fmtDistance(radius)}</span>
+                </div>
+                <input type="range" min={100} max={1500} step={50} value={radius} onChange={(e) => setRadius(Number(e.target.value))} className="teal-range w-full" aria-label="Neighborhood radius in meters" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
-      {/* Panel: left column on desktop, bottom sheet on mobile */}
-      <section
-        className={`absolute inset-x-0 bottom-0 z-[1000] flex flex-col rounded-t-2xl border border-line bg-ink-900/95 shadow-2xl backdrop-blur transition-[max-height] sm:inset-y-3 sm:left-3 sm:right-auto sm:max-h-none sm:w-[440px] sm:rounded-2xl ${
-          sheetExpanded ? "max-h-[68dvh]" : "max-h-[9.5rem]"
-        }`}
-      >
-        <button onClick={() => setSheetExpanded((v) => !v)} className="mx-auto mt-1.5 h-1.5 w-10 rounded-full bg-slate-600 sm:hidden" aria-label="Toggle panel" />
-        <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-3">
-          <Brand />
-          <div className="flex items-center gap-1">
-            <button onClick={() => setHistoryOpen(true)} className="rounded-lg px-2 py-1 text-[11px] text-slate-400 hover:bg-ink-800 hover:text-teal-300">
-              History
-            </button>
-            {result && (
-              <button onClick={clearAll} className="rounded-lg px-2 py-1 text-[11px] text-slate-400 hover:bg-ink-800 hover:text-teal-300">
-                New search
-              </button>
+      {/* Candidates */}
+      <AnimatePresence>{result && !selected && !searching && <CandidateRail result={result} hoveredId={hoveredId} onHover={setHoveredId} onSelect={(c) => selectCandidate(c)} />}</AnimatePresence>
+
+      {/* Property sheet */}
+      <AnimatePresence>
+        {selected && (
+          <motion.section
+            key="sheet"
+            initial={desktop ? { opacity: 0, x: 40 } : { y: "100%" }}
+            animate={desktop ? { opacity: 1, x: 0 } : { y: 0 }}
+            exit={desktop ? { opacity: 0, x: 40 } : { y: "100%" }}
+            transition={{ type: "spring", stiffness: 260, damping: 30 }}
+            className={
+              desktop
+                ? "glass-strong pointer-events-auto absolute bottom-4 right-4 top-[132px] z-30 flex w-[408px] flex-col overflow-hidden rounded-2xl"
+                : "glass-strong pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex h-[76dvh] flex-col overflow-hidden rounded-t-3xl"
+            }
+          >
+            {!desktop && (
+              <div className="flex items-center justify-between px-4 pt-2">
+                <span className="mx-auto h-1 w-10 rounded-full bg-white/20" />
+              </div>
             )}
-          </div>
-        </header>
-        <div className="px-4 pb-2">
-          <HealthBadge />
-        </div>
-        <div className="px-4 pb-3">
-          <SearchBox query={query} setQuery={setQuery} onSearch={runSearch} loading={searching} showExamples={!result && !searching} />
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4">
-          {searching && (
-            <div className="flex items-center gap-2 rounded-xl border border-line bg-ink-850/60 p-3 text-xs text-slate-400">
-              <Spinner /> Understanding your request and searching Vexcel property data…
+            {!desktop && (
+              <div className="px-4 pt-2">
+                <div className="mb-1 flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <Radius size={12} className="text-violet-300" /> Neighborhood
+                  </span>
+                  <span className="font-mono text-violet-200">{fmtDistance(radius)}</span>
+                </div>
+                <input type="range" min={100} max={1500} step={50} value={radius} onChange={(e) => setRadius(Number(e.target.value))} className="teal-range w-full" aria-label="Neighborhood radius in meters" />
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+            <PropertySheet
+              candidate={selected}
+              detail={detail}
+              detailLoading={detailLoading}
+              detailError={detailError}
+              neighborhood={neighborhood}
+              neighborhoodLoading={nbLoading}
+              neighborhoodError={nbError}
+              radius={radius}
+              visibleGroups={visibleGroups}
+              setVisibleGroups={setVisibleGroups}
+              requirements={requirements}
+              setRequirements={setRequirements}
+              onAnalyze={analyze}
+              analyzing={analyzing}
+              analyzeError={analyzeError}
+              onBack={() => {
+                setSelected(null);
+                setNeighborhood(null);
+                setFitKey(`back-${Date.now()}`);
+              }}
+            />
             </div>
-          )}
-          {searchError && <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">{searchError}</p>}
-
-          {!result && !searching && !searchError && <Intro />}
-
-          {result && !searching && (
-            <>
-              <IntentBar result={result} />
-              {selected ? (
-                <PropertyPanel
-                  candidate={selected}
-                  detail={detail}
-                  detailLoading={detailLoading}
-                  detailError={detailError}
-                  radius={radius}
-                  setRadius={setRadius}
-                  neighborhood={neighborhood}
-                  neighborhoodLoading={nbLoading}
-                  neighborhoodError={nbError}
-                  onBack={() => {
-                    setSelected(null);
-                    setNeighborhood(null);
-                    setFitKey(`back-${Date.now()}`);
-                  }}
-                  resultCount={candidates.length}
-                />
-              ) : (
-                <CandidateList candidates={candidates} hoveredId={hoveredId} onHover={setHoveredId} onSelect={(c) => selectCandidate(c)} />
-              )}
-            </>
-          )}
-        </div>
-        {result && selected && !searching && (
-          <AnalyzeBar
-            requirements={requirements}
-            setRequirements={setRequirements}
-            onAnalyze={analyze}
-            analyzing={analyzing}
-            disabled={detailLoading}
-            error={analyzeError}
-          />
+          </motion.section>
         )}
-      </section>
+      </AnimatePresence>
 
-      <LayerToggle layer={layer} onChange={setLayer} className="absolute right-3 top-3 z-[1000]" />
+      {/* Bottom-center search */}
+      <AnimatePresence>
+        {(desktop || !selected) && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 ${desktop && selected ? "pr-[440px]" : ""}`}
+          >
+            <div className="w-full max-w-[640px]">
+              <AnimatePresence>
+                {searchError && (
+                  <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pointer-events-auto mb-2 rounded-xl bg-rose-500/15 px-3 py-2 text-center text-xs text-rose-200 ring-1 ring-rose-400/30">
+                    {searchError}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+              {!result && !searching && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-3 hidden text-center sm:block">
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-50 drop-shadow">
+                    Find the <span className="text-gradient">right building</span> for your business
+                  </h1>
+                  <p className="mt-1 text-sm text-slate-300/80 drop-shadow">AI agents check the building, the neighborhood, the rules and the cost.</p>
+                </motion.div>
+              )}
+              <SearchDock query={query} setQuery={setQuery} onSearch={runSearch} loading={searching} idle={!result && !searching} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <HistoryDrawer open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </main>
-  );
-}
-
-function Intro() {
-  const steps = [
-    ["Describe", "Tell us your business and city in plain words."],
-    ["Discover", "Matching buildings appear on Vexcel aerial imagery."],
-    ["Inspect", "Pick one to see its building data and surroundings."],
-    ["Decide", "AI agents investigate fit, compliance and cost — with evidence."],
-  ];
-  return (
-    <ol className="grid grid-cols-2 gap-2">
-      {steps.map(([t, d], i) => (
-        <li key={t} className="rounded-xl border border-line bg-ink-850/50 p-3">
-          <div className="text-[10px] font-bold text-teal-400">0{i + 1}</div>
-          <div className="text-xs font-semibold text-slate-200">{t}</div>
-          <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{d}</div>
-        </li>
-      ))}
-    </ol>
   );
 }

@@ -5,7 +5,7 @@ Turnkey Matchmaker has two parts:
 | Part | Tech | Port |
 |---|---|---|
 | `backend/` | Python 3.12, FastAPI, LangChain Deep Agents, SQLite | 8000 |
-| `frontend/` | Next.js 15, TypeScript, Tailwind | 3000 (Docker) / any for dev |
+| `frontend/` | Next.js 15, TypeScript, Tailwind, MapLibre GL, Motion | 3000 (Docker) / any for dev |
 
 All LLM decisions (query parsing, every Deep Agent step, the final recommendation) run through the
 **Codex CLI on your machine**, using **your own Codex / ChatGPT login**. The app stores no LLM API key:

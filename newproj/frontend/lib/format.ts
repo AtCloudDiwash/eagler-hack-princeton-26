@@ -32,7 +32,7 @@ export const VERDICT_STYLE: Record<Verdict, { label: string; text: string; bg: s
 
 export const STATUS_STYLE: Record<MetricStatus, { label: string; cls: string; color: string }> = {
   strong: { label: "Strong", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30", color: "#34d399" },
-  adequate: { label: "Adequate", cls: "bg-teal-500/15 text-teal-300 ring-teal-400/30", color: "#2dd4bf" },
+  adequate: { label: "Adequate", cls: "bg-teal-500/15 text-teal-300 ring-teal-400/30", color: "#c8e83a" },
   weak: { label: "Weak", cls: "bg-amber-500/15 text-amber-300 ring-amber-400/30", color: "#fbbf24" },
   blocker: { label: "Blocker", cls: "bg-rose-500/15 text-rose-300 ring-rose-400/30", color: "#fb7185" },
   unknown: { label: "Unknown", cls: "bg-slate-500/15 text-slate-300 ring-slate-400/30", color: "#64748b" },
@@ -52,15 +52,15 @@ export const SEVERITY_STYLE: Record<string, string> = {
 };
 
 export const AGENT_META: Record<AgentName, { label: string; short: string; color: string; icon: string; role: string }> = {
-  vexcel: { label: "Vexcel Agent", short: "Vexcel", color: "#22d3ee", icon: "🛰", role: "Building characteristics from aerial AI" },
+  vexcel: { label: "Vexcel Agent", short: "Vexcel", color: "#e2fb5c", icon: "🛰", role: "Building characteristics from aerial AI" },
   neighborhood: { label: "Neighborhood Agent", short: "Neighborhood", color: "#a78bfa", icon: "🏙", role: "Surroundings, demand & competition" },
   compliance: { label: "Compliance Agent", short: "Compliance", color: "#f472b6", icon: "⚖", role: "Permitted use, parking, codes" },
   cost: { label: "Cost Agent", short: "Cost", color: "#fbbf24", icon: "＄", role: "Rent, fit-out & feasibility" },
   matterport: { label: "Matterport Agent", short: "Matterport", color: "#60a5fa", icon: "◫", role: "Interior layout (optional)" },
-  engine: { label: "Orchestrator", short: "Engine", color: "#2dd4bf", icon: "◎", role: "Plans, validates, reconciles" },
+  engine: { label: "Orchestrator", short: "Engine", color: "#e4e4e7", icon: "◎", role: "Plans, validates, reconciles" },
 };
 
-const PALETTE = ["#22d3ee", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#60a5fa", "#fb923c", "#e879f9", "#a3e635", "#f87171", "#38bdf8", "#facc15"];
+const PALETTE = ["#e2fb5c", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#60a5fa", "#fb923c", "#e879f9", "#a3e635", "#f87171", "#38bdf8", "#facc15"];
 
 /** Stable color for an arbitrary label (place groups, building types from config). */
 export function colorFor(label: string | null | undefined): string {
@@ -71,7 +71,7 @@ export function colorFor(label: string | null | undefined): string {
 }
 
 const BUILDING_COLORS: Record<string, string> = {
-  commercial: "#2dd4bf",
+  commercial: "#8b9bb4",
   single_family: "#fbbf24",
   multiple_family: "#fb923c",
   condo_apartment: "#f472b6",

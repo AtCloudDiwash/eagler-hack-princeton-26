@@ -134,3 +134,13 @@ def test_missing_binary_is_a_clear_error():
 
     with pytest.raises(CodexError, match="not found"):
         ChatCodexCLI(binary="/nonexistent/codex").invoke("hi")
+
+
+def test_usage_limit_is_a_distinct_error(tmp_path):
+    from services.codex_chat import CodexUsageLimitError
+
+    fake = tmp_path / "codex"
+    fake.write_text("#!/bin/sh\necho 'ERROR: You have hit your usage limit. Try again at 8:14 PM.' >&2\nexit 1\n")
+    fake.chmod(0o755)
+    with pytest.raises(CodexUsageLimitError, match="usage limit"):
+        ChatCodexCLI(binary=str(fake)).invoke("hi")

@@ -25,6 +25,7 @@ from langchain_core.tools import StructuredTool
 
 from config import business, metrics_registry, settings
 from schemas import AgentFinding, AgentMetricAssessment, AgentOutput, AgentReport, Evidence, Finding
+from services.codex_chat import CodexUsageLimitError
 from services.llm import chat_model
 
 log = logging.getLogger("turnkey.agents")
@@ -139,7 +140,7 @@ def tracked_tool(ctx: RunContext, agent: str, budget: ToolBudget, source: str) -
                 return json.dumps({"error": str(err)})
             eid = ctx.evidence.add(agent, fn.__name__, result.get("source", source), result["summary"], result.get("data"), result.get("url"))
             budget.seen[key] = eid
-            ctx.emit(agent, "tool_result", f"{eid}: {result['summary']}", {"evidence_id": eid})
+            ctx.emit(agent, "tool_result", f"{eid}: {result['summary']}", {"evidence_id": eid, "tool": fn.__name__, "args": safe_args})
             payload = {"evidence_id": eid, "summary": result["summary"], **({"data": result["data"]} if result.get("data") is not None else {})}
             if result.get("guidance"):
                 payload["interpretation_notes"] = result["guidance"]
@@ -266,6 +267,8 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
         state = await asyncio.wait_for(drive(), timeout=settings.agent_timeout_s)
         messages = state.get("messages", [])
         output = state.get("structured_response")
+    except CodexUsageLimitError:
+        raise  # no point continuing: every other LLM call would fail the same way
     except asyncio.TimeoutError:
         error = f"Timed out after {settings.agent_timeout_s:.0f}s"
     except Exception as err:  # noqa: BLE001 - one agent failing must not sink the analysis
@@ -284,6 +287,8 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
             try:
                 output = await _extract_output(_transcript(messages), metrics, evidence)
                 status = "partial" if error else "completed"
+            except CodexUsageLimitError:
+                raise
             except Exception as err:  # noqa: BLE001
                 error = error or f"Report extraction failed: {err}"
         if output is None:

@@ -26,6 +26,8 @@ export type BusinessTypeInfo = { id: string; label: string; icon: string; defaul
 
 // ---------------------------------------------------------------- discovery
 
+export type Budget = { amount: number; period: "monthly" | "upfront" | "annual"; text: string };
+
 export type Intent = {
   business_type: string; // key in backend/config/business_types.yaml, e.g. "restaurant"
   business_label: string; // "Restaurant"
@@ -33,6 +35,7 @@ export type Intent = {
   seats: number | null;
   sqft: number | null;
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
+  budget: Budget | null; // stated in the query ("$8k/month", "budget of $300k"), else null
   parser: "llm" | "rules";
 };
 
@@ -178,6 +181,16 @@ export type Costs = {
   monthly_occupancy: { low: number; high: number } | null; // rent + NNN + amortized fit-out
   upfront: { low: number; high: number };
   assumptions: string[];
+  /** Estimate vs the user's budget, or vs a typical budget for this use + size when none was given. */
+  budget?: {
+    source: "user" | "typical";
+    period: "monthly" | "upfront" | "annual";
+    amount: number;
+    compare_low: number;
+    compare_high: number;
+    status: "within" | "partly" | "over";
+    note: string;
+  };
 };
 
 export type ComplianceItem = {

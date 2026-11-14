@@ -44,6 +44,7 @@ export default function DemoAnalysisPage() {
       seats: 40,
       sqft: null,
       requirements: [],
+      budget: null,
       parser: "rules",
     },
     property: {

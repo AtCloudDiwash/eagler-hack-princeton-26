@@ -194,6 +194,10 @@ class CodexError(RuntimeError):
     pass
 
 
+class CodexUsageLimitError(CodexError):
+    """The user's Codex plan is out of usage; retrying won't help until it resets."""
+
+
 class ChatCodexCLI(BaseChatModel):
     """Chat model that runs every completion through the local `codex exec`."""
 
@@ -299,7 +303,11 @@ class ChatCodexCLI(BaseChatModel):
         out = Path(tmp.name, "out.txt")
         text = out.read_text().strip() if out.exists() else ""
         if rc != 0 or not text:
-            tail = "\n".join(line for line in stderr.splitlines() if "WebSocket" not in line)[-600:]
+            lines = [line for line in stderr.splitlines() if "WebSocket" not in line]
+            limit = next((line for line in lines if "usage limit" in line.lower()), None)
+            if limit:
+                raise CodexUsageLimitError("Codex usage limit reached: " + limit.split("ERROR:", 1)[-1].strip())
+            tail = "\n".join(lines)[-600:]
             raise CodexError(f"codex exec failed (exit {rc}): {tail or 'no output'}")
         return text
 

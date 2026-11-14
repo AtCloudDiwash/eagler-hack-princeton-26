@@ -30,7 +30,7 @@ from services import costs as cost_engine
 from services import external, neighborhood, rules, scoring
 from services.geo import haversine_m
 from services.intent import target_sqft
-from services.codex_chat import default_model
+from services.codex_chat import CodexUsageLimitError, default_model
 from services.llm import chat_model
 from services.vexcel import key_facts, imagery_meta
 
@@ -178,7 +178,11 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
     est = _evidence_data(ctx, "estimate_costs")
     if est:
         eid, data = est[-1]
-        override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
+        if ctx.intent.get("budget"):
+            check = cost_engine.budget_check(data, ctx.intent["budget"], ctx.intent["business_type"])
+            override("occupancy_cost", cost_engine.budget_status(check), f"the estimate is '{check['status']}' your stated budget", [eid])
+        else:
+            override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
         if "conversion_risk" in ctx.business["metrics"]:
             override("conversion_risk", cost_engine.conversion_risk_status(data), "the cost engine's uncertainty share says otherwise", [eid])
 
@@ -344,6 +348,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
         phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
+        limit_hit = next((r for r in phase1 if isinstance(r, CodexUsageLimitError)), None)
+        if limit_hit:
+            raise limit_hit
         for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
             if isinstance(rep, BaseException):
                 log_.emit(name, "error", f"Crashed: {rep}")
@@ -364,6 +371,8 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
         try:
             reports["cost"] = await cost_agent.run(ctx)
+        except CodexUsageLimitError:
+            raise
         except Exception as err:  # noqa: BLE001
             reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
 
@@ -411,6 +420,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
 
         cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
+        cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
         headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public)
 
