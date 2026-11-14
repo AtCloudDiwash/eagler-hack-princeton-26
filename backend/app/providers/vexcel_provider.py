@@ -56,6 +56,10 @@ EARTH_RADIUS_M = 6_371_008.8
 
 CACHE_FILES = {"ortho": "ortho.jpg", "oblique": "oblique.jpg", "property": "property.json"}
 
+# Notes of fixture facts written by scripts/snapshot_vexcel.py start with this. Their boxes (like
+# live ones) are positioned on the live 800x800 ortho, not on the placeholder SVG.
+SNAPSHOT_NOTE_PREFIX = "Snapshot of Vexcel property/extract"
+
 GEOFENCE_REASON = "outside the Vexcel account geofence (403)"
 NO_DATA_REASON = "no Vexcel data for this location (404)"
 
@@ -72,6 +76,11 @@ _failures: dict[tuple[str, str, float, float], tuple[float, str]] = {}
 
 def _record(property_id: str) -> dict[str, Any]:
     return load_fixture("observations.json").get(property_id, {})
+
+
+def is_snapshot_fact(raw: Any) -> bool:
+    """True for a fixture fact copied from a live Vexcel response by scripts/snapshot_vexcel.py."""
+    return isinstance(raw, dict) and str(raw.get("note") or "").startswith(SNAPSHOT_NOTE_PREFIX)
 
 
 # --------------------------------------------------------------------------------------------
@@ -230,25 +239,37 @@ def normalize_property_extract(
     if units is not None:
         units = int(units)
         unit_score = _score(structure.get("roof-objects.ac-unit.score"))
-        add("rooftop_hvac_units", units, f"{units} rooftop AC unit(s) detected by Vexcel AI", unit_score)
+        add("rooftop_hvac_units", units, f"{units} rooftop AC unit(s) detected by Vexcel AI (whole building)", unit_score)
         add(
             "hvac_tons",
             _whole(units * tons_per_unit),
-            f"Estimated from {units} rooftop unit(s) at {tons_per_unit:g} tons each",
+            f"Estimated from {units} rooftop unit(s) at {tons_per_unit:g} tons each (whole building)",
             None if unit_score is None else round(unit_score * HVAC_ESTIMATE_FACTOR, 2),
         )
 
+    # hardscapes.area is parcel-level paving. Urban parcels often report only a few sq ft because
+    # their parking is a shared lot or the street, so fewer than one space's worth is treated as
+    # "unknown" (no estimate emitted) rather than as a count of 0 spaces.
     paved = _number(props.get("hardscapes.area"))
     if paved is not None:
         paved_sqft = int(round(paved))
-        add("paved_area_sqft", paved_sqft, f"Paved (hardscape) area on the parcel: {paved_sqft:,} sq ft")
-        if sqft_per_space > 0:
+        estimable = sqft_per_space > 0 and paved_sqft >= sqft_per_space
+        scope = "parcel paving only; excludes shared lots and street parking"
+        if estimable:
+            paved_note = f"Paved (hardscape) area on the parcel: {paved_sqft:,} sq ft ({scope})"
+        else:
+            paved_note = (
+                f"Paved (hardscape) area on the parcel: {paved_sqft:,} sq ft, less than one parking space "
+                f"({sqft_per_space:g} sq ft/space), so no space estimate is made ({scope})"
+            )
+        add("paved_area_sqft", paved_sqft, paved_note)
+        if estimable:
             spaces = int(paved_sqft // sqft_per_space)
             add(
                 "estimated_parking_spaces",
                 spaces,
                 f"Estimate from {paved_sqft:,} sq ft of paved area at {sqft_per_space:g} sq ft/space "
-                "(includes drive aisles and walkways); not a count of striped spaces",
+                f"(includes drive aisles and walkways; {scope}); not a count of striped spaces",
                 PARKING_ESTIMATE_CONFIDENCE,
             )
 
@@ -459,6 +480,24 @@ def fetch_live(prop: Property, force_refresh: bool = False) -> LiveFetch:
         except (OSError, ValueError) as exc:
             result.errors["property"] = f"unreadable cache ({type(exc).__name__})"
     return result
+
+
+def read_cached_property(prop: Property) -> tuple[dict[str, Any] | None, str | None]:
+    """(cached /property/extract JSON, fetched_at ISO string) for `prop`, without any network call.
+
+    (None, None) when there is no cache for the property's current coordinates or it is unreadable.
+    Lets scripts re-derive facts after a normalization change without re-calling the API."""
+    if prop.latitude is None or prop.longitude is None:
+        return None, None
+    folder = CACHE_DIR / _safe_id(prop.id)
+    meta = _read_meta(folder, prop)
+    if meta is None or "property" in (meta.get("errors") or {}):
+        return None, None
+    try:
+        data = json.loads((folder / CACHE_FILES["property"]).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    return (data if isinstance(data, dict) else None), meta.get("fetched_at")
 
 
 def _threshold(evaluator_name: str, key: str, default: float) -> float:

@@ -68,6 +68,8 @@ Array<{
   latitude: number | null; longitude: number | null;
   image_url: string | null /* e.g. "/static/properties/property-123.svg" */;
   matterport_url: string | null; available: boolean;
+  use_restrictions: string[] | null;  // recorded deed / lease use-restriction tags, e.g. ["no_food_service"]; null = listing says nothing, [] = none disclosed
+  listing_source: string | null;      // "costar" (live API) or "sample" (hand-made demo listing at a real address; rent/size/TI illustrative)
 }>
 ```
 
@@ -111,7 +113,8 @@ Response (`AnalyzeResponse`):
 Requirements = {
   business_type: string; business_label: string; city: string; state: string;
   capacity: number; capacity_unit: string; occupant_load: number;
-  parking_required: number; parking_source: "user" | "guideline";
+  parking_required: number;
+  parking_source: "user" | "guideline" | "jurisdiction";  // jurisdiction = city code minimum (jurisdictions.yaml parking_ratios)
   bathrooms_required: number;
   min_sqft: number | null; max_sqft: number | null; max_rent: number | null;
   needs_kitchen: boolean; required_hvac_tons: number; required_electrical_amps: number;
@@ -120,6 +123,8 @@ Requirements = {
 
 AnalysisResult = {
   property_id: string; address: string; rank: number;
+  listing_source: string | null;     // Property.listing_source ("sample" drives the "Sample listing" badge); null in older stored runs
+  use_restrictions: string[] | null; // Property.use_restrictions; null when not stated / older stored runs
   score: number;                     // criteria fit 0-100
   disqualified: boolean; disqualifiers: string[];   // criterion ids that hard-blocked
   weak_fit: boolean;                 // not disqualified but score < min_score; ranked after qualifying results, before disqualified
@@ -162,13 +167,41 @@ Evidence = {
 ```
 
 Overlay rule for the UI: evidence with `source: "vexcel"` and a `box` is drawn on `media.aerial_url`;
-`source: "matterport"` with a `box` is drawn on `media.floor_plan_url`.
+`source: "matterport"` with a `box` is drawn on `media.floor_plan_url`. Boxes of live Vexcel facts and of
+fixture facts snapshotted from live Vexcel (note starts "Snapshot of Vexcel property/extract") are
+positioned on the live 800×800 ortho, so the backend sends them with `box: null` when
+`media.aerial_source == "placeholder"`; hand-made fixture boxes drawn for the placeholder SVGs are kept.
 
-Vexcel facts (live mode, from `/property/extract`): `rooftop_hvac_units`, `hvac_tons` (units × tons per
-unit), `paved_area_sqft`, `estimated_parking_spaces`, `vehicles_count`, `roof_condition` (1–5, 5 = best),
+Vexcel facts (live mode, from `/property/extract`; mock mode replays a snapshot of them for the Houston
+listings): `rooftop_hvac_units` and `hvac_tons` (units × tons per unit) — both **whole building**,
+`paved_area_sqft`, `estimated_parking_spaces`, `vehicles_count`, `roof_condition` (1–5, 5 = best),
 `roof_material`, `roof_defects`, `building_footprint_sqft`, `building_type`. A `building_footprint`
 evidence item carries the footprint's `box` on the aerial image. The Vexcel API key never reaches the
 browser: the backend downloads imagery and serves it from `/static`.
+
+Parking estimate rule: `paved_area_sqft` is parcel-level paving (excludes shared lots and street parking).
+`estimated_parking_spaces` = floor(paved ÷ `sqft_per_space`, the `parking_sufficiency` threshold, 350) and
+is **omitted** when paving is under one space, so it never reads as "0 spaces"; parking is then UNKNOWN
+unless a `visible_parking_count` exists. `vehicles_count` appears in parking evidence as context only,
+never as a space count.
+
+Evidence keys added by evaluators (in `CriterionResult.evidence`):
+
+| key | source | criterion | meaning |
+|---|---|---|---|
+| `use_restrictions` | costar | zoning_use | restriction tags disclosed in the listing (`[]` = none disclosed) |
+| `zoning_mode` | jurisdiction | zoning_use | `"no zoning"` for a no-zoning city (e.g. Houston); note = the city's zoning note |
+| `use_restriction_rule` | jurisdiction | zoning_use | e.g. `"no_food_service: prohibits restaurant"` when a restriction blocks the use |
+| `zoning_rule` | jurisdiction | zoning_use | e.g. `"CS: permitted"` from the city's use table |
+| `business_required_parking` | requirements | parking_sufficiency | spaces this property must provide; note says why (user / city code / guideline) |
+| `code_required_parking` | jurisdiction | parking_sufficiency | city minimum for this property's size; note shows the math and citation (only where a minimum applies) |
+| `parking_rule` | jurisdiction | parking_sufficiency | the city's parking rule, e.g. `"10 per 1,000 sq ft GFA"`, `"no minimum (East Downtown (EaDo) market-based parking area)"`, `"no parking minimum"` (Austin); note = citation |
+| `hvac_tons_suite_share` | vexcel | hvac_capacity | building tons × min(1, `size_sqft` ÷ `building_footprint_sqft`) when the footprint is known and larger than the listing and `hvac_capacity.thresholds.prorate_by_footprint` is true; the criterion is evaluated against this value |
+
+The `parking_sufficiency` result's `source` is the jurisdiction's parking citation (e.g. Houston Code
+Ch. 26 §26-492, §26-471 in a market-based area, Austin's parking note); its `required_inputs` stay
+`["business_required_parking"]`, computed per property (city minimum for the property's size and
+location, never below a user-stated number).
 
 ### GET /api/v1/analyses?limit=20
 

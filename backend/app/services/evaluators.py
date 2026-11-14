@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..models import Criterion, Evidence, Property, Requirements, Status
+from .requirements_parser import property_parking_requirement
 
 
 @dataclass
@@ -234,37 +235,92 @@ def zoning_checker(ctx: EvalContext) -> EvalOutcome:
 # --------------------------------------------------------------------------------------------
 
 
+def _parking_basis(ctx: EvalContext, required: float) -> tuple[str, str, list[Evidence]]:
+    """(basis phrase for the spaces needed, citation for the result's `source`, rule evidence).
+
+    The requirement comes from the user, the city code (config/jurisdictions.yaml parking_ratios,
+    with market-based / exempt areas) or the business guideline; the phrase says which, and the
+    evidence cites the jurisdiction's parking rule (source "jurisdiction")."""
+    rule = property_parking_requirement(ctx.requirements, ctx.property, ctx.jurisdiction, ctx.business)[1]
+    city = ctx.jurisdiction.get("name", "This city")
+    cite = ctx.jurisdiction.get("parking_ratio_cite") or rule.source or "city code"
+    stated = ctx.requirements.parking_required
+    from_user = ctx.requirements.parking_source == "user"
+    general_note = " ".join(str(ctx.jurisdiction.get("parking_note") or "").split())
+
+    if rule.spaces is None:  # the city sets no minimum for this use: user number or guideline
+        basis = "you stated" if from_user else "business guideline, not a code minimum"
+        value = "no minimum loaded" if ctx.jurisdiction.get("parking_minimums") else "no parking minimum"
+        evidence = [ctx.derived("parking_rule", value, general_note or f"{city}: no parking minimum loaded", "jurisdiction")]
+        return basis, general_note or ctx.criterion.source, evidence
+
+    if rule.spaces == 0:  # exempt / market-based area
+        where = f"no {city} parking minimum in the {rule.exempt_area}"
+        basis = f"you stated; {where}" if from_user and required > 0 else where
+        evidence = [ctx.derived("parking_rule", f"no minimum ({rule.exempt_area})", rule.note, "jurisdiction")]
+        return basis, rule.source or general_note, evidence
+
+    ratio = f"{rule.ratio:g} per 1,000 sq ft"
+    if not from_user:
+        basis = f"{cite}: {ratio}"
+    elif rule.spaces > stated and required >= rule.spaces:  # the city minimum raised the user's number
+        basis = f"you stated {stated}; {cite} ({ratio}) raises it to {rule.spaces}"
+    else:
+        basis = f"you stated; {cite} minimum is {rule.spaces}"
+    evidence = [
+        ctx.derived("code_required_parking", rule.spaces, rule.note, "jurisdiction"),
+        ctx.derived("parking_rule", f"{ratio} GFA", rule.source or cite, "jurisdiction"),
+    ]
+    return basis, rule.source or general_note, evidence
+
+
+def _vehicles_context(ctx: EvalContext) -> list[Evidence]:
+    """Vehicles seen on the aerial image: context only, never used as a space count."""
+    return [
+        ev.model_copy(update={"note": f"{ev.note or 'Vehicles visible'} (context only, not a count of available spaces)"})
+        for ev in ctx.evidence("vehicles_count")
+    ]
+
+
 @evaluator("parking_checker")
 def parking_checker(ctx: EvalContext) -> EvalOutcome:
     """Visible (striped) parking count when known; otherwise the Vexcel estimate from paved area.
 
-    Missing both -> UNKNOWN (scored per the criterion's missing_data_policy)."""
+    The provider omits the estimate when parcel paving is under one space (urban parcels with shared
+    or street parking), so missing both -> UNKNOWN (scored per the criterion's missing_data_policy).
+    `vehicles_count` is shown as context only."""
     required = float(ctx.value("business_required_parking"))
     min_ratio = float(ctx.thresholds.get("min_ratio", 1.0))
-    basis = "you stated" if ctx.requirements.parking_source == "user" else "the business guideline"
-    note = ctx.jurisdiction.get("parking_note", "")
-    source = f"{ctx.criterion.source}. {note}".strip()
-    needed = [ctx.derived("business_required_parking", int(required), f"Spaces needed ({basis})")]
+    basis, source, rule_evidence = _parking_basis(ctx, required)
+    needed = [ctx.derived("business_required_parking", int(required), f"Spaces needed ({basis})")] + rule_evidence
+    context = _vehicles_context(ctx)
     if ctx.value("visible_parking_count") is not None:
         count, fact, label = float(ctx.value("visible_parking_count")), "visible_parking_count", "visible"
     elif ctx.value("estimated_parking_spaces") is not None:
         count, fact, label = float(ctx.value("estimated_parking_spaces")), "estimated_parking_spaces", "estimated"
     else:
+        paved = ctx.value("paved_area_sqft")
+        detail = (
+            f" Parcel paving is only {float(paved):,.0f} sq ft (less than one space), so parking is likely a shared lot or the street."
+            if paved is not None else ""
+        )
         return EvalOutcome(
             "UNKNOWN",
-            "Not enough data: could not confirm the number of parking spaces available.",
-            needed,
+            f"Not enough data: could not confirm the number of parking spaces available ({int(required)} needed: {basis}).{detail}",
+            ctx.evidence("paved_area_sqft") + context + needed,
             questions=["Can you confirm the number of parking spaces available?"],
             source=source,
         )
     facts = (fact, "paved_area_sqft") if label == "estimated" else (fact,)
-    evidence = ctx.evidence(*facts) + needed
+    evidence = ctx.evidence(*facts) + context + needed
     caveat = " (estimated from paved area, not a striped-space count)" if label == "estimated" else ""
-    if required <= 0 or count / required >= min_ratio:
-        return EvalOutcome("PASS", f"{count:g} spaces {label} vs {required:g} needed{caveat}.", evidence, source=source)
+    if required <= 0:
+        return EvalOutcome("PASS", f"No spaces required ({basis}); {count:g} spaces {label}{caveat}.", evidence, source=source)
+    if count / required >= min_ratio:
+        return EvalOutcome("PASS", f"{count:g} spaces {label} vs {required:g} needed ({basis}){caveat}.", evidence, source=source)
     return EvalOutcome(
         "RISK",
-        f"Only {count:g} spaces {label} vs {required:g} needed ({basis}){caveat}. {note}".strip(),
+        f"Only {count:g} spaces {label} vs {required:g} needed ({basis}){caveat}.",
         evidence,
         questions=[f"How many of the {count:g} {label} parking spaces are reserved for this unit, and is overflow parking available nearby?"],
         source=source,
@@ -418,25 +474,62 @@ def _hvac_fallback(ctx: EvalContext) -> list[CostNeed]:
     return [CostNeed("hvac_rtu", units, "Rooftop capacity unknown; new units budgeted")]
 
 
+def _hvac_suite_share(ctx: EvalContext, building_tons: float) -> Evidence | None:
+    """The listing's share of building-level rooftop tonnage, when `prorate_by_footprint` is on and
+    the Vexcel building footprint is known and larger than the listing:
+
+        tons x min(1, size_sqft / building_footprint_sqft)
+
+    None otherwise (fixture tonnage without a footprint is taken as the suite's own)."""
+    footprint = ctx.value("building_footprint_sqft")
+    size = ctx.property.size_sqft
+    if not ctx.thresholds.get("prorate_by_footprint") or not footprint or float(footprint) <= size:
+        return None
+    share = min(1.0, size / float(footprint))
+    units = ctx.value("rooftop_hvac_units")
+    what = _plural(int(units), "rooftop unit") if units is not None else f"{building_tons:g} tons of rooftop HVAC"
+    building = ctx.observations.get("hvac_tons")
+    return Evidence(
+        key="hvac_tons_suite_share",
+        value=round(building_tons * share, 1),
+        source="vexcel",
+        note=f"≈ your share of {what} ({float(footprint):,.0f} sq ft building, {size:,} sq ft suite): "
+        f"{building_tons:g} tons x {size:,} / {float(footprint):,.0f}",
+        live=bool(building and building.live),
+    )
+
+
 @evaluator("hvac_checker", fallback=_hvac_fallback)
 def hvac_checker(ctx: EvalContext) -> EvalOutcome:
-    have = float(ctx.value("hvac_tons"))
+    building_tons = float(ctx.value("hvac_tons"))
     need = _hvac_need(ctx)
     per_unit = float(ctx.thresholds.get("tons_per_unit", 5))
     per_ton = ctx.business.get("hvac_sqft_per_ton", 250)
-    # hvac_tons is a fixture observation or, live, Vexcel rooftop units x tons_per_unit.
-    evidence = ctx.evidence("hvac_tons", "rooftop_hvac_units") + [
-        ctx.derived("required_hvac_tons", need, f"{ctx.property.size_sqft} sq ft at {per_ton} sq ft/ton")
-    ]
+    # hvac_tons is a fixture observation or, live, Vexcel rooftop units x tons_per_unit (whole building).
+    evidence = ctx.evidence("hvac_tons", "rooftop_hvac_units")
+    share = _hvac_suite_share(ctx, building_tons)
+    if share is not None:
+        have = float(share.value)
+        evidence += ctx.evidence("building_footprint_sqft") + [share]
+        units = ctx.value("rooftop_hvac_units")
+        what = _plural(int(units), "rooftop unit") if units is not None else f"{building_tons:g} building tons"
+        capacity = (
+            f"≈{_plural(have, 'ton')} of rooftop HVAC (your share of {what}: "
+            f"{float(ctx.value('building_footprint_sqft')):,.0f} sq ft building, {ctx.property.size_sqft:,} sq ft suite)"
+        )
+    else:
+        have = building_tons
+        capacity = f"{have:g} tons of rooftop HVAC"
+    evidence.append(ctx.derived("required_hvac_tons", need, f"{ctx.property.size_sqft} sq ft at {per_ton} sq ft/ton"))
     if have >= need:
-        return EvalOutcome("PASS", f"{have:g} tons of rooftop HVAC vs {need:g} tons needed.", evidence)
-    units = math.ceil((need - have) / per_unit)
+        return EvalOutcome("PASS", f"{capacity} vs {need:g} tons needed.", evidence)
+    units_to_add = math.ceil(round(need - have, 1) / per_unit)
     return EvalOutcome(
         "RISK",
-        f"{have:g} tons of rooftop HVAC vs {need:g} tons needed; about {_plural(units, f'{per_unit:g}-ton unit')} to add.",
+        f"{capacity} vs {need:g} tons needed; about {_plural(units_to_add, f'{per_unit:g}-ton unit')} to add.",
         evidence,
-        [CostNeed("hvac_rtu", units, f"{need - have:g} ton shortfall")],
-        ["How old are the rooftop HVAC units, and who is responsible for replacement?"],
+        [CostNeed("hvac_rtu", units_to_add, f"{round(need - have, 1):g} ton shortfall")],
+        ["How old are the rooftop HVAC units, which of them serve this suite, and who is responsible for replacement?"],
     )
 
 

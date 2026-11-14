@@ -14,6 +14,8 @@
 #   parking_minimums       true when the city sets off-street parking minimums
 #   parking_ratios         zoning_use -> required spaces per 1,000 sq ft of gross floor area (GFA)
 #   parking_ratio_source   citation for parking_ratios
+#   parking_ratio_cite     short form of that citation used in result notes (optional; falls back
+#                          to parking_ratio_source)
 #   parking_exempt_areas   areas with no minimum (polygons as [lon, lat] rings, approximate)
 #   parking_note           sentence appended to parking results
 
@@ -33,6 +35,7 @@ default:
   parking_minimums: false
   parking_ratios: {}
   parking_ratio_source: null
+  parking_ratio_cite: null
   parking_exempt_areas: []
   parking_note: "No local parking rule loaded; compared against the spaces your business needs."
   plumbing_code: "Model plumbing code fixture table (IPC Table 2902.1 / UPC Table 422.1)"
@@ -112,6 +115,7 @@ houston-tx:
     restaurant: 10.0
     medical_office: 3.5
   parking_ratio_source: "Houston Code of Ordinances Ch. 26, Art. VIII, §26-492 (Ord. 2013-208)"
+  parking_ratio_cite: "Houston Code §26-492"
   # Market-based parking area: no minimum (§26-471, Ord. 2019-0540). The official boundary is a map;
   # the polygons below are deliberately CONSERVATIVE inner approximations (a property outside them is
   # treated as subject to minimums). Midtown is only partly in the area and its exact boundary was not

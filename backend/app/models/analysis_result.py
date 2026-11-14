@@ -77,6 +77,12 @@ class Media(BaseModel):
 class AnalysisResult(BaseModel):
     property_id: str
     address: str
+    listing_source: str | None = Field(
+        None, description="Property.listing_source, e.g. 'sample' (demo listing) or 'costar'; null for older runs"
+    )
+    use_restrictions: list[str] | None = Field(
+        None, description="Property.use_restrictions disclosed with the listing; null = not stated / older runs"
+    )
     rank: int
     score: float = Field(..., description="Criteria fit score, 0-100 (higher is better)")
     disqualified: bool

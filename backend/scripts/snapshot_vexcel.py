@@ -5,13 +5,18 @@ force_refresh, normalizes /property/extract, prints the facts and merges them in
 property's `aerial` block as {value, confidence, note, box?}. Imagery is NOT copied into the
 fixtures: it stays in the gitignored backend/static/vexcel-cache/ (Vexcel imagery is licensed).
 
-Safe to re-run: facts are replaced key by key, other fixture facts (e.g. visible_parking_count)
-are kept, and properties outside the account geofence / without data are skipped.
+Safe to re-run: facts are replaced key by key, snapshot facts the new normalization no longer
+emits (e.g. an estimated_parking_spaces below one space) are removed, other fixture facts (e.g.
+visible_parking_count) are kept, and properties outside the account geofence / without data are skipped.
+
+--from-cache re-normalizes the cached backend/static/vexcel-cache/<id>/property.json instead of
+calling the API (no key, no network): use it after changing `normalize_property_extract`.
 
 Usage (from backend/, needs VEXCEL_API_KEY in backend/.env):
     venv/bin/python scripts/snapshot_vexcel.py                       # all fixture properties
     venv/bin/python scripts/snapshot_vexcel.py --only property-901   # selected ids
     venv/bin/python scripts/snapshot_vexcel.py --dry-run             # print, don't write
+    venv/bin/python scripts/snapshot_vexcel.py --from-cache --only property-hou-01   # offline re-normalize
     venv/bin/python scripts/snapshot_vexcel.py --properties /tmp/p.json --observations /tmp/o.json
 """
 from __future__ import annotations
@@ -31,6 +36,7 @@ from app.models import Evidence, Property  # noqa: E402
 from app.providers import vexcel_provider  # noqa: E402
 
 FACT_GROUPS = ("interior", "aerial")
+SNAPSHOT_NOTE_PREFIX = vexcel_provider.SNAPSHOT_NOTE_PREFIX
 
 
 # --------------------------------------------------------------------------------------------
@@ -79,18 +85,19 @@ def snapshot_entry(ev: Evidence, on: str) -> dict[str, Any]:
     entry: dict[str, Any] = {"value": ev.value}
     if ev.confidence is not None:
         entry["confidence"] = ev.confidence
-    entry["note"] = f"Snapshot of Vexcel property/extract on {on}: {ev.note}" if ev.note else (
-        f"Snapshot of Vexcel property/extract on {on}"
-    )
+    entry["note"] = f"{SNAPSHOT_NOTE_PREFIX} on {on}: {ev.note}" if ev.note else f"{SNAPSHOT_NOTE_PREFIX} on {on}"
     if ev.box is not None:
         entry["box"] = ev.box
     return entry
 
 
 def merge_snapshot(observations: dict[str, Any], property_id: str, facts: dict[str, Evidence], on: str) -> None:
-    """Replace/insert `facts` in the property's aerial block; leave every other fact alone."""
+    """Replace/insert `facts` in the property's aerial block. Earlier snapshot facts that are not in
+    `facts` are dropped (the normalization no longer emits them); hand-written facts are left alone."""
     record = observations.setdefault(property_id, {})
     aerial = record.setdefault("aerial", {})
+    for key in [k for k, v in aerial.items() if k not in facts and vexcel_provider.is_snapshot_fact(v)]:
+        del aerial[key]
     for key, ev in facts.items():
         aerial[key] = snapshot_entry(ev, on)
 
@@ -105,27 +112,49 @@ def _load_properties(path: Path) -> list[Property]:
     return [Property(**p) for p in (raw if isinstance(raw, list) else raw.get("properties", []))]
 
 
+def _print_facts(facts: dict[str, Evidence]) -> None:
+    for key, ev in facts.items():
+        conf = f"  conf {ev.confidence:g}" if ev.confidence is not None else ""
+        box = f"  box {ev.box}" if ev.box else ""
+        print(f"    {key:26} {ev.value!r}{conf}{box}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--properties", type=Path, default=FIXTURES_DIR / "properties.json")
     parser.add_argument("--observations", type=Path, default=FIXTURES_DIR / "observations.json")
     parser.add_argument("--only", default="", help="comma-separated property ids")
     parser.add_argument("--dry-run", action="store_true", help="print facts without writing")
+    parser.add_argument("--from-cache", action="store_true",
+                        help="re-normalize the cached property.json (no API key, no network)")
     args = parser.parse_args(argv)
 
-    settings.force_mock = False  # this script is live-only, whatever USE_MOCK_DATA says
-    if settings.provider_mode(settings.vexcel_api_key) != "live":
-        print("VEXCEL_API_KEY is not set (backend/.env); nothing to snapshot.", file=sys.stderr)
-        return 2
+    if not args.from_cache:
+        settings.force_mock = False  # live snapshots ignore USE_MOCK_DATA
+        if settings.provider_mode(settings.vexcel_api_key) != "live":
+            print("VEXCEL_API_KEY is not set (backend/.env); nothing to snapshot.", file=sys.stderr)
+            return 2
     only = {s.strip() for s in args.only.split(",") if s.strip()}
     today = date.today().isoformat()
     snapshots: dict[str, dict[str, Evidence]] = {}
+    snapshot_dates: dict[str, str] = {}
 
     for prop in _load_properties(args.properties):
         if only and prop.id not in only:
             continue
         if prop.latitude is None or prop.longitude is None:
             print(f"SKIP {prop.id}: no coordinates")
+            continue
+        if args.from_cache:
+            data, fetched_at = vexcel_provider.read_cached_property(prop)
+            facts = vexcel_provider.live_facts(prop, data)
+            if not facts:
+                print(f"SKIP {prop.id}: no cached property data for its coordinates")
+                continue
+            snapshots[prop.id] = facts
+            snapshot_dates[prop.id] = (fetched_at or today)[:10]  # date of the original API call
+            print(f"{prop.id} ({prop.address}, {prop.city}, {prop.state}) - from cache ({snapshot_dates[prop.id]})")
+            _print_facts(facts)
             continue
         result = vexcel_provider.get_aerial(prop, force_refresh=True)
         errors = result["errors"]
@@ -140,10 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         facts = result["live_observations"]
         snapshots[prop.id] = facts
         print(f"{prop.id} ({prop.address}, {prop.city}, {prop.state}) - {imagery} cached")
-        for key, ev in facts.items():
-            conf = f"  conf {ev.confidence:g}" if ev.confidence is not None else ""
-            box = f"  box {ev.box}" if ev.box else ""
-            print(f"    {key:26} {ev.value!r}{conf}{box}")
+        _print_facts(facts)
 
     if not snapshots:
         print("No facts to write.")
@@ -154,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     # Re-read right before writing so concurrent edits to the fixture are not lost.
     observations = json.loads(args.observations.read_text(encoding="utf-8"))
     for pid, facts in snapshots.items():
-        merge_snapshot(observations, pid, facts, today)
+        merge_snapshot(observations, pid, facts, snapshot_dates.get(pid, today))
     args.observations.write_text(dump_observations(observations), encoding="utf-8")
     print(f"Wrote {sum(len(f) for f in snapshots.values())} facts for {len(snapshots)} properties to {args.observations}")
     return 0

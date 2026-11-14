@@ -87,7 +87,16 @@
     },
     "aerial": {
       "visible_parking_count": { "value": 24, "confidence": 0.75, "note": "Placeholder: ~24 spaces in the shared lot in front of the suite (verify reserved count)", "box": [0.05, 0.6, 0.55, 0.3] },
-      "hvac_tons": { "value": 10, "confidence": 0.6, "note": "Placeholder: two rooftop units over the suite" }
+      "hvac_tons": { "value": 10, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Estimated from 2 rooftop unit(s) at 5 tons each (whole building) (Vexcel imagery 2025-12-19)" },
+      "rooftop_hvac_units": { "value": 2, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 2 rooftop AC unit(s) detected by Vexcel AI (whole building) (Vexcel imagery 2025-12-19)" },
+      "paved_area_sqft": { "value": 14, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Paved (hardscape) area on the parcel: 14 sq ft, less than one parking space (350 sq ft/space), so no space estimate is made (parcel paving only; excludes shared lots and street parking) (Vexcel imagery 2025-12-19)" },
+      "vehicles_count": { "value": 59, "confidence": 0.93, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 59 vehicle(s) visible on the parcel (Vexcel imagery 2025-12-19)" },
+      "roof_condition": { "value": 4, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Vexcel AI roof condition score, 1 (poor) to 5 (excellent) (Vexcel imagery 2025-12-19)" },
+      "roof_material": { "value": "metal", "confidence": 1.0, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof material classified as metal (Vexcel imagery 2025-12-19)" },
+      "roof_defects": { "value": [], "note": "Snapshot of Vexcel property/extract on 2026-11-14: No roof defects detected (Vexcel imagery 2025-12-19)" },
+      "building_footprint_sqft": { "value": 19863, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building footprint 19,863 sq ft (whole building, not the suite) (Vexcel imagery 2025-12-19)" },
+      "building_footprint": { "value": 19863, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building outline from the Vexcel footprint (box drawn on the aerial image) (Vexcel imagery 2025-12-19)", "box": [0.2682, 0.2515, 0.4602, 0.4181] },
+      "building_type": { "value": "commercial", "confidence": 1.0, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building type classified as commercial (Vexcel imagery 2025-12-19)" }
     }
   },
   "property-hou-02": {
@@ -107,7 +116,15 @@
     },
     "aerial": {
       "visible_parking_count": { "value": 4, "confidence": 0.7, "note": "Placeholder: no private lot; ~4 head-in spaces at the curb, otherwise street parking", "box": [0.05, 0.78, 0.5, 0.12] },
-      "hvac_tons": { "value": 10, "confidence": 0.55, "note": "Placeholder: share of the building's rooftop units" }
+      "hvac_tons": { "value": 15, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Estimated from 3 rooftop unit(s) at 5 tons each (whole building) (Vexcel imagery 2025-12-19)" },
+      "rooftop_hvac_units": { "value": 3, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 3 rooftop AC unit(s) detected by Vexcel AI (whole building) (Vexcel imagery 2025-12-19)" },
+      "paved_area_sqft": { "value": 13, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Paved (hardscape) area on the parcel: 13 sq ft, less than one parking space (350 sq ft/space), so no space estimate is made (parcel paving only; excludes shared lots and street parking) (Vexcel imagery 2025-12-19)" },
+      "roof_condition": { "value": 2, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Vexcel AI roof condition score, 1 (poor) to 5 (excellent) (Vexcel imagery 2025-12-19)" },
+      "roof_material": { "value": "membrane", "confidence": 1.0, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof material classified as membrane (Vexcel imagery 2025-12-19)" },
+      "roof_defects": { "value": ["discoloration", "water-pooling"], "confidence": 0.89, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof defects detected: discoloration (84.28% of roof), water-pooling (84.28% of roof) (Vexcel imagery 2025-12-19)" },
+      "building_footprint_sqft": { "value": 9390, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building footprint 9,390 sq ft (whole building, not the suite) (Vexcel imagery 2025-12-19)" },
+      "building_footprint": { "value": 9390, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building outline from the Vexcel footprint (box drawn on the aerial image) (Vexcel imagery 2025-12-19)", "box": [0.3841, 0.3418, 0.2306, 0.387] },
+      "building_type": { "value": "commercial", "confidence": 0.2, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building type classified as commercial (Vexcel imagery 2025-12-19)" }
     }
   },
   "property-hou-03": {
@@ -127,7 +144,16 @@
     },
     "aerial": {
       "visible_parking_count": { "value": 30, "confidence": 0.8, "note": "Placeholder: shared strip-center lot", "box": [0.05, 0.6, 0.6, 0.3] },
-      "hvac_tons": { "value": 10, "confidence": 0.6, "note": "Placeholder: two rooftop units serve the suite" }
+      "hvac_tons": { "value": 70, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Estimated from 14 rooftop unit(s) at 5 tons each (whole building) (Vexcel imagery 2025-12-19)" },
+      "rooftop_hvac_units": { "value": 14, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 14 rooftop AC unit(s) detected by Vexcel AI (whole building) (Vexcel imagery 2025-12-19)" },
+      "paved_area_sqft": { "value": 154, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Paved (hardscape) area on the parcel: 154 sq ft, less than one parking space (350 sq ft/space), so no space estimate is made (parcel paving only; excludes shared lots and street parking) (Vexcel imagery 2025-12-19)" },
+      "vehicles_count": { "value": 37, "confidence": 0.95, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 37 vehicle(s) visible on the parcel (Vexcel imagery 2025-12-19)" },
+      "roof_condition": { "value": 3, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Vexcel AI roof condition score, 1 (poor) to 5 (excellent) (Vexcel imagery 2025-12-19)" },
+      "roof_material": { "value": "membrane", "confidence": 1.0, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof material classified as membrane (Vexcel imagery 2025-12-19)" },
+      "roof_defects": { "value": ["discoloration", "water-pooling"], "confidence": 0.63, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof defects detected: discoloration (3.41% of roof), water-pooling (3.41% of roof) (Vexcel imagery 2025-12-19)" },
+      "building_footprint_sqft": { "value": 18315, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building footprint 18,315 sq ft (whole building, not the suite) (Vexcel imagery 2025-12-19)" },
+      "building_footprint": { "value": 18315, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building outline from the Vexcel footprint (box drawn on the aerial image) (Vexcel imagery 2025-12-19)", "box": [0.1142, 0.3835, 0.7722, 0.2335] },
+      "building_type": { "value": "commercial", "confidence": 0.85, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building type classified as commercial (Vexcel imagery 2025-12-19)" }
     }
   },
   "property-hou-04": {
@@ -147,7 +173,15 @@
     },
     "aerial": {
       "visible_parking_count": { "value": 0, "confidence": 0.8, "note": "Placeholder: no on-site lot; street parking and paid lots nearby", "box": [0.05, 0.8, 0.9, 0.12] },
-      "hvac_tons": { "value": 15, "confidence": 0.55, "note": "Placeholder: share of the building's rooftop units" }
+      "hvac_tons": { "value": 90, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Estimated from 18 rooftop unit(s) at 5 tons each (whole building) (Vexcel imagery 2025-12-31)" },
+      "rooftop_hvac_units": { "value": 18, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 18 rooftop AC unit(s) detected by Vexcel AI (whole building) (Vexcel imagery 2025-12-31)" },
+      "paved_area_sqft": { "value": 3, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Paved (hardscape) area on the parcel: 3 sq ft, less than one parking space (350 sq ft/space), so no space estimate is made (parcel paving only; excludes shared lots and street parking) (Vexcel imagery 2025-12-31)" },
+      "roof_condition": { "value": 3, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Vexcel AI roof condition score, 1 (poor) to 5 (excellent) (Vexcel imagery 2025-12-31)" },
+      "roof_material": { "value": "membrane", "confidence": 0.75, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof material classified as membrane (Vexcel imagery 2025-12-31)" },
+      "roof_defects": { "value": ["discoloration", "rust", "water-pooling"], "confidence": 0.43, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof defects detected: discoloration (2.06% of roof), rust (5.54% of roof), water-pooling (2.06% of roof) (Vexcel imagery 2025-12-31)" },
+      "building_footprint_sqft": { "value": 35049, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building footprint 35,049 sq ft (whole building, not the suite) (Vexcel imagery 2025-12-31)" },
+      "building_footprint": { "value": 35049, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building outline from the Vexcel footprint (box drawn on the aerial image) (Vexcel imagery 2025-12-31)", "box": [0.0534, 0.1627, 0.7395, 0.8373] },
+      "building_type": { "value": "commercial", "confidence": 0.88, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building type classified as commercial (Vexcel imagery 2025-12-31)" }
     }
   },
   "property-hou-05": {
@@ -166,7 +200,16 @@
       "window_area": { "value": 20, "confidence": 0.8, "note": "Exterior windows on the Kirby side" }
     },
     "aerial": {
-      "hvac_tons": { "value": 6, "confidence": 0.55, "note": "Placeholder: suite share of the building's rooftop equipment" }
+      "hvac_tons": { "value": 180, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Estimated from 36 rooftop unit(s) at 5 tons each (whole building) (Vexcel imagery 2025-12-31)" },
+      "rooftop_hvac_units": { "value": 36, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 36 rooftop AC unit(s) detected by Vexcel AI (whole building) (Vexcel imagery 2025-12-31)" },
+      "paved_area_sqft": { "value": 324, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Paved (hardscape) area on the parcel: 324 sq ft, less than one parking space (350 sq ft/space), so no space estimate is made (parcel paving only; excludes shared lots and street parking) (Vexcel imagery 2025-12-31)" },
+      "vehicles_count": { "value": 1, "confidence": 0.69, "note": "Snapshot of Vexcel property/extract on 2026-11-14: 1 vehicle(s) visible on the parcel (Vexcel imagery 2025-12-31)" },
+      "roof_condition": { "value": 3, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Vexcel AI roof condition score, 1 (poor) to 5 (excellent) (Vexcel imagery 2025-12-31)" },
+      "roof_material": { "value": "membrane", "confidence": 1.0, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof material classified as membrane (Vexcel imagery 2025-12-31)" },
+      "roof_defects": { "value": ["discoloration", "water-pooling"], "confidence": 0.68, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Roof defects detected: discoloration (14.07% of roof), water-pooling (14.07% of roof) (Vexcel imagery 2025-12-31)" },
+      "building_footprint_sqft": { "value": 44463, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building footprint 44,463 sq ft (whole building, not the suite) (Vexcel imagery 2025-12-31)" },
+      "building_footprint": { "value": 44463, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building outline from the Vexcel footprint (box drawn on the aerial image) (Vexcel imagery 2025-12-31)", "box": [0.0667, 0.193, 0.8632, 0.6216] },
+      "building_type": { "value": "commercial", "confidence": 0.65, "note": "Snapshot of Vexcel property/extract on 2026-11-14: Building type classified as commercial (Vexcel imagery 2025-12-31)" }
     }
   }
 }

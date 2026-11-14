@@ -382,3 +382,100 @@ def test_snapshot_merge_keeps_fixture_facts_and_format():
     assert json.loads(text) == observations
     real = (Path(__file__).parent.parent / "fixtures" / "observations.json").read_text()
     assert dump_observations(json.loads(real)) == real  # rewriting never reformats the fixture
+
+
+# ----------------------------- parking estimate: parcel paving under one space -----------------------------
+
+
+def _with_paving(sqft):
+    data = la_extract()
+    data["features"][0]["properties"]["hardscapes.area"] = sqft
+    return data
+
+
+@pytest.mark.parametrize("paved", [3, 14, 324, 349.4])
+def test_estimate_omitted_below_one_space(paved):
+    facts = normalize_property_extract(_with_paving(paved), LA_LON, LA_LAT, sqft_per_space=350)
+    assert "estimated_parking_spaces" not in facts  # unknown, never "0 spaces"
+    note = facts["paved_area_sqft"].note
+    assert "less than one parking space" in note and "street parking" in note
+
+
+def test_estimate_kept_from_one_space():
+    facts = normalize_property_extract(_with_paving(350), LA_LON, LA_LAT, sqft_per_space=350)
+    assert facts["estimated_parking_spaces"].value == 1
+    assert "excludes shared lots and street parking" in facts["paved_area_sqft"].note
+
+
+def test_parking_tiny_paving_is_unknown_with_vehicle_context(restaurant_req):
+    facts = normalize_property_extract(_with_paving(14), LA_LON, LA_LAT, sqft_per_space=350)
+    facts["vehicles_count"] = Evidence(key="vehicles_count", value=59, source="vexcel", note="59 vehicle(s) visible")
+    out = run("parking_checker", restaurant_req, facts, thresholds={"min_ratio": 1})
+    assert out.status == "UNKNOWN" and "0 spaces" not in out.notes and "less than one space" in out.notes
+    vehicles = next(e for e in out.evidence if e.key == "vehicles_count")
+    assert "context only" in vehicles.note and "59" not in out.notes  # not used as a space count
+    assert {"paved_area_sqft", "vehicles_count"} <= {e.key for e in out.evidence}
+
+
+def test_parking_count_carries_vehicle_context(restaurant_req):
+    facts = obs("vexcel", visible_parking_count=22, vehicles_count=5)
+    out = run("parking_checker", restaurant_req, facts, thresholds={"min_ratio": 1})
+    assert out.status == "PASS" and out.notes.startswith("22 spaces visible")
+    assert "vehicles_count" in {e.key for e in out.evidence}
+
+
+# ----------------------------- snapshot: stale facts, --from-cache -----------------------------
+
+
+def test_snapshot_merge_drops_stale_snapshot_facts():
+    observations = {"p1": {"aerial": {
+        "visible_parking_count": {"value": 8, "note": "Placeholder: 8 spaces"},
+        "estimated_parking_spaces": {"value": 0, "note": "Snapshot of Vexcel property/extract on 2026-11-01: old"},
+    }}}
+    facts = normalize_property_extract(_with_paving(14), LA_LON, LA_LAT, sqft_per_space=350)
+    merge_snapshot(observations, "p1", facts, "2026-11-14")
+    aerial = observations["p1"]["aerial"]
+    assert "estimated_parking_spaces" not in aerial  # no longer emitted -> removed
+    assert aerial["visible_parking_count"]["value"] == 8  # hand-written fact kept
+    assert aerial["paved_area_sqft"]["value"] == 14
+
+
+def test_snapshot_from_cache_needs_no_key_or_network(tmp_path, monkeypatch, capsys):
+    from scripts.snapshot_vexcel import main
+
+    monkeypatch.setattr(settings, "vexcel_api_key", None)
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("--from-cache must not call the API"))
+    prop = la_property(id="la-cache")
+    folder = vexcel_provider.CACHE_DIR / "la-cache"
+    folder.mkdir(parents=True)
+    (folder / "property.json").write_text(json.dumps(_with_paving(14)))
+    (folder / "meta.json").write_text(json.dumps({"latitude": LA_LAT, "longitude": LA_LON,
+                                                  "fetched_at": "2026-11-02T10:00:00+00:00", "errors": {}}))
+    props_file, obs_file = tmp_path / "p.json", tmp_path / "o.json"
+    props_file.write_text(json.dumps([prop.model_dump(), la_property(id="la-nocache").model_dump()]))
+    obs_file.write_text(json.dumps({"la-cache": {"aerial": {
+        "estimated_parking_spaces": {"value": 0, "note": "Snapshot of Vexcel property/extract on 2026-11-02: stale"}}}}))
+    assert main(["--from-cache", "--properties", str(props_file), "--observations", str(obs_file)]) == 0
+    aerial = json.loads(obs_file.read_text())["la-cache"]["aerial"]
+    assert "estimated_parking_spaces" not in aerial and aerial["paved_area_sqft"]["value"] == 14
+    assert aerial["hvac_tons"]["note"].startswith("Snapshot of Vexcel property/extract on 2026-11-02")  # API call date
+    assert "SKIP la-nocache" in capsys.readouterr().out
+
+
+# ----------------------------- boxes on the placeholder aerial -----------------------------
+
+
+def test_snapshot_boxes_dropped_on_placeholder_but_fixture_boxes_kept():
+    observations, media = gather_observations(costar_provider.get_property("property-hou-01"))
+    assert media.aerial_source == "placeholder"
+    assert observations["building_footprint"].box is None  # positioned on the live ortho, not the SVG
+    assert observations["visible_parking_count"].box == [0.05, 0.6, 0.55, 0.3]  # hand-drawn for the SVG
+    austin, _ = gather_observations(costar_provider.get_property("property-123"))
+    assert austin["visible_parking_count"].box and austin["hvac_tons"].box
+
+
+def test_live_boxes_dropped_when_ortho_falls_back(vexcel_live):
+    vexcel_live(ortho=404)
+    observations, media = gather_observations(la_property(id="la-boxes"))
+    assert media.aerial_source == "placeholder" and observations["building_footprint"].live
+    assert all(ev.box is None for ev in observations.values() if ev.live)

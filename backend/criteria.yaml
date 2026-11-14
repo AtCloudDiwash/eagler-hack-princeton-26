@@ -39,11 +39,14 @@
   hard_block: false
   evaluator: "parking_checker"
   # Space count comes from visible_parking_count (striped spaces) or, failing that, the Vexcel
-  # estimated_parking_spaces; the evaluator returns UNKNOWN (assume_risk) when neither is known.
+  # estimated_parking_spaces (omitted when parcel paving is under one space); the evaluator returns
+  # UNKNOWN (assume_risk) when neither is known. Spaces needed: the user's number, the city minimum
+  # (jurisdictions.yaml parking_ratios; none in market-based areas) or the business guideline.
+  # The evaluator cites the jurisdiction's parking rule in place of this generic source.
   required_inputs: ["business_required_parking"]
   missing_data_policy: "assume_risk"
   evidence_required: true
-  source: "Business need; Austin has no minimum parking requirement (Nov 2023)"
+  source: "Business need, or the city's off-street parking minimum where one applies (citation per jurisdiction)"
   thresholds:
     min_ratio: 1.0          # visible / required spaces needed for PASS
     sqft_per_space: 350     # paved sq ft per space when estimating from Vexcel hardscape area
@@ -133,6 +136,9 @@
   source: "Rule of thumb: sq ft per ton by business type"
   thresholds:
     tons_per_unit: 5        # also used to turn Vexcel rooftop AC unit counts into tons
+    # Vexcel rooftop units are counted for the whole building. When the building footprint is known
+    # and larger than the listing, evaluate the suite's share: tons x (size_sqft / footprint).
+    prorate_by_footprint: true
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]
 

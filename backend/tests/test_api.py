@@ -14,7 +14,7 @@ DEMO_BODY = {
 }
 
 RESULT_KEYS = {
-    "property_id", "address", "rank", "score", "disqualified", "disqualifiers", "weak_fit", "monthly_rent",
+    "property_id", "address", "listing_source", "use_restrictions", "rank", "score", "disqualified", "disqualifiers", "weak_fit", "monthly_rent",
     "total_cost_estimate", "first_year_cost", "fit_out_estimate", "ti_allowance", "buildout_months",
     "breakdown", "line_items", "compliance", "criteria_results", "questions_for_landlord", "landlord_request",
     "observations", "media", "assumptions",
