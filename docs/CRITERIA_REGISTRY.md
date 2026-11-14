@@ -19,7 +19,7 @@ changes on disk**, so edits apply on the next request without a restart.
 | `missing_data_policy` | `assume_risk` (default) \| `assume_cost` \| `unknown` \| `ignore` | What an UNKNOWN means for the score (table below) |
 | `evidence_required` | bool, default false | A PASS needs at least one CoStar, Matterport or Vexcel evidence item, else it is downgraded to UNKNOWN |
 | `source` | str | Citation shown in the UI (an evaluator may override it with a jurisdiction citation) |
-| `thresholds` | map, default {} | Evaluator-specific knobs (`min_ratio`, `min_width`, `tons_per_unit`, `min_area`) |
+| `thresholds` | map, default {} | Evaluator-specific knobs (table below) |
 | `business_types` | list, default `["ALL"]` | Business type ids this applies to |
 | `applicable_jurisdictions` | list, default `["ALL"]` | `"ALL"`, a state code (`"TX"`) or a city (`"Austin"`), case-insensitive |
 
@@ -31,17 +31,37 @@ changes on disk**, so edits apply on the next request without a restart.
 | `assume_cost` | UNKNOWN | yes, as 0 | The evaluator's `fallback` adds the fix cost; an assumption is recorded |
 | `unknown` / `ignore` | UNKNOWN | no | Shown only |
 
-The same policy applies when an evaluator itself returns UNKNOWN (e.g. zoning district not in the table).
+The same policy applies when an evaluator itself returns UNKNOWN (e.g. zoning district not in the table),
+**except a "verify" UNKNOWN**: when an evaluator sets `EvalOutcome.verify=True` (the data exists but only
+the landlord can settle it), the result is excluded from the score whatever the policy, with no cost.
+Today only `hvac_checker` does this, for a short prorated share of building-level HVAC.
+
+### Thresholds in use
+
+| Criterion | Threshold | Default | Meaning |
+|---|---|---|---|
+| `parking_sufficiency` | `min_ratio` | 1.0 | Counted / required spaces needed for PASS |
+| `parking_sufficiency` | `sqft_per_space` | 350 | Paved sq ft per space when estimating from Vexcel `paved_area_sqft` (no estimate below one space). Read by the Vexcel provider too |
+| `ada_accessibility` | `min_width` | 32 | Door clear width, inches |
+| `hvac_capacity` | `tons_per_unit` | 5 | Tons per rooftop unit; turns Vexcel unit counts into tons and sizes `hvac_rtu` |
+| `hvac_capacity` | `prorate_by_footprint` | true | Evaluate the suite's share `hvac_tons × min(1, size_sqft / building_footprint_sqft)` when the footprint is known and larger than the listing; a short share is "verify with landlord" |
+| `window_visibility` | `min_area` | 10 | Street-facing glass, sq ft |
+| `roof_condition` | `min_condition` | 3 | Vexcel roof score (1-5) needed for PASS |
+| `roof_condition` | `serious_defects` (optional, not set) | `[structural-damage, tarp]` | Defects that are a RISK whatever the score |
 
 ### Available input names
 
-Observed facts: `zoning_code`, `previous_use`, `size_sqft`, `door_width_inches`,
-`step_free_entrance`, `kitchen_equipment_visible`, `hood_present`, `grease_interceptor_present`,
-`bathrooms_visible`, `plumbed_operatories`, `electrical_service_amps`, `sprinklered`, `window_area`,
-`visible_parking_count`, `hvac_tons`, plus any new key you add to `fixtures/observations.json`.
-Derived values: `business_required_parking`, `business_required_bathrooms`, `business_capacity`,
-`required_hvac_tons`, `required_electrical_amps`, `occupant_load`, `needs_kitchen`, `size_sqft`,
-`monthly_rent` (see `compliance_engine.build_inputs`).
+Observed facts: listing (`zoning_code`, `previous_use`, `size_sqft`, `use_restrictions`); Matterport
+(`door_width_inches`, `step_free_entrance`, `kitchen_equipment_visible`, `hood_present`,
+`grease_interceptor_present`, `bathrooms_visible`, `plumbed_operatories`, `electrical_service_amps`,
+`sprinklered`, `window_area`); Vexcel (`visible_parking_count` from fixtures, plus the live/snapshot facts
+`rooftop_hvac_units`, `hvac_tons`, `paved_area_sqft`, `estimated_parking_spaces`, `vehicles_count`,
+`roof_condition`, `roof_material`, `roof_defects`, `building_footprint_sqft`, `building_footprint`,
+`building_type`); plus any new key you add to `fixtures/observations.json`.
+Derived values: `business_required_parking` (per property: the city minimum for its size and location,
+never below the user's number), `code_required_parking`, `parking_requirement_note`,
+`business_required_bathrooms`, `business_capacity`, `required_hvac_tons`, `required_electrical_amps`,
+`occupant_load`, `needs_kitchen`, `size_sqft`, `monthly_rent` (see `compliance_engine.build_inputs`).
 
 ## Scoring (`services/scoring.py`)
 
@@ -51,8 +71,10 @@ criterion_score: PASS = 1, RISK = 0, counted UNKNOWN = 0
 ```
 
 The denominator is the counted weight, so adding a criterion re-normalizes automatically.
-Example: property-123 in the demo passes zoning (10), ADA (15) and window (5) out of 95 counted
-weight → 31.6. The score orders results only through the weak-fit gate (`ranking.min_score` in
+Example: 801 St Emanuel (Houston demo) passes zoning (10), parking (10), ADA (15), restrooms (10),
+electrical (5), window (5) and roof (5) and fails kitchen (20) and grease interceptor (10): 60 of 90
+counted weight → **66.7**. HVAC (10) is a "verify" UNKNOWN and fire safety has weight 0, so neither is
+counted. The score orders results only through the weak-fit gate (`ranking.min_score` in
 `costs.yaml`) and tie-breaks; see [COST_ENGINE.md](COST_ENGINE.md#ranking).
 
 ## Current registry
@@ -70,8 +92,21 @@ weight → 31.6. The score orders results only through the weak-fit gate (`ranki
 | `electrical_service` | space | 5 | no | `electrical_checker` | assume_risk | yes | ALL |
 | `fire_safety` | safety | 0 | yes | `fire_safety_checker` | unknown | no | ALL |
 | `window_visibility` | marketing | 5 | no | `check_window_visibility` | ignore | no | restaurant |
+| `roof_condition` | space | 5 | no | `roof_checker` | unknown | yes | ALL |
 
-All entries use `applicable_jurisdictions: ["ALL"]`. A restaurant gets 10 criteria, a dental clinic 8.
+All entries use `applicable_jurisdictions: ["ALL"]`. A restaurant gets 11 criteria, a dental clinic 9.
+
+Notes on specific entries:
+- `zoning_use` has `required_inputs: []` on purpose: a no-zoning city (`zoning_mode: none`, Houston)
+  has no zoning code to require. The evaluator reports a missing code as UNKNOWN itself, and the
+  citation comes from the jurisdiction's `zoning_source`. It also hard-blocks on a disclosed use
+  restriction that prohibits the use.
+- `parking_sufficiency` requires only `business_required_parking`; the space count is
+  `visible_parking_count`, else Vexcel `estimated_parking_spaces`, else UNKNOWN (counted as 0 under
+  `assume_risk`). Its `source` is replaced by the jurisdiction's parking citation.
+- `hvac_capacity` keeps `assume_risk` for truly missing data, but a short prorated share is a "verify"
+  UNKNOWN and is not counted.
+- `roof_condition` uses Vexcel data only; offline listings without roof data get UNKNOWN, not scored.
 
 ## How to add a criterion (config only)
 
@@ -84,7 +119,7 @@ Reuse an existing evaluator with new thresholds or a new scope. Example:
   weight: 5
   hard_block: false
   evaluator: "parking_checker"
-  required_inputs: ["visible_parking_count", "business_required_parking"]
+  required_inputs: ["business_required_parking"]
   missing_data_policy: "ignore"
   evidence_required: true
   source: "Business preference"
@@ -98,7 +133,10 @@ Save the file and run a new analysis. The criterion appears in `GET /api/v1/crit
 not change. A malformed entry returns a 500 whose `detail` names the file, the entry number and the
 bad field.
 
-`window_visibility` was added this way (prompts/scale-criteria.md), and
+`window_visibility` was added this way (prompts/scale-criteria.md); `roof_condition` reused the same path
+with one new evaluator (`roof_checker`) and one cost item (`roof_repair`). Changing a threshold works the
+same: setting `roof_condition` `min_condition: 3` → `4` turns three Houston roofs (scored 3/5) into RISK
+with a priced roof repair ([DEMO_RUNBOOK.md](DEMO_RUNBOOK.md#5-config-only-scaling-215-245)), and
 `tests/test_criteria_manager.py::test_adding_a_criterion_via_config_changes_results` proves it changes
 scores with no code change.
 
@@ -132,6 +170,8 @@ Then:
 
 `EvalContext` gives you `requirements`, `property`, `observations`, `criterion`, `thresholds`,
 `jurisdiction`, `business`, `value(name)`, `evidence(*keys)` and `derived(key, value, note, source)`.
+`EvalOutcome` also takes `source=` (override the citation) and `verify=True` (an UNKNOWN that is
+excluded from the score; use it when the data exists but only the landlord can confirm it).
 `tests/test_evaluators.py::test_every_criteria_yaml_evaluator_is_registered` fails if the YAML
 names an evaluator that does not exist.
 
@@ -141,4 +181,5 @@ Add a block to `config/business_types.yaml` (label, capacity unit, occupancy gro
 occupant load factors, parking guideline, restroom rule, HVAC sq ft/ton, amps, build-out months,
 optional sprinkler trigger). It appears in the form via `GET /api/v1/business-types`. Add
 `zoning.<zoning_use>` lists to `jurisdictions.yaml` so zoning can be checked, and scope
-type-specific criteria with `business_types: [<id>]`.
+type-specific criteria with `business_types: [<id>]`. For a city with parking minimums, add the
+type's `zoning_use` to that city's `parking_ratios`.

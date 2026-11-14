@@ -4,10 +4,11 @@ Focus on the following sponsors/prizes:
 
 - **CoStar Group (Commercial Real Estate Data)**
   - *Fit:* We directly use CoStar data and related property analytics (Matterport and Vexcel).
-  - *Action:* Highlight the use of CoStar's market data (even if mocked) and analytics from Matterport/Vexcel.
-  - *Built:* `costar_provider` (listings, tolerant `map_costar_listing`), `matterport_provider` (floor plan + 3D tour embed), `vexcel_provider` (aerial). Mock fixtures by default, live behind `USE_MOCK_DATA=false` + keys with fixture fallback. Report overlays show which source produced each finding (see [INTEGRATIONS.md](INTEGRATIONS.md), [VISION_OVERLAYS.md](VISION_OVERLAYS.md)).
+  - *Action:* Lead the demo with the real Vexcel data: live aerial and angled imagery, the AI building footprint, rooftop HVAC unit counts and roof condition feeding the checks and the cost estimate.
+  - *Built (real):* `vexcel_provider` calls the Vexcel API with the sponsor key (ortho, oblique-north, `/property/extract`), caches imagery server-side, and turns AI facts into evidence: rooftop units → prorated HVAC share ("verify with landlord"), roof condition → `roof_condition` criterion and roof repair cost, footprint → overlay box, paved area → parking estimate. Verified end to end on 5 Houston buildings (the key is geofenced to Los Angeles + Houston).
+  - *Built (ready for data):* `costar_provider` (tolerant `map_costar_listing`; sample listings at real Houston buildings until access arrives, labelled "Sample listing") and `matterport_provider` (floor plan + 3D tour iframe; no tour links yet). Report overlays and evidence chips show which source produced each finding (see [INTEGRATIONS.md](INTEGRATIONS.md), [VISION_OVERLAYS.md](VISION_OVERLAYS.md)).
   - *Prize:* Emphasize solving CoStar’s challenge by combining multi-source property data. Mention CoStar integration in marketing blurb.
-  - *Tech:* If possible, use any CoStar-provided sample dataset or API (with sponsor permission) instead of generic data.
+  - *Tech:* Swap the Houston sample listings for real CoStar listings (with sponsor permission) as soon as access is available; the Vexcel side already uses real data.
 
 - **Peri (Forward Deployed Challenges)**
   - *Fit:* Show we talked to a real small business owner (restaurant or clinic) and included their feedback.
@@ -30,4 +31,4 @@ Focus on the following sponsors/prizes:
   - *Fit:* These sponsors are more community/prizes. Not specific tech requirements.
   - *Action:* In Devpost or pitch, acknowledge Princeton CS and general idea value.
   
-**Key Point:** Emphasize *unique multi-layer analysis using sponsor data.* In demo and presentation, cite that we are solving a "CoStar challenge" by combining building data, 3D tours, and zoning rules into one agent.
+**Key Point:** Emphasize *unique multi-layer analysis using sponsor data.* In demo and presentation, cite that we are solving a "CoStar challenge" by combining listing data, real Vexcel aerial intelligence, 3D-tour data, and Houston's actual parking and deed-restriction rules into one agent.

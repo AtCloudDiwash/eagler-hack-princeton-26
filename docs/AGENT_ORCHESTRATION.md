@@ -32,20 +32,29 @@ loads each property through `costar_provider.get_property` (404 if unknown), cal
   JSON. Values are range-checked and merged **over** the regex fields. Any exception, refusal or
   non-`end_turn` stop falls back to regex and logs a warning.
 - `build_requirements` fills unstated fields from `business_types.yaml` and records each default in
-  `assumptions`. It computes occupant load, guideline parking, restrooms, HVAC tons and electrical amps.
+  `assumptions`. It computes occupant load, parking, restrooms, HVAC tons and electrical amps. Parking:
+  the user's number; else the **city code minimum** for the estimated space need when
+  `jurisdictions.yaml` sets one (`parking_source: "jurisdiction"`, e.g. Houston §26-492: 10 per 1,000
+  sq ft × 1,400 sq ft = 14); else the business guideline. When the user states a number in a city with
+  minimums, an assumption says each property is checked against the larger of the two.
 
 ## 2. Vision agent (`gather_observations`)
 
 - **In:** `Property`. **Out:** `(observations: dict[str, Evidence], Media)`.
-- CoStar listing facts: `zoning_code` (confidence 0.95), `previous_use`, `size_sqft`.
+- CoStar listing facts: `zoning_code` (confidence 0.95, when the listing has one), `previous_use`,
+  `size_sqft`. (`use_restrictions` is read from the `Property` by the zoning check.)
 - `matterport_provider.get_interior(prop)`: interior facts (`door_width_inches`,
   `step_free_entrance`, `kitchen_equipment_visible`, `hood_present`, `grease_interceptor_present`,
   `bathrooms_visible`, `plumbed_operatories`, `electrical_service_amps`, `sprinklered`,
-  `window_area`) plus the floor-plan and 3D-tour URLs.
-- `vexcel_provider.get_aerial(prop)`: aerial facts (`visible_parking_count`, `hvac_tons`) plus the
-  aerial URL.
-- Facts come from `fixtures/observations.json` in every mode (no live image detection). A fact that is
-  absent is unknown, which drives the missing-data policies.
+  `window_area`) plus the floor-plan and 3D-tour URLs. Always fixtures today.
+- `vexcel_provider.get_aerial(prop)`: aerial and oblique URLs, `aerial_source`, attribution, fixture
+  aerial facts and, in live mode, **live facts** from `/property/extract` (rooftop AC units, HVAC tons,
+  paved area, parking estimate, vehicles, roof condition/material/defects, footprint + box, building
+  type). Live facts win over fixture facts of the same key; fixture facts fill the gaps. Live calls are
+  cached on disk and fall back per item ([INTEGRATIONS.md](INTEGRATIONS.md#vexcel-aerial-imagery--property-intelligence-vexcel_providerpy)).
+- Box rule: live / snapshot boxes are positioned on the live ortho, so they are dropped when the
+  aerial is the placeholder ([VISION_OVERLAYS.md](VISION_OVERLAYS.md)).
+- A fact that is absent is unknown, which drives the missing-data policies.
 
 ## 3. Compliance / criteria agent (`compliance_engine.run_compliance`)
 
@@ -53,11 +62,13 @@ loads each property through `costar_provider.get_property` (404 if unknown), cal
   requirements, property, observations, jurisdiction rules, business profile.
 - `build_inputs` flattens observations plus requirement and listing values (`business_required_parking`,
   `business_required_bathrooms`, `business_capacity`, `required_hvac_tons`,
-  `required_electrical_amps`, `occupant_load`, `needs_kitchen`, `size_sqft`, `monthly_rent`) into the
-  names that `required_inputs` can reference.
+  `required_electrical_amps`, `occupant_load`, `needs_kitchen`, `size_sqft`, `monthly_rent`,
+  `use_restrictions`) into the names that `required_inputs` can reference. `business_required_parking`
+  is recomputed **per property** (city minimum for its size and location, 0 in a market-based parking
+  area, never below the user's number), with `code_required_parking` and `parking_requirement_note`.
 - `evaluate_criterion` applies the registry semantics (missing inputs → UNKNOWN, missing-data
-  policy, `evidence_required` downgrade, hard block only on a definitive failure) and calls the
-  evaluator from `evaluators.py`.
+  policy, `evidence_required` downgrade, "verify" UNKNOWNs excluded from the score, hard block only on a
+  definitive failure) and calls the evaluator from `evaluators.py`.
 - **Out:** `ComplianceReport` with `criteria_results`, `cost_needs` (fix items), landlord
   `questions`, `assumptions`, `disqualifiers`, and `score` (`scoring.weighted_score`).
 
@@ -86,21 +97,29 @@ Details: [COMPLIANCE_AGENT.md](COMPLIANCE_AGENT.md), [CRITERIA_REGISTRY.md](CRIT
 `(tier, first_year_cost.min, first_year_cost.max, -score)` where tier is 0 qualifying, 1 weak fit, 2 disqualified.
 `min_score` comes from `ranking_settings()` (`costs.yaml` `ranking.min_score`; missing or 0 turns the gate off).
 
-1. **Qualifying** spaces (not disqualified, `score >= ranking.min_score`, default 25) by
+1. **Qualifying** spaces (not disqualified, `score >= ranking.min_score`, currently 55) by
    first-year cost, cheapest first.
 2. **Weak fit** spaces (`score < min_score`): `weak_fit: true`, ranked after every qualifying space
-   even when they are cheaper.
+   even when they are cheaper (by first-year cost among themselves).
 3. **Disqualified** spaces (a hard-block criterion failed definitively) are always last.
 
 Ties are broken by higher score. `AnalyzeResponse.ranking_basis` states the rule in plain English,
 and `AnalyzeResponse.min_score` echoes the threshold.
 
-Demo outcome (restaurant, "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces", Austin TX,
-all 4 properties): #1 property-456 (score 100), #2 property-123 (31.6), #3 property-321 (0.0, weak
-fit), #4 property-789 (disqualified: `zoning_use`).
+Demo outcome (restaurant, "40 seats, kitchen needed, 2 bathrooms", Houston TX, all 5 properties; same
+in mock and live mode): #1 property-hou-01 1903 Yale (score 100, first-year $93.2k-$104.5k),
+#2 property-hou-04 801 St Emanuel (66.7, $114.0k-$174.8k), #3 property-hou-05 3701 Kirby (50.0, weak
+fit), #4 property-hou-02 240 W 19th (16.7, weak fit), #5 property-hou-03 4720 Washington
+(disqualified: `zoning_use`, `no_food_service` restriction). With "20 parking spaces" added, hou-04
+scores 55.6 and the order is unchanged.
+
+Austin offline dataset ("40 seats, kitchen needed, 2 bathrooms, 20 parking spaces"): #1 property-456
+(100), #2 property-321 (0.0, weak fit), #3 property-123 (31.6, weak fit), #4 property-789
+(disqualified: LO zoning).
 
 ## Response assembly
 
 `analyze_properties` adds `analysis_id` (uuid4 hex), `created_at`, `ranking_basis`, `mode`
 (provider modes plus the parser actually used) and the `costs.yaml` disclaimer. Properties are analyzed
-sequentially; with mock data a 4-property run takes milliseconds.
+sequentially; with mock data or a warm Vexcel cache a 5-property run takes milliseconds. A cold live
+run makes three parallel Vexcel calls per property (bounded by `PROVIDER_TIMEOUT_SECONDS`).

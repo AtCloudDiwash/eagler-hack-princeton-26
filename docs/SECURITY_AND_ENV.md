@@ -9,13 +9,16 @@ echo "API_ORIGIN=http://localhost:8000" > frontend/.env.local
 ```
 
 The `.env.example` placeholders (values starting with `your_`) are treated as "not set", so the
-copied file runs everything in mock mode. Env vars are read once at startup; restart uvicorn or
-`npm run dev` after changing them. YAML config changes (criteria, costs) need no restart.
+copied file runs everything in mock mode. For live Vexcel imagery set `USE_MOCK_DATA=false` and
+`VEXCEL_API_KEY` in `backend/.env` ([DEMO_RUNBOOK.md](DEMO_RUNBOOK.md)). Env vars are read once at
+startup; restart uvicorn or `npm run dev` after changing them. YAML config changes (criteria, costs,
+jurisdictions) need no restart.
 
 ## Variables
 
 Verified against `backend/app/config.py` (`os.getenv`) and `frontend/next.config.ts`
-(`process.env`). No other env vars are read.
+(`process.env`). No other env vars are read (the test suite and Playwright config set some of these
+for their own runs).
 
 | Name | Used by | Default | Required? | Purpose |
 |---|---|---|---|---|
@@ -25,8 +28,8 @@ Verified against `backend/app/config.py` (`os.getenv`) and `frontend/next.config
 | `COSTAR_API_BASE_URL` | `costar_provider` | `https://api.costar.example/v1` (placeholder) | for live CoStar | Base URL; `/listings` is appended |
 | `MATTERPORT_API_KEY` | `matterport_provider` | unset | only for live Matterport | Basic-auth credential |
 | `MATTERPORT_API_BASE_URL` | `matterport_provider` | `https://api.matterport.com/api/models/graph` | no | GraphQL endpoint |
-| `VEXCEL_API_KEY` | `vexcel_provider` | unset | only for live Vexcel | Bearer token |
-| `VEXCEL_API_BASE_URL` | `vexcel_provider` | `https://api.vexcel.example/v1` (placeholder) | for live Vexcel | Base URL; `/images/ortho` is appended |
+| `VEXCEL_API_KEY` | `vexcel_provider` | unset | for live Vexcel | Sent only as the `X-API-KEY` header. The sponsor key is geofenced to Los Angeles + Houston and expires 2026-12-01 |
+| `VEXCEL_API_BASE_URL` | `vexcel_provider` | `https://api.vexcelgroup.com/v2` | no | `/ortho/extract`, `/oriented/extract`, `/property/extract` are appended |
 | `GEOCODING_API_KEY` | `config.py` only | unset | no | Reserved; read but not used yet |
 | `ANTHROPIC_API_KEY` | `requirements_parser` | unset | no | Enables the Claude parser (regex fallback always on) |
 | `ANTHROPIC_MODEL` | `requirements_parser` | `claude-haiku-5-5` | no | Claude model id |
@@ -39,12 +42,34 @@ Verified against `backend/app/config.py` (`os.getenv`) and `frontend/next.config
 read at build/dev-server time by `next.config.ts`, so it is never exposed to client code. Never put
 a secret in a `NEXT_PUBLIC_` variable.
 
+## Vexcel key and licensed imagery
+
+- **Header only, backend only.** The key is sent only in the `X-API-KEY` header from the backend. The
+  browser never calls Vexcel: the backend downloads imagery into `backend/static/vexcel-cache/` and
+  serves it from `/static/vexcel-cache/...`, so the key never appears in a URL, page or bundle.
+- **Never logged.** Failure messages are redacted (`_redact` replaces the key with `***`) before they
+  are logged or stored in the cache's `meta.json`; startup logs show only modes.
+  `tests/test_vexcel.py::test_api_key_never_logged` and `test_request_shape_and_key_only_in_header`
+  check this.
+- **Licensed imagery stays local.** `backend/static/vexcel-cache/` is gitignored: Vexcel imagery and
+  API responses must not be committed or redistributed. Only derived facts (numbers, a box) are
+  snapshotted into `backend/fixtures/observations.json`. Live imagery is shown with the attribution
+  "© Vexcel Imaging US, Inc.".
+- **Rotate pasted keys.** If a key was ever pasted into a chat, issue, screenshot, terminal recording or
+  commit, treat it as leaked and ask the sponsor to rotate it. Don't show `backend/.env` on screen
+  during the demo.
+- **Expiry and geofence.** The hackathon key works only for Los Angeles and Houston and expires
+  2026-12-01. After expiry, already-cached properties keep working (no calls are made); anything else
+  falls back to placeholders.
+
 ## Git hygiene
 
-`.gitignore` excludes `backend/.env`, `backend/.env.local`, `frontend/.env.local`, `backend/venv/`,
-`frontend/node_modules/`, `frontend/.next/`, `backend/*.db` (including `turnkey.db`) and caches.
-Only `.env.example` (placeholders) is committed. The test suite pins `DATABASE_URL` to a temp file
-and blanks every API key (`tests/conftest.py`), so tests never touch the network or your real DB.
+`.gitignore` excludes `backend/.env`, `backend/.env.local`, `frontend/.env.local`,
+`backend/static/vexcel-cache/`, `backend/venv/`, `frontend/node_modules/`, `frontend/.next/`,
+`backend/*.db` (including `turnkey.db`) and caches. Only `.env.example` (placeholders) is committed.
+The test suite pins `DATABASE_URL` to a temp file, forces mock mode and blanks every API key
+(`tests/conftest.py`); Vexcel tests use a fake HTTP layer and a temp cache dir, so tests never touch
+the network, your real DB or your cache.
 
 ## Practices in the code
 
@@ -53,11 +78,11 @@ and blanks every API key (`tests/conftest.py`), so tests never touch the network
 - CORS allows only `CORS_ORIGINS`. In normal use the frontend goes through the same-origin Next.js
   proxy, so CORS matters only for direct API calls.
 - Input is validated by Pydantic (422) and property / business type ids are checked (404 / 400).
-  SQL goes through SQLModel (parameterized).
+  SQL goes through SQLModel (parameterized). Vexcel cache folder names are sanitized property ids.
 - The drafted landlord letter is plain text rendered by React (escaped), not HTML.
 
 ## Out of scope for the hackathon
 
 Authentication and authorization (anyone who can reach the API can read stored analyses by id),
 rate limiting, and HTTPS termination. Add these before any public deployment (e.g. AWS behind
-an ALB/API Gateway).
+an ALB/API Gateway). A public deployment would also need Vexcel's terms for serving cached imagery.

@@ -26,6 +26,11 @@ Fix items come from evaluators as `CostNeed(item, qty, reason)`. `merge_needs` k
 item id, using the largest quantity and joining the distinct reasons. An item id that is missing
 from `costs.yaml` raises `UnknownCostItem`.
 
+**What is not priced:** a "verify with landlord" result (e.g. a short prorated HVAC share, see
+[COMPLIANCE_AGENT.md](COMPLIANCE_AGENT.md#hvac-proration-building-level-vexcel-data)) adds **no** cost;
+it becomes a landlord question instead. HVAC is priced (`hvac_rtu`) only when the building has zero
+detected rooftop units or direct tonnage is short.
+
 ## `costs.yaml` structure
 
 ```yaml
@@ -44,80 +49,95 @@ soft_costs:
   contingency_pct:        { label, min: 0.10, max: 0.20 }
 ranking:
   horizon_months: 12                # months of rent after opening in first-year cost
-  min_score: 25                     # fit score below this ranks as "weak fit" (see Ranking)
+  min_score: 55                     # fit score below this ranks as "weak fit" (see Ranking)
 ```
 
-| Item | Unit | Min | Max | Adds months |
-|---|---|---|---|---|
-| `kitchen_install` | each | 40,000 | 60,000 | 1-2 |
-| `hood_exhaust` | each | 15,000 | 30,000 | 0-1 |
-| `grease_interceptor` | each | 8,000 | 20,000 | |
-| `restroom_add` | each | 10,000 | 15,000 | |
-| `door_widening` | each | 1,000 | 3,000 | |
-| `entrance_ramp` | each | 5,000 | 10,000 | |
-| `hvac_rtu` (5-ton) | each | 15,000 | 25,000 | |
-| `electrical_service_upgrade` | each | 10,000 | 25,000 | |
-| `operatory_plumbing` | each | 5,000 | 8,000 | |
-| `fire_sprinkler` | per_sqft | 3 | 7 | 1-1 |
-| `permits_fees` (soft) | flat | 5,000 | 10,000 | |
+| Item | Unit | Min | Max | Adds months | Emitted by |
+|---|---|---|---|---|---|
+| `kitchen_install` | each | 40,000 | 60,000 | 1-2 | `kitchen_checker` |
+| `hood_exhaust` | each | 15,000 | 30,000 | 0-1 | `kitchen_checker` |
+| `grease_interceptor` | each | 8,000 | 20,000 | | `grease_checker` |
+| `restroom_add` | each | 10,000 | 15,000 | | `bathroom_checker` |
+| `door_widening` | each | 1,000 | 3,000 | | `ada_checker` |
+| `entrance_ramp` | each | 5,000 | 10,000 | | `ada_checker` |
+| `hvac_rtu` (5-ton) | each | 15,000 | 25,000 | | `hvac_checker` |
+| `electrical_service_upgrade` | each | 10,000 | 25,000 | | `electrical_checker` |
+| `operatory_plumbing` | each | 5,000 | 8,000 | | `operatory_checker` |
+| `fire_sprinkler` | per_sqft | 3 | 7 | 1-1 | `fire_safety_checker` |
+| `roof_repair` (flat roof repair / recoat) | per_sqft (qty = the **suite's** `size_sqft`, a tenant's share, not the whole building) | 4 | 9 | | `roof_checker` |
+| `permits_fees` (soft) | flat | 5,000 | 10,000 | | always |
 
 Base build-out months come from `business_types.yaml`: restaurant 2-3, dental clinic 2-4.
 
 ## Worked example (real output)
 
-Demo profile: restaurant, "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces", Austin, TX.
-**property-123**, 123 Elm Street: 2,000 sq ft, $4,000/month, TI $10/sq ft. The evaluators found no
-kitchen, no grease interceptor, 1 of 2 restrooms, 5 of 10 HVAC tons, and 200 A of 400 A service.
+Demo profile: restaurant, "40 seats, kitchen needed, 2 bathrooms", Houston, TX.
+**property-hou-02**, 240 W 19th Street: 1,800 sq ft, $4,500/month, TI $15/sq ft. The evaluators found a
+stepped entrance, no kitchen, no grease interceptor, 1 of 2 restrooms, 200 A of 400 A service, and a
+Vexcel roof condition of 2/5. HVAC (3 rooftop units on a 9,390 sq ft building → ≈2.9-ton share vs 9
+needed) is "verify with landlord", so it is not priced.
 
 | Line | Qty | Min | Max |
 |---|---|---|---|
+| ADA entrance ramp | 1 | 5,000 | 10,000 |
 | Commercial kitchen | 1 | 40,000 | 60,000 |
 | Grease interceptor | 1 | 8,000 | 20,000 |
 | Additional restroom | 1 | 10,000 | 15,000 |
-| Rooftop HVAC unit (5-ton shortfall) | 1 | 15,000 | 25,000 |
 | Electrical service upgrade | 1 | 10,000 | 25,000 |
-| **Hard costs** | | **83,000** | **145,000** |
-| General conditions (10% / 20% of hard) | | 8,300 | 29,000 |
-| Contingency (10% of 91,300 / 20% of 174,000) | | 9,130 | 34,800 |
+| Roof repair / recoat ($4-$9 × 1,800 sq ft) | 1,800 | 7,200 | 16,200 |
+| **Hard costs** | | **80,200** | **146,200** |
+| General conditions (10% / 20% of hard) | | 8,020 | 29,240 |
+| Contingency (10% of 88,220 / 20% of 175,440) | | 8,822 | 35,088 |
 | Permits and fees | | 5,000 | 10,000 |
-| **Fit-out (gross)** | | **105,430** | **218,800** |
-| TI allowance ($10 × 2,000) | | −20,000 | −20,000 |
-| Net fit-out | | 85,430 | 198,800 |
+| **Fit-out (gross)** | | **102,042** | **220,528** |
+| TI allowance ($15 × 1,800) | | −27,000 | −27,000 |
+| Net fit-out | | 75,042 | 193,528 |
 | Build-out months (2-3 base + kitchen 1-2) | | 3 | 5 |
-| Rent during build-out ($4,000 × 3 / × 5) | | 12,000 | 20,000 |
-| **Cost to open** | | **97,430** | **218,800** |
-| + 12 months rent | | 48,000 | 48,000 |
-| **First-year cost** | | **145,430** | **266,800** |
+| Rent during build-out ($4,500 × 3 / × 5) | | 13,500 | 22,500 |
+| **Cost to open** | | **88,542** | **216,028** |
+| + 12 months rent | | 54,000 | 54,000 |
+| **First-year cost** | | **142,542** | **270,028** |
 
-Compare with **property-456**, 456 Oak Avenue: 1,800 sq ft, $4,800/month (the *highest* rent), a
-second-generation restaurant where every check passes. Its only line item is permits ($5,000-$10,000).
-Build-out is 2-3 months, so cost to open is $14,600-$24,400 and first-year cost is **$72,200-$82,000**,
-about half of property-123's.
+Compare with **property-hou-01**, 1903 Yale Street: 2,000 sq ft, $6,300/month (the *highest* rent), a
+second-generation restaurant. Its only line item is permits ($5,000-$10,000). Build-out is 2-3 months,
+so cost to open is $17,600-$28,900 and first-year cost is **$93,200-$104,500**.
 
-All four demo properties (first-year cost):
+All five Houston properties (first-year cost):
 
 | Rank | Property | Rent | Fit-out | TI | Cost to open | First-year cost | Score | Status |
 |---|---|---|---|---|---|---|---|---|
-| 1 | property-456 | 4,800 | 5,000-10,000 | 0 | 14,600-24,400 | 72,200-82,000 | 100.0 | qualifying |
-| 2 | property-123 | 4,000 | 105,430-218,800 | 20,000 | 97,430-218,800 | 145,430-266,800 | 31.6 | qualifying |
-| 3 | property-321 | 4,200 | 75,180-175,600 | 8,000 | 75,580-184,400 | 125,980-234,800 | 0.0 | weak fit |
-| 4 | property-789 | 3,600 | 100,590-215,920 | 33,000 | 78,390-200,920 | 121,590-244,120 | 22.2 | disqualified (zoning) |
+| 1 | hou-01 1903 Yale St | 6,300 | 5,000-10,000 | 0 | 17,600-28,900 | 93,200-104,500 | 100.0 | qualifying |
+| 2 | hou-04 801 St Emanuel St | 5,800 | 32,830-82,000 | 0 | 44,430-105,200 | 114,030-174,800 | 66.7 | qualifying |
+| 3 | hou-05 3701 Kirby Dr | 4,600 | 75,180-161,200 | 66,500 | 22,480-117,700 | 77,680-172,900 | 50.0 | weak fit |
+| 4 | hou-02 240 W 19th St | 4,500 | 102,042-220,528 | 27,000 | 88,542-216,028 | 142,542-270,028 | 16.7 | weak fit |
+| 5 | hou-03 4720 Washington Ave | 4,800 | 75,180-161,200 | 60,000 | 29,580-125,200 | 87,180-182,800 | 50.0 | disqualified (use restriction) |
 
-To reproduce: `POST /api/v1/analyze` with the demo body in [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md),
-or `cd backend && venv/bin/pytest -q tests/test_api.py`.
+Austin offline dataset ("40 seats, kitchen needed, 2 bathrooms, 20 parking spaces"):
+
+| Rank | Property | Rent | First-year cost | Score | Status |
+|---|---|---|---|---|---|
+| 1 | property-456 456 Oak Ave | 4,800 | 72,200-82,000 | 100.0 | qualifying |
+| 2 | property-321 2100 E Cesar Chavez St | 4,200 | 125,980-234,800 | 0.0 | weak fit |
+| 3 | property-123 123 Elm St | 4,000 | 145,430-266,800 | 31.6 | weak fit |
+| 4 | property-789 789 Congress Ave | 3,600 | 121,590-244,120 | 22.2 | disqualified (zoning) |
+
+To reproduce: `POST /api/v1/analyze` with the body in [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md#fallback-plan),
+or `cd backend && venv/bin/pytest -q tests/test_houston.py tests/test_api.py`.
 
 ## Ranking
 
 `agent_orchestrator.rank_results` orders results as follows:
 
-1. **Qualifying**: not disqualified and `score >= ranking.min_score` (25), by `first_year_cost.min`
+1. **Qualifying**: not disqualified and `score >= ranking.min_score` (**55**), by `first_year_cost.min`
    then `.max`, cheapest first.
-2. **Weak fit**: `score < min_score` (`weak_fit: true`). Property-321 is cheaper than 123 on
-   first-year cost but scores 0 (conditional zoning, parking shortfall, no hood, unknown ADA ...),
-   so it ranks after 123.
+2. **Weak fit**: `score < min_score` (`weak_fit: true`), also by first-year cost. 3701 Kirby is cheaper
+   than 801 St Emanuel on first-year minimum but scores exactly 50 for a restaurant (it is a medical
+   office), so it ranks after it.
 3. **Disqualified**: always last.
 
-Ties are broken by higher score. The cost engine itself never looks at the score.
+Ties are broken by higher score. The cost engine itself never looks at the score. Why 55: "clearly more
+than half of the weighted, scored criteria pass"; the earlier value 25 let a medical office (50) outrank
+real restaurant candidates. Set it to 0 to rank purely by first-year cost.
 
 ## Helpers
 

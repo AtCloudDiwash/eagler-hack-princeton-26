@@ -27,14 +27,20 @@ API_ORIGIN=http://localhost:8000
 | `npm run build` / `npm start` | Production build / serve |
 | `npm test` | Vitest + React Testing Library (`test/**/*.test.ts(x)`, jsdom) |
 | `npm run lint` | ESLint (`eslint-config-next`) |
-| `npm run e2e` | Playwright end-to-end demo flow (starts backend and frontend) |
+| `npm run e2e` | Playwright end-to-end: Austin and Houston demo flows + error state, desktop and 375px mobile (starts the backend in mock mode and the frontend, or reuses servers already running) |
 
 ## Layout
 
-- `app/`: `/` (profile form + recent analyses), `/properties` (candidate spaces + criteria),
+- `app/`: `/` (profile form + recent analyses), `/properties` (candidate spaces with Sample listing /
+  use-restriction badges + criteria),
   `/analysis/[id]` (stored report)
 - `components/`: page components, `analysis/*` report sections, `ui/*` primitives (Button, Card, Badge, ...)
 - `lib/`: `api.ts` (typed client), `types.ts` (mirror of `docs/API_CONTRACT.md`), `format.ts`,
-  `overlay.ts`, `useAsync.ts`
+  `overlay.ts` (evidence boxes, building footprint), `useAsync.ts`
+- Media: images (placeholder SVGs, cached live Vexcel JPEGs) come from the backend's `/static` via the
+  rewrite and render as plain `<img>`. The aerial (`components/analysis/AerialPanel.tsx`) uses a square
+  frame, a "Live · Vexcel" badge + attribution for live imagery, and Top-down / Angled tabs. The browser
+  never calls Vexcel or sees its key.
+- The profile form defaults to Houston, TX (the demo city).
 - Theme tokens (navy surfaces, cyan accent, PASS/RISK/UNKNOWN colors) live in `app/globals.css` under
   `@theme`. There is no `tailwind.config.js`.

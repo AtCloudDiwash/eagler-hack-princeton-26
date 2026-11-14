@@ -22,22 +22,24 @@ passes its state through the query string, so `/properties?...` URLs are shareab
 |---|---|
 | `SiteHeader` / `SiteFooter` | Sticky header with logo and `ApiStatus`, plus the footer |
 | `ApiStatus` | `GET /health` pill: "API · mock data" / "mixed data" / "live data" / "API offline" |
-| `BusinessProfileForm` | Business type select (from `/business-types`, with an offline fallback list), details input with a **Use example** button (example built from the type's config), city/ZIP, state |
+| `BusinessProfileForm` | Business type select (from `/business-types`, with an offline fallback list), details input with a **Use example** button (example built from the type's config), city/ZIP (default **Houston**), state (default TX, required, 2 letters) |
 | `RecentAnalyses` | Links to stored runs; hidden when empty or when the API is down |
-| `PropertyCard` | Photo, address, size, rent, zoning, TI/sq ft, previous use; the whole card toggles selection |
+| `PropertyCard` | Photo, address, size, rent, zoning, TI/sq ft, previous use; a **Sample listing** badge with tooltip when `listing_source === "sample"`; an orange **Use restriction: ...** line when `use_restrictions` is non-empty; the whole card toggles selection |
 | `CriteriaTable` | Renders any list of criteria: description, domain, weight, hard block and source columns, with required inputs, missing-data policy and jurisdictions under each description. No criterion ids are hard-coded |
 | `AnalyzeProgress` | Modal with cosmetic steps (parsing, listings, compliance, fit-out) while `/analyze` runs |
-| `MediaImage` | Image with loading/error placeholder; `fit="natural"` keeps the aspect ratio for overlays |
-| `analysis/RequirementsSummary` | Parsed requirements chips, assumptions, ranking basis, provider and parser mode badges |
+| `MediaImage` | Plain `<img>` with an error placeholder; `fit="cover"`, `"contain"` (letterbox in a fixed frame, used for the angled photo) or `"natural"` (own aspect, needed for overlays) |
+| `analysis/RequirementsSummary` | Parsed requirements chips (parking labelled "you said" / "city code" / "guideline"), assumptions, ranking basis, provider and parser mode badges |
 | `analysis/ComparisonTable` | One column per property: rank (+ weak-fit badge), score, cost to open, first-year cost, rent, build-out, TI, status |
 | `analysis/WeakFitBadge` | "Weak fit" badge for results with `weak_fit: true` (score below `min_score`) |
 | `analysis/AnalysisCard` | Full report for one property: `ScoreRing`, rank / disqualified badges, six key numbers, `CostBreakdown`, `MediaPanel`, `CriteriaResults`, landlord questions, `LandlordLetter`, observations, assumptions |
 | `analysis/CostBreakdown` | Line items with reasons, any extra breakdown entries, and the roll-up to cost to open |
-| `analysis/CriteriaResults` | PASS/RISK/UNKNOWN counts; results grouped by domain (`groupByDomain`), each with a status badge, notes, an `InfoTip` source citation and evidence chips |
-| `analysis/MediaPanel` + `ImageOverlay` | Aerial (Vexcel) and floor plan (Matterport) with numbered evidence boxes plus a legend; Matterport iframe when `matterport_embed_url` exists. See [VISION_OVERLAYS.md](VISION_OVERLAYS.md) |
+| `analysis/CriteriaResults` | PASS/RISK/UNKNOWN counts; results grouped by domain (`groupByDomain`), each with a status badge, notes, an `InfoTip` source citation and evidence chips (with a live dot for live evidence) |
+| `analysis/MediaPanel` | `AerialPanel` + floor plan (Matterport, `ImageOverlay`) side by side; Matterport 3D tour iframe when `matterport_embed_url` exists, else a "No Matterport 3D tour" note |
+| `analysis/AerialPanel` | Vexcel aerial in a **square frame**: "Live · Vexcel" badge + attribution for live imagery, else "Placeholder imagery"; **Top-down / Angled** tabs when `oblique_url` exists; evidence boxes and the dashed building footprint on the top-down view; legend. See [VISION_OVERLAYS.md](VISION_OVERLAYS.md) |
+| `analysis/ImageOverlay` | `OverlayImage` (image + normalized boxes, `frame="natural" \| "square"`), `EvidenceLegend`, captioned `ImageOverlay` |
 | `analysis/LandlordLetter` | Drafted letter with a copy-to-clipboard button |
 | `analysis/ScoreRing` | 0-100 ring: green >= 75, cyan >= 50, orange below (or when disqualified) |
-| `ui/*` | `Button` / `ButtonLink` (primary, secondary, ghost), `Card`, `SectionTitle`, `Badge` / `StatusBadge`, `EmptyState` / `ErrorState`, `InfoTip`, `Spinner` / `LoadingBlock` |
+| `ui/*` | `Button` / `ButtonLink` (primary, secondary, ghost), `Card`, `SectionTitle`, `Badge` / `StatusBadge`, `EmptyState` / `ErrorState`, `InfoTip` (named `group/tip`, optional `align="start"`), `LiveDot` (cyan "live" marker for `evidence.live`), `Spinner` / `LoadingBlock` |
 
 ## Data layer
 
@@ -47,8 +49,8 @@ passes its state through the query string, so `/properties?...` URLs are shareab
 - `lib/useAsync.ts`: keyed loading / error / success state with abort on change and `retry()`.
 - `lib/types.ts`: TypeScript mirror of [API_CONTRACT.md](API_CONTRACT.md).
 - `lib/format.ts`: currency, compact currency, ranges ("$84k – $132k"), months, sq ft, percent,
-  `humanize`, `formatValue`. Missing values render as "N/A".
-- `lib/overlay.ts`: `boxToStyle`, `overlayEvidence`.
+  `humanize`, `formatValue`, `parkingSourceLabel`. Missing values render as "N/A".
+- `lib/overlay.ts`: `boxToStyle`, `overlayEvidence`, `isFootprint`.
 
 ## Theme (`app/globals.css`)
 
@@ -75,6 +77,12 @@ Fonts: Geist Sans / Geist Mono via `next/font`. Disqualification uses Tailwind's
   down because it falls back to the built-in business types.
 - Accessibility: labeled inputs, the card checkbox is a real (visually hidden) input,
   `role="status"` spinners, `role="alert"` for disqualification, and a keyboard-focusable `InfoTip`.
+
+## Media
+
+Images are plain `<img>` elements, never the Next.js optimizer: they are placeholder SVGs or cached
+Vexcel JPEGs served by the backend at `/static/...` (proxied by `next.config.ts`). The aerial frame is
+square because live orthos are 800 × 800; the 4:3 placeholder SVGs letterbox inside it.
 
 ## Not built
 
