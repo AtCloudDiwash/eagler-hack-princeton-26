@@ -78,6 +78,64 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
+def _latest(ctx: RunContext, tool: str, predicate=lambda d: True) -> tuple[str, dict] | None:
+    for e in reversed(ctx.evidence.all()):
+        if e.tool == tool and isinstance(e.data, dict) and predicate(e.data):
+            return e.id, e.data
+    return None
+
+
+def pick_adders(ctx: RunContext) -> list[dict]:
+    """Quick mode: choose conversion items deterministically from the evidence other agents gathered.
+    Every item cites the evidence that triggered it; unverified conditions are labelled as allowances."""
+    use = ctx.business["zoning_use"]
+    out: list[dict] = []
+    roof_eq = _latest(ctx, "inspect_roof", lambda d: any("ac-unit" in k for k in d))
+    roof_cond = _latest(ctx, "inspect_roof", lambda d: any("condition" in k for k in d))
+    parking = _latest(ctx, "compute_parking_requirement")
+    reqs = _latest(ctx, "list_use_requirements")
+    req_ids = {i["id"] for i in (reqs[1].get("items", []) if reqs else [])}
+    ac_units = None
+    if roof_eq:
+        ac_units = next((v for k, v in roof_eq[1].items() if k.endswith("ac-unit.count")), None)
+
+    def add(item: str, reason: str, evidence: tuple[str, dict] | None, quantity: int = 1) -> None:
+        out.append({"id": item, "quantity": quantity, "reason": reason, "evidence_ids": [evidence[0]] if evidence else []})
+
+    if use == "restaurant":
+        add("hood_exhaust", "Commercial kitchen exhaust is required and no existing hood is verified (allowance).", roof_eq)
+        if "grease_interceptor" in req_ids:
+            add("grease_interceptor", "Food service requires a grease interceptor.", reqs)
+    if ac_units in (0, None):
+        add("hvac_rtu", "No rooftop AC units detected; HVAC capacity unverified (allowance).", roof_eq)
+    if roof_cond:
+        cond = next((v for k, v in roof_cond[1].items() if k.endswith("condition") or k.endswith("precise-value")), None)
+        if isinstance(cond, (int, float)) and cond <= 2.5:
+            add("roof_repair", f"Roof condition {cond}/5 suggests repair before fit-out.", roof_cond)
+    if parking and parking[1].get("status") == "risk":
+        add("parking_agreement", "Likely parking shortfall vs the city minimum.", parking)
+    if use in {"restaurant", "medical_office", "gym", "retail", "office"} and req_ids & {"ada_tas", "ada_cbc11b", "ada"}:
+        add("ada_upgrades", "Public-facing use: budget for accessible entry/restrooms (allowance).", reqs)
+    if use == "medical_office":
+        add("operatory_plumbing", "Each operatory needs water, vacuum and air.", None, quantity=max(3, round(ctx.target_sqft / 500)))
+        add("electrical_upgrade", "Dental equipment needs dedicated circuits (allowance).", None)
+    if use == "gym":
+        add("rubber_flooring", "Free-weight areas need impact flooring.", None)
+        add("locker_showers", "Members expect locker rooms with showers.", None)
+    return out
+
+
 async def run(ctx: RunContext, budget_limit: int = 5, focus: str | None = None) -> AgentReport:
     budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "cost", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+    tools = build_tools(ctx, budget)
+    if ctx.mode == "quick" and not focus:
+        calls = [
+            ("get_rent_assumption", {}),
+            ("estimate_costs", {"leased_sqft": ctx.target_sqft, "adders": pick_adders(ctx), "second_generation": False}),
+        ]
+        task = task_prompt(ctx) + (
+            "\n\nQUICK MODE: the estimate below already uses conversion items chosen from the evidence. Review whether "
+            "they fit this business and budget and explain the result; call estimate_costs again only if an item is clearly wrong."
+        )
+        return await run_agent(ctx, "cost", ROLE, task, tools, budget, prefetch_calls=calls, extra_tool_calls=1, max_model_calls=3)
+    return await run_agent(ctx, "cost", ROLE, task_prompt(ctx, focus), tools, budget)

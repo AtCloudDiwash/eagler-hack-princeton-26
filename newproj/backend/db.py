@@ -48,6 +48,10 @@ def conn() -> sqlite3.Connection:
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
+        cols = {r[1] for r in _conn.execute("PRAGMA table_info(analyses)")}
+        if "mode" not in cols:  # migration for databases created before Quick/Deep modes
+            _conn.execute("ALTER TABLE analyses ADD COLUMN mode TEXT NOT NULL DEFAULT 'deep'")
+            _conn.commit()
     return _conn
 
 
@@ -94,10 +98,10 @@ def get_property(prop_id: str) -> tuple[dict, dict | None] | None:
 
 # ---------------------------------------------------------------- analyses
 
-def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int) -> None:
+def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int, mode: str = "deep") -> None:
     _exec(
-        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m) VALUES (?, 'queued', ?, ?, ?, ?, ?)",
-        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m),
+        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, mode) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?)",
+        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, mode),
     )
 
 
@@ -122,6 +126,7 @@ def _row_to_analysis(row: sqlite3.Row) -> dict:
         "intent": json.loads(row["intent"]),
         "property": json.loads(row["property"]),
         "radius_m": row["radius_m"],
+        "mode": row["mode"] if "mode" in row.keys() else "deep",
         "events": json.loads(row["events"]),
         "result": json.loads(row["result"]) if row["result"] else None,
         "error": row["error"],

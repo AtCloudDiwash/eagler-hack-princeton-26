@@ -92,6 +92,7 @@ class RunContext:
     evidence: EvidenceStore
     emit: Callable[[str, str, str, dict | None], None]
     shared: dict[str, Any] = field(default_factory=dict)  # findings shared between agents
+    mode: str = "deep"  # "quick" = pre-gathered evidence, fewer model calls, brief reports; "deep" = full investigation
 
     @property
     def business(self) -> dict:
@@ -176,6 +177,13 @@ COMMON_RULES = """How to investigate:
 9. Finish by returning your structured report (AgentOutput) with one metric assessment per assigned metric id."""
 
 
+QUICK_RULES = """
+QUICK MODE (the user asked for a fast answer):
+- The key evidence for your metrics is already gathered below the request (cite its E-ids). Call a tool only if
+  something critical for THIS business is still missing.
+- Keep the report brief: at most 3 findings, one-sentence details and rationales, at most 3 missing_information items."""
+
+
 def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], budget: int) -> str:
     return (
         f"You are the {AGENT_LABELS[agent]} on a commercial-property investigation team.\n"
@@ -186,6 +194,7 @@ def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], b
         + (f"Requirements mentioned: {', '.join(ctx.intent.get('requirements') or [])}\n" if ctx.intent.get("requirements") else "")
         + f"\nYOUR METRICS (assess every one):\n{metrics_brief(metrics)}\n\n"
         + COMMON_RULES.format(budget=budget)
+        + (QUICK_RULES if ctx.mode == "quick" else "")
     )
 
 
@@ -231,11 +240,40 @@ def _transcript(messages: list) -> str:
     return "\n".join(parts)
 
 
-async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: list[StructuredTool], budget: ToolBudget) -> AgentReport:
-    """Run one Deep Agent investigation and return a validated AgentReport (never raises)."""
+def prefetch(tools: list[StructuredTool], calls: list[tuple[str, dict]]) -> str:
+    """Quick mode: run the given tool calls up front (they still register evidence and emit events) and
+    return a block summarizing the results for the agent's first prompt."""
+    by_name = {t.name: t for t in tools}
+    lines = []
+    for name, args in calls:
+        if name not in by_name:
+            continue
+        try:
+            out = json.loads(by_name[name].invoke(args))
+        except Exception as err:  # noqa: BLE001 - a failed prefetch just isn't included
+            log.warning("prefetch %s failed: %s", name, err)
+            continue
+        if out.get("evidence_id"):
+            lines.append(f"{out['evidence_id']} [{name}]: {out.get('summary', '')}")
+    return "PRE-GATHERED EVIDENCE (cite these ids):\n" + "\n".join(lines) if lines else ""
+
+
+async def run_agent(
+    ctx: RunContext, agent: str, role: str, task: str, tools: list[StructuredTool], budget: ToolBudget,
+    prefetch_calls: list[tuple[str, dict]] | None = None, extra_tool_calls: int = 2, max_model_calls: int | None = None,
+) -> AgentReport:
+    """Run one Deep Agent investigation and return a validated AgentReport (never raises).
+
+    With `prefetch_calls` (Quick mode) those tools run first and their results go into the task, the tool
+    budget becomes what was used plus `extra_tool_calls`, and `max_model_calls` caps the agent's LLM calls."""
     start = time.time()
     metrics = ctx.metrics_for(agent)
     ctx.emit(agent, "start", f"{AGENT_LABELS[agent]} started — {len(metrics)} metrics to assess", {"metrics": [m["id"] for m in metrics]})
+    if prefetch_calls:
+        block = await asyncio.to_thread(prefetch, tools, prefetch_calls)
+        budget.limit = budget.used + extra_tool_calls
+        if block:
+            task = f"{task}\n\n{block}"
     output: AgentOutput | None = None
     messages: list = []
     error: str | None = None
@@ -243,9 +281,9 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
         graph = create_deep_agent(
             model=chat_model(),
             tools=tools,
-            system_prompt=system_prompt(agent, role, ctx, metrics, budget.limit),
+            system_prompt=system_prompt(agent, role, ctx, metrics, budget.limit - budget.used),
             response_format=ToolStrategy(AgentOutput),
-            middleware=[ModelCallLimitMiddleware(run_limit=settings.agent_max_model_calls, exit_behavior="end")],
+            middleware=[ModelCallLimitMiddleware(run_limit=max_model_calls or settings.agent_max_model_calls, exit_behavior="end")],
             name=f"{agent}_agent",
         )
 

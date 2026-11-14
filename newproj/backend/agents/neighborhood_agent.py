@@ -117,6 +117,19 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
+def quick_prefetch(ctx: RunContext) -> list[tuple[str, dict]]:
+    """Demand and competition groups for this business at its catchment, plus access, mix and demographics."""
+    radius = ctx.business["default_radius_m"]
+    roles = ctx.business.get("place_roles", {})
+    groups = [g for role in ("competitors", "demand") for g in roles.get(role, [])]
+    calls = [("count_places", {"group": g, "radius_m": radius}) for g in dict.fromkeys(groups)]
+    return calls + [("get_building_mix", {"radius_m": radius}), ("get_access_options", {"radius_m": 400}), ("get_demographics", {})]
+
+
 async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None) -> AgentReport:
     budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "neighborhood", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+    tools = build_tools(ctx, budget)
+    if ctx.mode == "quick" and not focus:
+        budget.limit = 20  # room for the pre-gathered calls; reset to used + 2 after prefetch
+        return await run_agent(ctx, "neighborhood", ROLE, task_prompt(ctx), tools, budget, prefetch_calls=quick_prefetch(ctx), max_model_calls=3)
+    return await run_agent(ctx, "neighborhood", ROLE, task_prompt(ctx, focus), tools, budget)

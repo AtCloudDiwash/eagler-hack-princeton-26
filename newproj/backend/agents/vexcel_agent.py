@@ -147,11 +147,23 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
+QUICK_PREFETCH = [
+    ("get_building_overview", {}),
+    ("check_size_fit", {}),
+    ("inspect_roof", {"focus": "condition"}),
+    ("inspect_roof", {"focus": "equipment"}),
+    ("inspect_site_paving", {}),
+]
+
+
 async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None) -> AgentReport:
     if not ctx.feature:
         return _no_vexcel_report(ctx)
     budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "vexcel", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+    tools = build_tools(ctx, budget)
+    if ctx.mode == "quick" and not focus:
+        return await run_agent(ctx, "vexcel", ROLE, task_prompt(ctx), tools, budget, prefetch_calls=QUICK_PREFETCH, max_model_calls=3)
+    return await run_agent(ctx, "vexcel", ROLE, task_prompt(ctx, focus), tools, budget)
 
 
 def _no_vexcel_report(ctx: RunContext) -> AgentReport:

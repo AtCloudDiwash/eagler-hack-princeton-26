@@ -89,7 +89,7 @@ async def start_analysis(req: AnalysisRequest) -> dict:
     if not stored:
         raise HTTPException(404, "Unknown property")
     analysis_id = uuid.uuid4().hex[:12]
-    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(*stored), req.radius_m)
+    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(*stored), req.radius_m, req.mode)
     task = asyncio.create_task(multi_agent_engine.run_analysis(analysis_id, req))
     _running.add(task)
     task.add_done_callback(_running.discard)
@@ -114,6 +114,6 @@ def list_analyses() -> list[dict]:
             "id": a["id"], "status": a["status"], "created_at": a["created_at"], "query": a["query"],
             "business_label": a["intent"].get("business_label"),
             "property": {"id": p.get("id"), "lat": p.get("lat"), "lon": p.get("lon"), "building_type": p.get("building_type"), "area_sqft": p.get("area_sqft"), "address": p.get("address")},
-            "score": rec.get("score"), "confidence": rec.get("confidence"), "verdict": rec.get("verdict"),
+            "score": rec.get("score"), "confidence": rec.get("confidence"), "verdict": rec.get("verdict"), "mode": a.get("mode", "deep"),
         })
     return out

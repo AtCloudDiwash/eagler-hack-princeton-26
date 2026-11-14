@@ -97,6 +97,14 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
                     {duration != null ? ` · analyzed in ${fmtClock(duration)}` : ""}
                     {demo ? " · sample" : ""}
                   </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset ${
+                      analysis.mode === "quick" ? "bg-teal-300/10 text-teal-200 ring-teal-300/30" : "bg-white/[0.04] text-slate-400 ring-white/10"
+                    }`}
+                    title={analysis.mode === "quick" ? "Quick response: agents started from pre-gathered evidence" : "Deep report: full investigation with follow-ups"}
+                  >
+                    {analysis.mode === "quick" ? "Quick" : "Deep report"}
+                  </span>
                 </div>
                 <h1 className="mt-2 text-xl font-semibold leading-snug tracking-tight text-slate-50 sm:text-[22px]">{rec.headline}</h1>
                 <p className="mt-1.5 flex items-center gap-1.5 truncate text-[12px] text-slate-400">

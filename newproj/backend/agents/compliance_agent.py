@@ -72,4 +72,14 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
 
 async def run(ctx: RunContext, budget_limit: int = 6, focus: str | None = None) -> AgentReport:
     budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "compliance", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+    tools = build_tools(ctx, budget)
+    if ctx.mode == "quick" and not focus:
+        calls = [
+            ("identify_jurisdiction", {}),
+            ("check_permitted_use", {}),
+            ("compute_parking_requirement", {"leased_floor_sqft": ctx.target_sqft}),
+            ("list_use_requirements", {}),
+            ("check_accessibility_signals", {}),
+        ]
+        return await run_agent(ctx, "compliance", ROLE, task_prompt(ctx), tools, budget, prefetch_calls=calls, extra_tool_calls=1, max_model_calls=3)
+    return await run_agent(ctx, "compliance", ROLE, task_prompt(ctx, focus), tools, budget)

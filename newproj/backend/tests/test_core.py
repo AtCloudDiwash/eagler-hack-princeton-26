@@ -220,3 +220,35 @@ def test_budget_parsing_and_check():
     assert tight["status"] == "over" and costs.budget_status(tight) == "weak"
     typical = costs.budget_check(est, None, "restaurant")
     assert typical["source"] == "typical" and "didn't specify a budget" in typical["note"]
+
+
+def test_quick_prefetch_registers_cited_evidence():
+    from agents.base import ToolBudget, prefetch
+    from agents.compliance_agent import build_tools
+
+    ctx = _ctx()
+    budget = ToolBudget(6)
+    block = prefetch(build_tools(ctx, budget), [("identify_jurisdiction", {}), ("check_permitted_use", {}), ("no_such_tool", {})])
+    assert block.startswith("PRE-GATHERED EVIDENCE") and "E1 [identify_jurisdiction]" in block and "E2 [check_permitted_use]" in block
+    assert budget.used == 2 and len(ctx.evidence.all()) == 2
+
+
+def test_quick_cost_items_come_from_evidence():
+    from agents.cost_agent import pick_adders
+
+    ctx = _ctx()
+    roof = ctx.evidence.add("vexcel", "inspect_roof", "x", "0 AC units", {"roof-objects.ac-unit.count": 0, "roof-objects.roof-vent.count": 2})
+    cond = ctx.evidence.add("vexcel", "inspect_roof", "x", "roof 2/5", {"roof-characteristics.condition": 2.0})
+    park = ctx.evidence.add("compliance", "compute_parking_requirement", "x", "risk", {"status": "risk"})
+    reqs = ctx.evidence.add("compliance", "list_use_requirements", "x", "reqs", {"items": [{"id": "grease_interceptor"}, {"id": "ada_tas"}]})
+    items = {a["id"]: a for a in pick_adders(ctx)}
+    assert set(items) == {"hood_exhaust", "grease_interceptor", "hvac_rtu", "roof_repair", "parking_agreement", "ada_upgrades"}
+    assert items["hvac_rtu"]["evidence_ids"] == [roof] and items["roof_repair"]["evidence_ids"] == [cond]
+    assert items["parking_agreement"]["evidence_ids"] == [park] and items["grease_interceptor"]["evidence_ids"] == [reqs]
+
+
+def test_analysis_request_defaults_to_deep():
+    from schemas import AnalysisRequest, Intent
+
+    assert AnalysisRequest(query="q", intent=Intent(), property_id="p").mode == "deep"
+    assert AnalysisRequest(query="q", intent=Intent(), property_id="p", mode="quick").mode == "quick"

@@ -83,6 +83,7 @@ async def build_context(req: AnalysisRequest, prop: dict, feature: dict | None, 
         target_sqft=sq,
         target_basis=basis,
         extra_requirements=req.requirements,
+        mode=req.mode,
         evidence=EvidenceStore(),
         emit=log_.emit,
     )
@@ -345,37 +346,64 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         for agent, action, why in plan:
             log_.emit("engine", "plan", f"{AGENT_LABELS[agent]}: {'will run' if action == 'run' else 'skipped'} — {why}")
 
-        # ---- phase 1: independent investigations, concurrently
-        log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
-        phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
-        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError)), None)
-        if limit_hit:
-            raise limit_hit
-        for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
-            if isinstance(rep, BaseException):
-                log_.emit(name, "error", f"Crashed: {rep}")
-                reports[name] = AgentReport(agent=name, label=AGENT_LABELS[name], status="failed", error=str(rep))
-            else:
-                reports[name] = rep
 
-        # ---- share findings with the dependent Cost Agent
-        lines = []
-        for name in ("vexcel", "compliance", "matterport", "neighborhood"):
-            r = reports[name]
-            for f in r.findings:
-                if f.impact == "negative" or f.severity != "low":
-                    lines.append(f"- [{AGENT_LABELS[name]}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'}; {f.kind})")
-            for q in r.missing_information[:3]:
-                lines.append(f"- [{AGENT_LABELS[name]}] UNKNOWN: {q}")
-        ctx.shared["upstream_findings"] = "\n".join(lines[:24])
-        log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
-        try:
-            reports["cost"] = await cost_agent.run(ctx)
-        except AllProvidersFailedError:
-            raise
-        except Exception as err:  # noqa: BLE001
-            reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
+        def collect(names: list[str], results: list) -> None:
+            limit_hit = next((r for r in results if isinstance(r, AllProvidersFailedError)), None)
+            if limit_hit:
+                raise limit_hit
+            for name, rep in zip(names, results):
+                if isinstance(rep, BaseException):
+                    log_.emit(name, "error", f"Crashed: {rep}")
+                    reports[name] = AgentReport(agent=name, label=AGENT_LABELS[name], status="failed", error=str(rep))
+                else:
+                    reports[name] = rep
+
+        def share_upstream(names: tuple[str, ...]) -> int:
+            lines = []
+            for name in names:
+                r = reports.get(name)
+                if not r:
+                    continue
+                for f in r.findings:
+                    if f.impact == "negative" or f.severity != "low":
+                        lines.append(f"- [{AGENT_LABELS[name]}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'}; {f.kind})")
+                for q in r.missing_information[:3]:
+                    lines.append(f"- [{AGENT_LABELS[name]}] UNKNOWN: {q}")
+            ctx.shared["upstream_findings"] = "\n".join(lines[:24])
+            return len(lines)
+
+        async def run_cost() -> AgentReport:
+            try:
+                return await cost_agent.run(ctx)
+            except AllProvidersFailedError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                return AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
+
+        if ctx.mode == "quick":
+            # Quick: evidence is pre-gathered per agent; the Cost agent only depends on building + rules, so it
+            # starts as soon as the Vexcel and Compliance agents finish (Neighborhood keeps running alongside).
+            log_.emit("engine", "plan", "Quick mode: agents start from pre-gathered evidence; Cost starts after Vexcel + Compliance")
+            t_neigh = asyncio.create_task(neighborhood_agent.run(ctx))
+            t_mp = asyncio.create_task(matterport_agent.run(ctx))
+            collect(["vexcel", "compliance"], await asyncio.gather(vexcel_agent.run(ctx), compliance_agent.run(ctx), return_exceptions=True))
+            n = share_upstream(("vexcel", "compliance"))
+            log_.emit("engine", "plan", f"Cost Agent starts with {n} findings from Vexcel + Compliance")
+            t_cost = asyncio.create_task(run_cost())
+            collect(["neighborhood", "matterport"], await asyncio.gather(t_neigh, t_mp, return_exceptions=True))
+            collect(["cost"], [await asyncio.gather(t_cost, return_exceptions=True)][0])
+        else:
+            # ---- phase 1: independent investigations, concurrently
+            log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
+            collect(
+                ["vexcel", "neighborhood", "compliance", "matterport"],
+                await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True),
+            )
+            # ---- share findings with the dependent Cost Agent
+            n = share_upstream(("vexcel", "compliance", "matterport", "neighborhood"))
+            log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {n} upstream findings")
+            reports["cost"] = await run_cost()
 
         # Guarantee a cost estimate exists (deterministic, no adders) if the agent never produced one.
         if not _evidence_data(ctx, "estimate_costs"):
@@ -389,7 +417,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
 
         # ---- targeted follow-ups that could change the recommendation
         followups_run = []
-        for m in followup_candidates(ctx, metrics, reports):
+        for m in followup_candidates(ctx, metrics, reports) if ctx.mode == "deep" else []:
             agent_mod = FOLLOWUP_AGENTS[m.owner_agent]
             question = f"Resolve the metric '{m.id}' ({m.name}). It is currently '{m.status}' and could change the final verdict. Find specific evidence or confirm it cannot be determined."
             log_.emit("engine", "followup", f"Follow-up to {AGENT_LABELS[m.owner_agent]}: {m.name} could change the verdict")
@@ -451,6 +479,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         ]
         result = {
             "business_type": ctx.intent["business_type"],
+            "mode": ctx.mode,
             "business_label": ctx.business["label"],
             "recommendation": {
                 "verdict": rec["verdict"], "label": rec["label"], "score": rec["score"], "confidence": rec["confidence"],

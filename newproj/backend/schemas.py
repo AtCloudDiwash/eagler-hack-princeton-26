@@ -64,6 +64,7 @@ class AnalysisRequest(BaseModel):
     property_id: str
     radius_m: int = 500
     requirements: str | None = None
+    mode: Literal["quick", "deep"] = "deep"  # quick = pre-gathered evidence, fewer LLM calls; deep = full investigation
 
 
 # ------------------------------------------------------------------ agent outputs (LLM-facing)

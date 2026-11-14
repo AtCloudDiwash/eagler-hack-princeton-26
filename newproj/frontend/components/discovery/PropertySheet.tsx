@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowLeft, Building2, Camera, Car, Database, Fan, Home, Layers3, MapPinned, Ruler, Sparkles } from "lucide-react";
-import type { Candidate, KeyFact, Neighborhood, PropertyDetail } from "@/lib/api-types";
+import { ArrowLeft, Building2, Camera, Car, Database, Fan, Home, Layers3, MapPinned, Microscope, Ruler, Sparkles, Zap } from "lucide-react";
+import type { AnalysisMode, Candidate, KeyFact, Neighborhood, PropertyDetail } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtSqft, titleCase } from "@/lib/format";
 import { groupIdForLabel, placeMeta } from "@/lib/places";
 import { FieldExplorer } from "@/components/ui/JsonView";
@@ -23,6 +23,8 @@ type Props = {
   requirements: string;
   setRequirements: (s: string) => void;
   onAnalyze: () => void;
+  mode: AnalysisMode;
+  setMode: (m: AnalysisMode) => void;
   analyzing: boolean;
   analyzeError: string | null;
   onBack: () => void;
@@ -194,6 +196,7 @@ export default function PropertySheet(p: Props) {
           className="w-full rounded-xl bg-white/[0.04] px-3 py-2.5 text-[12px] text-slate-100 ring-1 ring-inset ring-white/[0.06] placeholder:text-slate-500 focus:outline-none focus:ring-teal-300/40"
         />
         {p.analyzeError && <p className="text-xs text-rose-300">{p.analyzeError}</p>}
+        <ModeToggle mode={p.mode} setMode={p.setMode} />
         <motion.button
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
@@ -205,8 +208,49 @@ export default function PropertySheet(p: Props) {
           {p.analyzing ? <Spinner className="h-4 w-4 text-ink-950" /> : <Sparkles size={16} />}
           <span className="relative">Analyze this property</span>
         </motion.button>
-        <p className="text-center text-[10px] text-slate-500">4 AI agents check building, area, rules & cost · about 2 min</p>
+        <p className="text-center text-[10px] text-slate-500">{MODES[p.mode].caption}</p>
       </div>
+    </div>
+  );
+}
+
+const MODES: Record<AnalysisMode, { label: string; time: string; caption: string; icon: typeof Zap }> = {
+  quick: {
+    label: "Quick",
+    time: "~1 min",
+    icon: Zap,
+    caption: "Fast answer: agents start from pre-gathered evidence and keep reports brief",
+  },
+  deep: {
+    label: "Deep report",
+    time: "~2 min",
+    icon: Microscope,
+    caption: "Full investigation: each agent decides what to examine, with follow-ups",
+  },
+};
+
+/** Quick / Deep switch above the Analyze button. */
+function ModeToggle({ mode, setMode }: { mode: AnalysisMode; setMode: (m: AnalysisMode) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Analysis depth" className="grid grid-cols-2 gap-1 rounded-xl bg-white/[0.04] p-1 ring-1 ring-inset ring-white/[0.06]">
+      {(Object.keys(MODES) as AnalysisMode[]).map((m) => {
+        const { label, time, icon: Icon } = MODES[m];
+        const on = mode === m;
+        return (
+          <button
+            key={m}
+            role="radio"
+            aria-checked={on}
+            onClick={() => setMode(m)}
+            className={`relative flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[12px] font-medium transition-colors ${on ? "text-ink-950" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            {on && <motion.span layoutId="analysis-mode" className="absolute inset-0 rounded-lg bg-teal-300" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+            <Icon size={13} className="relative" />
+            <span className="relative">{label}</span>
+            <span className={`relative font-mono text-[10px] ${on ? "text-ink-950/70" : "text-slate-500"}`}>{time}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

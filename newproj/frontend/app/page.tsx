@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { BusinessTypeInfo, Candidate, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
+import type { AnalysisMode, BusinessTypeInfo, Candidate, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtSqft } from "@/lib/format";
 import { heightFor, type LngLat } from "@/lib/geo";
 import { useMedia } from "@/lib/useMedia";
@@ -50,6 +50,23 @@ export default function DiscoveryPage() {
   const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null);
 
   const [requirements, setRequirements] = useState("");
+  const [mode, setModeState] = useState<AnalysisMode>("deep");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("turnkey:mode");
+      if (saved === "quick" || saved === "deep") setModeState(saved);
+    } catch {
+      /* storage unavailable: keep the default */
+    }
+  }, []);
+  const setMode = (m: AnalysisMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem("turnkey:mode", m);
+    } catch {
+      /* storage unavailable: choice lasts for this visit only */
+    }
+  };
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
@@ -169,7 +186,7 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
+      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined, mode });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);
@@ -364,6 +381,8 @@ export default function DiscoveryPage() {
               requirements={requirements}
               setRequirements={setRequirements}
               onAnalyze={analyze}
+              mode={mode}
+              setMode={setMode}
               analyzing={analyzing}
               analyzeError={analyzeError}
               onBack={() => {

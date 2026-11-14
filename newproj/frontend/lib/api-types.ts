@@ -105,12 +105,16 @@ export type Neighborhood = {
 
 // ---------------------------------------------------------------- analysis
 
+/** quick = agents start from pre-gathered evidence with fewer LLM calls; deep = full investigation. */
+export type AnalysisMode = "quick" | "deep";
+
 export type AnalysisRequest = {
   query: string;
   intent: Intent;
   property_id: string;
   radius_m: number;
   requirements?: string; // free-text extra requirements from the user
+  mode?: AnalysisMode; // default "deep"
 };
 
 export type AgentName = "vexcel" | "neighborhood" | "compliance" | "cost" | "matterport" | "engine";
@@ -247,6 +251,7 @@ export type Analysis = {
   intent: Intent;
   property: PropertyDetail;
   radius_m: number;
+  mode?: AnalysisMode; // absent on analyses made before modes existed (= deep)
   events: AnalysisEvent[];
   result: AnalysisResult | null;
   error: string | null;
@@ -262,4 +267,5 @@ export type AnalysisSummary = {
   score: number | null;
   confidence: number | null;
   verdict: Verdict | null;
+  mode?: AnalysisMode;
 };
