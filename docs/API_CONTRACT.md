@@ -25,9 +25,12 @@ Types below use TypeScript notation. `Status = "PASS" | "RISK" | "UNKNOWN"`.
 { status: "ok"; mode: { costar: "mock" | "live"; matterport: "mock" | "live"; vexcel: "mock" | "live"; parser: "regex" | "ollama" | "claude"; llm: string /* e.g. "ollama:qwen3:8b", "anthropic:claude-haiku-5-5", "none" */ } }
 ```
 
-`mode.parser` here is the parser that is *configured* ("claude" when `ANTHROPIC_API_KEY` is set).
+`mode.parser` / `mode.llm` here are what is *configured and reachable right now* (`LLM_PROVIDER`:
+"ollama" + "ollama:qwen3:8b" when Ollama answers and the model is pulled, "claude" + "anthropic:<model>"
+when `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` is set, otherwise "regex" + "none").
 An analysis response's `mode.parser` is the parser that was *actually used* for that run, so it reads
-"regex" if the Claude call failed and fell back.
+"regex" if the LLM call failed and fell back; its `mode.llm` is the model used for the parse or the
+`ai_summary` in that run, or "none".
 
 ### GET /api/v1/business-types
 

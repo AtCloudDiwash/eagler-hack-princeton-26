@@ -1,6 +1,7 @@
 """Pydantic schemas shared by the API, services and providers."""
 from .analysis_result import (
     OBSERVED_SOURCES,
+    AISummary,
     AnalysisResult,
     AnalysisSummary,
     AnalyzeRequest,
@@ -18,7 +19,7 @@ from .criterion import Criterion
 from .property import Property
 
 __all__ = [
-    "OBSERVED_SOURCES", "AnalysisResult", "AnalysisSummary", "AnalyzeRequest", "AnalyzeResponse",
+    "OBSERVED_SOURCES", "AISummary", "AnalysisResult", "AnalysisSummary", "AnalyzeRequest", "AnalyzeResponse",
     "BusinessProfile", "ComplianceStatus", "CostLineItem", "CostRange", "Criterion", "CriterionResult",
     "Evidence", "Media", "Property", "Requirements", "Status",
 ]

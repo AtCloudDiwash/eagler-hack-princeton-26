@@ -4,24 +4,25 @@ Two extractors produce the same raw fields (capacity, bathrooms, parking, sq ft 
 kitchen need):
 
 * **regex** — always available, deterministic, offline.
-* **claude** — used first when ANTHROPIC_API_KEY is set. Its JSON is validated and merged over the
-  regex result. Any error, refusal or timeout falls back to regex silently (logged).
+* **LLM** — the provider chosen by LLM_PROVIDER (app/services/llm.py): a local Ollama model
+  (default, reported as "ollama") or Claude ("claude"). Tried first when available; its JSON is
+  validated and merged over the regex result. Any error, refusal, timeout or invalid JSON falls back
+  to regex silently (logged).
 
 Everything the user did not state is filled from backend/config/business_types.yaml, and every
 default is recorded as a human-readable string in `Requirements.assumptions`.
 """
 from __future__ import annotations
 
-import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Any
 
-from ..config import business_types, jurisdiction_for, log, settings
+from ..config import business_types, jurisdiction_for, log
 from ..models import BusinessProfile, Property, Requirements
+from . import llm
 
-CLAUDE_TIMEOUT_SECONDS = 8.0
 RAW_FIELDS = ("capacity", "bathrooms", "parking", "min_sqft", "max_sqft", "max_rent", "needs_kitchen")
 
 
@@ -122,11 +123,11 @@ def regex_extract(details: str) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------------------------
-# Claude extractor (optional)
+# LLM extractor (Ollama / Claude, optional)
 # --------------------------------------------------------------------------------------------
 
 _NULLABLE_INT = {"type": ["integer", "null"]}
-CLAUDE_SCHEMA: dict[str, Any] = {
+LLM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "capacity": {**_NULLABLE_INT, "description": "Seats / chairs / treatment rooms the business needs"},
@@ -140,27 +141,21 @@ CLAUDE_SCHEMA: dict[str, Any] = {
     "required": list(RAW_FIELDS),
     "additionalProperties": False,
 }
+CLAUDE_SCHEMA = LLM_SCHEMA  # backwards-compatible name
 
-_CLAUDE_SYSTEM = (
+_LLM_SYSTEM = (
     "You extract structured space requirements from a small-business owner's description of the "
     "commercial space they need. Return only values the text states or clearly implies; use null "
-    "for anything not mentioned. Do not guess defaults."
+    "for anything not mentioned. Do not guess defaults. Fields: capacity (seats, chairs, rooms), "
+    "bathrooms, parking (spaces), min_sqft / max_sqft (square feet), max_rent (monthly USD; '$5k' = "
+    "5000), needs_kitchen (true/false). Respond with JSON only."
 )
 
 
-def _anthropic_client():
-    """Build the SDK client. Separate function so tests can replace it with a fake."""
-    import anthropic
-
-    return anthropic.Anthropic(
-        api_key=settings.anthropic_api_key, timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=0
-    )
-
-
-def _validate_claude_fields(data: Any) -> dict[str, Any]:
+def _validate_llm_fields(data: Any) -> dict[str, Any]:
     """Keep only well-typed, plausible values; drop the rest (regex/defaults fill them)."""
     if not isinstance(data, dict):
-        raise ValueError("Claude output is not a JSON object")
+        raise ValueError("LLM output is not a JSON object")
     clean: dict[str, Any] = {}
     limits = {"capacity": 2000, "bathrooms": 50, "parking": 2000, "min_sqft": 500_000, "max_sqft": 500_000}
     for key, upper in limits.items():
@@ -179,20 +174,19 @@ def _validate_claude_fields(data: Any) -> dict[str, Any]:
     return clean
 
 
-def claude_extract(details: str, business_label: str) -> dict[str, Any]:
-    """Ask Claude for the raw fields as schema-constrained JSON. Raises on any failure."""
-    client = _anthropic_client()
-    response = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=2048,
-        system=_CLAUDE_SYSTEM,
-        messages=[{"role": "user", "content": f"Business type: {business_label}\nDescription: {details}"}],
-        output_config={"effort": "low", "format": {"type": "json_schema", "schema": CLAUDE_SCHEMA}},
+_validate_claude_fields = _validate_llm_fields  # backwards-compatible name
+
+
+def llm_extract(details: str, business_label: str) -> dict[str, Any]:
+    """Ask the configured LLM for the raw fields as schema-constrained JSON. Raises on any failure."""
+    data = llm.chat_json(
+        _LLM_SYSTEM,
+        f"Business type: {business_label}\nDescription: {details}",
+        LLM_SCHEMA,
+        max_tokens=256,
+        purpose="requirements parse",
     )
-    if response.stop_reason != "end_turn":
-        raise RuntimeError(f"Claude stopped with stop_reason={response.stop_reason}")
-    text = next(block.text for block in response.content if block.type == "text")
-    return _validate_claude_fields(json.loads(text))
+    return _validate_llm_fields(data)
 
 
 # --------------------------------------------------------------------------------------------
@@ -402,15 +396,15 @@ def build_requirements(profile: BusinessProfile, raw: dict[str, Any]) -> Require
 
 
 def parse_requirements(profile: BusinessProfile) -> tuple[Requirements, str]:
-    """Run the parser agent. Returns (requirements, parser_used) where parser_used is 'regex' | 'claude'."""
-    business = get_business(profile.type)  # validate before spending an API call
+    """Run the parser agent. Returns (requirements, parser_used): 'ollama' | 'claude' | 'regex'."""
+    business = get_business(profile.type)  # validate before spending an LLM call
     raw = regex_extract(profile.details)
     parser_used = "regex"
-    if settings.anthropic_api_key and profile.details.strip():
+    if profile.details.strip() and llm.is_available():
         try:
-            claude_fields = claude_extract(profile.details, business["label"])
-            raw = {**raw, **claude_fields}
-            parser_used = "claude"
-        except Exception as exc:  # noqa: BLE001 - any Claude failure falls back to regex
-            log.warning("Claude requirements parsing failed (%s: %s); using regex", type(exc).__name__, exc)
+            llm_fields = llm_extract(profile.details, business["label"])
+            raw = {**raw, **llm_fields}
+            parser_used = llm.parser_name()
+        except Exception as exc:  # noqa: BLE001 - any LLM failure falls back to regex
+            log.warning("LLM requirements parsing failed (%s: %s); using regex", type(exc).__name__, exc)
     return build_requirements(profile, raw), parser_used

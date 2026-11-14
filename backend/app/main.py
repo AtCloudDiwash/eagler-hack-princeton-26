@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db
 from .config import BACKEND_DIR, log, settings
 from .routers import analyses, analyze, business_types, criteria, health, properties
+from .services import llm
 from .services.criteria_manager import CriteriaConfigError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -21,8 +22,9 @@ STATIC_DIR = BACKEND_DIR / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
-    modes = {**settings.mode_summary, "parser": settings.parser_mode}
+    modes = {**settings.mode_summary, **health.llm_mode()}
     log.info("Turnkey Matchmaker API starting; provider modes: %s", modes)
+    llm.warm_up()  # background: load the Ollama model so the first analysis isn't slow
     log.info("Run history DB: %s", settings.database_url)
     yield
 

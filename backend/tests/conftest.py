@@ -9,6 +9,7 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="turnkey-tests-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP / 'test.db'}"
 os.environ["USE_MOCK_DATA"] = "true"
+os.environ["LLM_PROVIDER"] = "none"  # tests that need an LLM install a fake one (tests/test_llm.py)
 for _key in ("ANTHROPIC_API_KEY", "COSTAR_API_KEY", "MATTERPORT_API_KEY", "VEXCEL_API_KEY", "CRITERIA_PATH"):
     os.environ[_key] = ""
 

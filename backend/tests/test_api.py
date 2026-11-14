@@ -35,9 +35,12 @@ def demo(client):
 
 def test_health(client, monkeypatch):
     body = client.get("/health").json()
-    assert body == {"status": "ok", "mode": {"costar": "mock", "matterport": "mock", "vexcel": "mock", "parser": "regex"}}
+    assert body == {"status": "ok", "mode": {"costar": "mock", "matterport": "mock", "vexcel": "mock",
+                                             "parser": "regex", "llm": "none"}}
+    monkeypatch.setattr(settings, "llm_provider", "anthropic")
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
-    assert client.get("/health").json()["mode"]["parser"] == "claude"
+    mode = client.get("/health").json()["mode"]
+    assert (mode["parser"], mode["llm"]) == ("claude", f"anthropic:{settings.anthropic_model}")
 
 
 def test_business_types(client):
@@ -86,10 +89,11 @@ def test_analyze_errors(client):
 
 def test_analyze_response_shape(demo):
     assert set(demo) == {"analysis_id", "created_at", "business_type", "requirements", "ranking_basis", "min_score", "results",
-                         "mode", "disclaimer"}
+                         "mode", "disclaimer", "ai_summary"}
     assert len(demo["analysis_id"]) == 32 and demo["created_at"].endswith("Z")
     assert set(demo["requirements"]) == REQUIREMENT_KEYS
-    assert demo["mode"] == {"costar": "mock", "matterport": "mock", "vexcel": "mock", "parser": "regex"}
+    assert demo["mode"] == {"costar": "mock", "matterport": "mock", "vexcel": "mock", "parser": "regex", "llm": "none"}
+    assert demo["ai_summary"] is None  # LLM_PROVIDER=none in tests
     assert demo["disclaimer"].startswith("Preliminary estimates")
     for result in demo["results"]:
         assert set(result) == RESULT_KEYS

@@ -7,6 +7,7 @@ import pytest
 from conftest import DEMO_DETAILS, profile
 
 from app.config import settings
+from app.services import llm
 from app.services import requirements_parser as rp
 
 
@@ -93,8 +94,9 @@ class FakeMessages:
 def fake_claude(monkeypatch):
     def install(**kwargs) -> FakeMessages:
         messages = FakeMessages(**kwargs)
+        monkeypatch.setattr(settings, "llm_provider", "anthropic")
         monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
-        monkeypatch.setattr(rp, "_anthropic_client", lambda: SimpleNamespace(messages=messages))
+        monkeypatch.setattr(llm, "_anthropic_client", lambda: SimpleNamespace(messages=messages))
         return messages
 
     return install
@@ -146,7 +148,8 @@ def test_no_key_never_calls_claude(monkeypatch):
     def explode():
         raise AssertionError("Claude must not be called without a key")
 
+    monkeypatch.setattr(settings, "llm_provider", "anthropic")
     monkeypatch.setattr(settings, "anthropic_api_key", None)
-    monkeypatch.setattr(rp, "_anthropic_client", explode)
+    monkeypatch.setattr(llm, "_anthropic_client", explode)
     _, parser = rp.parse_requirements(profile())
     assert parser == "regex"

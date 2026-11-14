@@ -55,6 +55,15 @@ class Settings:
         self.geocoding_api_key = _key("GEOCODING_API_KEY")
         self.anthropic_api_key = _key("ANTHROPIC_API_KEY")
         self.anthropic_model = (os.getenv("ANTHROPIC_MODEL") or "claude-haiku-5-5").strip()
+        # LLM used for requirements parsing and the grounded ranking summary (app/services/llm.py).
+        self.llm_provider = (os.getenv("LLM_PROVIDER") or "ollama").strip().lower()  # ollama | anthropic | none
+        self.ollama_base_url = (os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").strip().rstrip("/")
+        self.ollama_model = (os.getenv("OLLAMA_MODEL") or "qwen3:8b").strip()
+        self.ollama_keep_alive = (os.getenv("OLLAMA_KEEP_ALIVE") or "30m").strip()
+        # Context window; the ranking digest for ~4 properties is ~1.5k tokens. Same value on every call
+        # (a different num_ctx makes Ollama reload the model).
+        self.ollama_num_ctx = int(os.getenv("OLLAMA_NUM_CTX") or 8192)
+        self.llm_timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS") or 20)
         # Placeholder base URLs for the live provider calls (phase 04). Only used in live mode.
         self.costar_api_base_url = (os.getenv("COSTAR_API_BASE_URL") or "https://api.costar.example/v1").rstrip("/")
         self.matterport_api_base_url = (
@@ -72,11 +81,6 @@ class Settings:
     def provider_mode(self, key: str | None) -> str:
         """'live' only when mock mode is off and the provider's key is set."""
         return "live" if (not self.force_mock and key) else "mock"
-
-    @property
-    def parser_mode(self) -> str:
-        """Which requirements parser will be tried first: 'claude' if a key is configured."""
-        return "claude" if self.anthropic_api_key else "regex"
 
     @property
     def mode_summary(self) -> dict[str, str]:

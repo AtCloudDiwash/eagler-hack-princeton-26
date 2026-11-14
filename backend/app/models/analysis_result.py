@@ -112,6 +112,16 @@ class AnalyzeRequest(BaseModel):
     property_ids: list[str] = Field(..., min_length=1)
 
 
+class AISummary(BaseModel):
+    """LLM explanation of an already-computed ranking. Generated only from the response's own
+    numbers / statuses (a guardrail rejects invented dollar figures and scores); never changes them."""
+
+    text: str = Field(..., description="2-4 sentence plain-English explanation of the ranking")
+    per_property: dict[str, str] = Field(default_factory=dict, description="property_id -> one sentence")
+    model: str = Field(..., description="e.g. 'ollama:qwen3:8b'")
+    grounded: Literal[True] = True
+
+
 class AnalyzeResponse(BaseModel):
     analysis_id: str = Field(..., description="uuid4 hex; use with GET /api/v1/analyses/{id}")
     created_at: str = Field(..., description="ISO-8601 UTC timestamp")
@@ -120,8 +130,12 @@ class AnalyzeResponse(BaseModel):
     ranking_basis: str
     min_score: float = Field(0, description="Fit-score threshold below which a property is a weak fit (0 = gate off)")
     results: list[AnalysisResult]
-    mode: dict[str, str] = Field(..., description="costar/matterport/vexcel: mock|live, parser: regex|claude")
+    mode: dict[str, str] = Field(
+        ..., description="costar/matterport/vexcel: mock|live; parser: regex|ollama|claude (actually used); "
+        "llm: model label actually used this run, e.g. 'ollama:qwen3:8b', or 'none'"
+    )
     disclaimer: str
+    ai_summary: AISummary | None = Field(None, description="Grounded LLM explanation; null when no LLM / rejected")
 
 
 class AnalysisSummary(BaseModel):

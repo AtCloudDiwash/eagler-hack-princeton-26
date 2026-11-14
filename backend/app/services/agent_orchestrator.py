@@ -1,20 +1,22 @@
 """Agent pipeline behind POST /api/v1/analyze.
 
-    1. requirements parser agent   free text -> Requirements          (regex, optionally Claude)
+    1. requirements parser agent   free text -> Requirements          (regex, or Ollama / Claude)
     2. vision agent                Matterport + Vexcel + CoStar facts -> observations (Evidence by fact)
     3. compliance / criteria agent criteria.yaml evaluators -> PASS / RISK / UNKNOWN, score, blockers
     4. cost agent                  fix items -> cost ranges, TI, build-out, cost to open, first-year cost
     5. recommendation agent        rank (min-score gate), landlord questions, drafted landlord request letter
+    6. explanation agent           one LLM call -> grounded ai_summary of the finished ranking (optional)
 
 Each agent is a plain function with typed inputs/outputs so it can be tested on its own.
 """
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import cost_config, jurisdiction_for, settings
+from ..config import cost_config, jurisdiction_for, log, settings
 from ..models import (
     AnalysisResult,
     AnalyzeResponse,
@@ -28,7 +30,9 @@ from ..models import (
 from ..providers import matterport_provider, vexcel_provider
 from .compliance_engine import ComplianceReport, run_compliance
 from .cost_engine import CostEstimate, estimate
+from . import llm
 from .criteria_manager import applicable_criteria
+from .ranking_summary import summarize_ranking
 from .requirements_parser import get_business, parse_requirements
 
 
@@ -259,10 +263,13 @@ def analyze_property(requirements: Requirements, prop: Property) -> AnalysisResu
 
 
 def analyze_properties(profile: BusinessProfile, properties: list[Property]) -> AnalyzeResponse:
+    started = time.perf_counter()
     requirements, parser_used = parse_requirements(profile)
+    parsed = time.perf_counter()
     horizon, min_score = ranking_settings()
     results = rank_results([analyze_property(requirements, prop) for prop in properties], min_score)
-    return AnalyzeResponse(
+    ranked = time.perf_counter()
+    response = AnalyzeResponse(
         analysis_id=uuid.uuid4().hex,
         created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         business_type=requirements.business_type,
@@ -270,6 +277,16 @@ def analyze_properties(profile: BusinessProfile, properties: list[Property]) -> 
         ranking_basis=ranking_basis(horizon, min_score),
         min_score=min_score,
         results=results,
-        mode={**settings.mode_summary, "parser": parser_used},
+        mode={**settings.mode_summary, "parser": parser_used, "llm": "none"},
         disclaimer=" ".join(str(cost_config().get("disclaimer", "")).split()),
     )
+    # 6. Explanation agent: one grounded LLM call over the finished ranking (None on any failure).
+    response.ai_summary = summarize_ranking(response)
+    if parser_used != "regex" or response.ai_summary is not None:
+        response.mode["llm"] = llm.label()
+    log.info(
+        "analysis timings: parse %.2fs (%s), evaluate+rank %.2fs, summary %.2fs (%s), total %.2fs",
+        parsed - started, parser_used, ranked - parsed, time.perf_counter() - ranked,
+        "ok" if response.ai_summary else "none", time.perf_counter() - started,
+    )
+    return response
