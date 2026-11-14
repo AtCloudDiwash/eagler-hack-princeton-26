@@ -2118,7 +2118,20 @@
     "costar": "mock",
     "matterport": "mock",
     "vexcel": "mock",
-    "parser": "regex"
+    "parser": "ollama",
+    "llm": "ollama:qwen3:8b"
   },
-  "disclaimer": "Estimates are planning ranges from a rule-based cost model, not contractor quotes or legal advice. Confirm zoning and code requirements with the City of Austin before signing a lease."
+  "disclaimer": "Estimates are planning ranges from a rule-based cost model, not contractor quotes or legal advice. Confirm zoning and code requirements with the City of Austin before signing a lease.",
+  "ai_summary": {
+    "text": "456 Oak Avenue ranks first: it has the lowest first-year cost ($152k – $212k) and the highest fit score (86) because it was already a restaurant. 123 Elm Street and 1201 Westheimer Road also qualify but cost roughly $100k more to open. 2100 E Cesar Chavez Street is cheaper but a weak fit (score 18), and 789 Congress Avenue is disqualified by zoning.",
+    "per_property": {
+      "property-456": "Lowest first-year cost ($152k – $212k) and best fit score (86); the existing kitchen keeps fit-out down.",
+      "property-123": "Qualifies with a fit score of 71, but cost to open ($206k – $324k) is about double the top pick.",
+      "property-hou-101": "Qualifies (score 64) with similar costs to 123 Elm Street and the highest first-year cost of the eligible spaces.",
+      "property-321": "Cheaper to open ($125k – $199k) but a weak fit at score 18, so it ranks after better-fitting spaces.",
+      "property-789": "Disqualified: zoning does not permit restaurant use."
+    },
+    "model": "ollama:qwen3:8b",
+    "grounded": true
+  }
 }

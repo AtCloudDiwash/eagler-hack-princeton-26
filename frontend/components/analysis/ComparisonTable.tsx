@@ -1,8 +1,9 @@
 import { NoSymbolIcon, TrophyIcon } from "@heroicons/react/16/solid";
 import type { ReactNode } from "react";
 import { formatCompactCurrency, formatMonths, formatRange, formatRent } from "@/lib/format";
-import type { AnalysisResult } from "@/lib/types";
+import type { AiSummary, AnalysisResult } from "@/lib/types";
 import { Badge } from "../ui/Badge";
+import { aiSentenceFor } from "./AiSummaryPanel";
 import { WeakFitBadge } from "./WeakFitBadge";
 
 interface Row {
@@ -42,9 +43,31 @@ const ROWS: Row[] = [
 /**
  * One column per property, sorted by rank. Only this table scrolls horizontally on small screens.
  * `minScore` (AnalyzeResponse.min_score) feeds the "Weak fit" explanation.
+ * With an `aiSummary` that covers at least one property, a final "Why" row shows its one-liners.
  */
-export function ComparisonTable({ results, minScore }: { results: AnalysisResult[]; minScore?: number }) {
+export function ComparisonTable({
+  results,
+  minScore,
+  aiSummary,
+}: {
+  results: AnalysisResult[];
+  minScore?: number;
+  aiSummary?: AiSummary | null;
+}) {
   const sorted = [...results].sort((a, b) => a.rank - b.rank);
+  const rows = sorted.some((r) => aiSentenceFor(aiSummary, r.property_id))
+    ? [
+        ...ROWS,
+        {
+          label: "Why (AI)",
+          render: (r: AnalysisResult) => (
+            <span className="block max-w-64 whitespace-normal text-xs leading-snug text-ink-muted">
+              {aiSentenceFor(aiSummary, r.property_id) ?? "N/A"}
+            </span>
+          ),
+        },
+      ]
+    : ROWS;
   // Weak fits are never "best value"; if every eligible space is weak, no column is highlighted.
   const best = sorted.find((r) => !r.disqualified && !r.weak_fit);
 
@@ -75,7 +98,7 @@ export function ComparisonTable({ results, minScore }: { results: AnalysisResult
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {ROWS.map((row) => (
+          {rows.map((row) => (
             <tr key={row.label}>
               <th scope="row" className="sticky left-0 z-10 bg-surface px-4 py-2.5 text-xs font-medium text-ink-muted">
                 {row.label}

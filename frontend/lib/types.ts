@@ -10,11 +10,20 @@ export interface CostRange {
 }
 
 export type ProviderMode = "mock" | "live";
-export type ParserMode = "regex" | "claude";
+/** Open-ended so a future parser still renders (as its raw name). */
+export type ParserMode = "regex" | "ollama" | "claude" | (string & {});
 
 export interface HealthResponse {
   status: "ok";
-  mode: { costar: ProviderMode; matterport: ProviderMode; vexcel: ProviderMode; parser: ParserMode };
+  mode: {
+    costar: ProviderMode;
+    matterport: ProviderMode;
+    vexcel: ProviderMode;
+    /** Parser that is *configured* (an analysis's mode.parser is the one actually used). */
+    parser: ParserMode;
+    /** Summary LLM, e.g. "ollama:qwen3:8b", "anthropic:claude-haiku-5-5" or "none". Absent on older backends. */
+    llm?: string;
+  };
 }
 
 export interface BusinessType {
@@ -206,7 +215,24 @@ export interface AnalysisMode {
   costar: string;
   matterport: string;
   vexcel: string;
+  /** Parser actually used for this run ("regex" when an LLM call failed and fell back). */
   parser: ParserMode;
+  /** Summary LLM used for this run, or "none". Absent on older runs. */
+  llm?: string;
+}
+
+/**
+ * Plain-English explanation of the ranking, written by an LLM from the response's own numbers and
+ * statuses. It never changes costs, scores or compliance (those stay rule-based).
+ */
+export interface AiSummary {
+  /** 2-4 sentences about the ranking as a whole. */
+  text: string;
+  /** property_id -> one sentence "why this rank". May omit properties. */
+  per_property: Record<string, string>;
+  /** e.g. "ollama:qwen3:8b". */
+  model: string;
+  grounded: true;
 }
 
 export interface AnalyzeResponse {
@@ -221,6 +247,8 @@ export interface AnalyzeResponse {
   results: AnalysisResult[];
   mode: AnalysisMode;
   disclaimer: string;
+  /** null when no LLM was reachable or the call failed; absent on older runs. The UI hides the panel either way. */
+  ai_summary?: AiSummary | null;
 }
 
 export interface AnalysisSummary {

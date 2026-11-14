@@ -1,4 +1,13 @@
-import { formatCurrency, formatDateTime, formatNumber, formatSqft, parkingSourceLabel } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDateTime,
+  formatNumber,
+  formatSqft,
+  hasLlm,
+  llmLabel,
+  parkingSourceLabel,
+  parserLabel,
+} from "@/lib/format";
 import type { AnalyzeResponse } from "@/lib/types";
 import { Badge } from "../ui/Badge";
 
@@ -20,7 +29,19 @@ function sqftRange(min: number | null, max: number | null): string {
 /** Report header: parsed requirements, assumptions, ranking basis and provider modes. */
 export function RequirementsSummary({ analysis }: { analysis: AnalyzeResponse }) {
   const req = analysis.requirements;
-  const modes = Object.entries(analysis.mode ?? {});
+  // Data providers (mock/live) first, then which parser and summary LLM this run actually used.
+  const { parser, llm, ...providers } = analysis.mode ?? ({} as Partial<AnalyzeResponse["mode"]>);
+  const modes: { key: string; label: string; accent: boolean; title?: string }[] = [
+    ...Object.entries(providers).map(([provider, mode]) => ({
+      key: provider,
+      label: `${provider}: ${mode}`,
+      accent: mode === "live",
+    })),
+    ...(parser
+      ? [{ key: "parser", label: `parser: ${parserLabel(parser)}`, accent: parser !== "regex", title: `Requirements parsed by ${parser}` }]
+      : []),
+    ...(hasLlm(llm) ? [{ key: "llm", label: llmLabel(llm), accent: true, title: `Summary written by ${llm}` }] : []),
+  ];
 
   return (
     <section className="grid gap-5">
@@ -38,9 +59,9 @@ export function RequirementsSummary({ analysis }: { analysis: AnalyzeResponse })
         </div>
         {modes.length > 0 && (
           <div className="flex flex-wrap gap-1.5" aria-label="Data sources">
-            {modes.map(([provider, mode]) => (
-              <Badge key={provider} tone={mode === "live" || mode === "claude" ? "accent" : "neutral"}>
-                {provider}: {mode}
+            {modes.map((mode) => (
+              <Badge key={mode.key} tone={mode.accent ? "accent" : "neutral"} title={mode.title}>
+                {mode.label}
               </Badge>
             ))}
           </div>

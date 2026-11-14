@@ -2,6 +2,7 @@
 
 import { ArrowLeftIcon } from "@heroicons/react/20/solid";
 import { useParams } from "next/navigation";
+import { AiSummaryPanel, aiSentenceFor } from "@/components/analysis/AiSummaryPanel";
 import { AnalysisCard } from "@/components/analysis/AnalysisCard";
 import { ComparisonTable } from "@/components/analysis/ComparisonTable";
 import { RequirementsSummary } from "@/components/analysis/RequirementsSummary";
@@ -50,17 +51,24 @@ export function AnalysisView() {
 
       <RequirementsSummary analysis={data} />
 
+      <AiSummaryPanel summary={data.ai_summary} />
+
       {results.length === 0 ? (
         <EmptyState title="No results" message="This analysis has no property results." />
       ) : (
         <>
           <section className="grid gap-3">
             <h2 className="text-lg font-semibold">Side-by-side</h2>
-            <ComparisonTable results={results} minScore={data.min_score} />
+            <ComparisonTable results={results} minScore={data.min_score} aiSummary={data.ai_summary} />
           </section>
           <section className="grid gap-6">
             {results.map((result) => (
-              <AnalysisCard key={result.property_id} result={result} minScore={data.min_score} />
+              <AnalysisCard
+                key={result.property_id}
+                result={result}
+                minScore={data.min_score}
+                aiSentence={aiSentenceFor(data.ai_summary, result.property_id)}
+              />
             ))}
           </section>
         </>

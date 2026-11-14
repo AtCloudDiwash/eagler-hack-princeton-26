@@ -3,7 +3,7 @@
 import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon } from "@heroicons/react/20/solid";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ANALYSIS_STEPS, AnalyzeProgress } from "@/components/AnalyzeProgress";
+import { ANALYSIS_STEPS, AnalyzeProgress, analysisSteps } from "@/components/AnalyzeProgress";
 import { CriteriaTable } from "@/components/CriteriaTable";
 import { PropertyCard } from "@/components/PropertyCard";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -14,6 +14,8 @@ import { humanize } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 
 const STEP_INTERVAL_MS = 1400;
+// With a summary LLM the run takes a few seconds longer; step faster so "Writing summary" is reached while it works.
+const STEP_INTERVAL_WITH_AI_MS = 1000;
 
 export function PropertiesView() {
   const router = useRouter();
@@ -27,6 +29,11 @@ export function PropertiesView() {
 
   const properties = useAsync((signal) => api.properties(query, { signal }), `properties:${queryKey}`);
   const criteria = useAsync((signal) => api.criteria(query, { signal }), `criteria:${queryKey}`);
+  // Only used to decide whether the progress overlay shows a "Writing summary" step.
+  const health = useAsync((signal) => api.health({ signal }), "health");
+  const steps = analysisSteps(health.status === "success" ? health.data.mode?.llm : undefined);
+  const lastStep = steps.length - 1;
+  const stepInterval = steps.length > ANALYSIS_STEPS.length ? STEP_INTERVAL_WITH_AI_MS : STEP_INTERVAL_MS;
 
   const [selected, setSelected] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -36,9 +43,9 @@ export function PropertiesView() {
   // Advance the cosmetic progress steps while the analysis request is in flight.
   useEffect(() => {
     if (!analyzing) return;
-    const timer = setInterval(() => setStep((s) => Math.min(s + 1, ANALYSIS_STEPS.length - 1)), STEP_INTERVAL_MS);
+    const timer = setInterval(() => setStep((s) => Math.min(s + 1, lastStep)), stepInterval);
     return () => clearInterval(timer);
-  }, [analyzing]);
+  }, [analyzing, lastStep, stepInterval]);
 
   if (!type) {
     return (
@@ -168,7 +175,7 @@ export function PropertiesView() {
         </div>
       )}
 
-      {analyzing && <AnalyzeProgress step={step} count={selectedIds.length} />}
+      {analyzing && <AnalyzeProgress step={step} count={selectedIds.length} steps={steps} />}
     </div>
   );
 }

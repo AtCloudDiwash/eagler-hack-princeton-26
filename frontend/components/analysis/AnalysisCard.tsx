@@ -1,4 +1,4 @@
-import { NoSymbolIcon } from "@heroicons/react/20/solid";
+import { NoSymbolIcon, SparklesIcon } from "@heroicons/react/20/solid";
 import type { ReactNode } from "react";
 import { formatCompactCurrency, formatMonths, formatPercent, formatRange, formatRent, formatValue, humanize, orNA } from "@/lib/format";
 import type { AnalysisResult } from "@/lib/types";
@@ -33,8 +33,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /**
  * Full report for one property: numbers, costs, criteria, evidence overlays, landlord materials.
  * `minScore` (AnalyzeResponse.min_score) feeds the "Weak fit" explanation.
+ * `aiSentence` is the AI summary's one-line "why this rank" (hidden when absent).
  */
-export function AnalysisCard({ result, minScore }: { result: AnalysisResult; minScore?: number }) {
+export function AnalysisCard({
+  result,
+  minScore,
+  aiSentence,
+}: {
+  result: AnalysisResult;
+  minScore?: number;
+  aiSentence?: string | null;
+}) {
   const descriptions = new Map((result.criteria_results ?? []).map((c) => [c.id, c.description]));
   const observations = Object.entries(result.observations ?? {});
 
@@ -54,6 +63,12 @@ export function AnalysisCard({ result, minScore }: { result: AnalysisResult; min
           </div>
           <h2 className="mt-1 text-lg font-semibold leading-snug sm:text-xl">{result.address}</h2>
           <p className="font-mono text-xs text-ink-muted">{result.property_id}</p>
+          {aiSentence && (
+            <p className="mt-2 flex gap-1.5 text-sm text-ink" data-testid="ai-sentence">
+              <SparklesIcon className="mt-0.5 size-4 shrink-0 text-accent" aria-label="AI" />
+              <span>{aiSentence}</span>
+            </p>
+          )}
         </div>
       </header>
 

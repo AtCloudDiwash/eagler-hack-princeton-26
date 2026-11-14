@@ -109,3 +109,35 @@ export function parkingSourceLabel(source: string | null | undefined): string {
   if (!source) return "guideline";
   return PARKING_SOURCE_LABELS[source] ?? humanize(source).toLowerCase();
 }
+
+const PARSER_LABELS: Record<string, string> = { regex: "Regex", ollama: "Ollama", claude: "Claude" };
+
+/** AnalysisMode.parser -> "Regex" / "Ollama" / "Claude"; unknown parsers fall back to humanized text. */
+export function parserLabel(parser: string | null | undefined): string {
+  if (!parser) return NA;
+  return PARSER_LABELS[parser] ?? humanize(parser);
+}
+
+/** True when `llm` names a real model ("none", empty or absent means no LLM). */
+export function hasLlm(llm: string | null | undefined): llm is string {
+  return !!llm && llm.trim() !== "" && llm !== "none";
+}
+
+/** True for a model served by the local Ollama runtime ("ollama:qwen3:8b"). */
+export function isLocalLlm(llm: string | null | undefined): boolean {
+  return !!llm && llm.startsWith("ollama:");
+}
+
+/**
+ * Model id -> badge text: "ollama:qwen3:8b" -> "Local AI · qwen3:8b",
+ * "anthropic:claude-haiku-5-5" -> "Claude · claude-haiku-5-5", anything else -> "AI · <model>".
+ */
+export function llmLabel(model: string | null | undefined): string {
+  if (!hasLlm(model)) return "No AI";
+  const split = model.indexOf(":");
+  const provider = split > 0 ? model.slice(0, split) : "";
+  const name = split > 0 ? model.slice(split + 1) : model;
+  if (provider === "ollama") return `Local AI · ${name}`;
+  if (provider === "anthropic") return `Claude · ${name}`;
+  return `AI · ${model}`;
+}

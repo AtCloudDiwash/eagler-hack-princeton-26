@@ -1,17 +1,35 @@
 "use client";
 
 import { CheckIcon } from "@heroicons/react/20/solid";
+import { hasLlm, isLocalLlm } from "@/lib/format";
 import { Spinner } from "./ui/Spinner";
 
-export const ANALYSIS_STEPS = [
+export const ANALYSIS_STEPS: readonly string[] = [
   "Parsing requirements",
   "Reading listings",
   "Checking compliance",
   "Estimating fit-out",
-] as const;
+];
+
+/**
+ * Progress steps for a run. When the backend has a summary LLM (`/health` mode.llm), a final
+ * "Writing summary" step makes its extra few seconds read as intentional work.
+ */
+export function analysisSteps(llm: string | null | undefined): readonly string[] {
+  if (!hasLlm(llm)) return ANALYSIS_STEPS;
+  return [...ANALYSIS_STEPS, isLocalLlm(llm) ? "Writing summary (local AI)" : "Writing summary (AI)"];
+}
 
 /** Full-screen overlay shown while POST /api/v1/analyze runs. `step` advances on a timer in the parent. */
-export function AnalyzeProgress({ step, count }: { step: number; count: number }) {
+export function AnalyzeProgress({
+  step,
+  count,
+  steps = ANALYSIS_STEPS,
+}: {
+  step: number;
+  count: number;
+  steps?: readonly string[];
+}) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-navy-950/80 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
       <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-6 shadow-2xl">
@@ -22,7 +40,7 @@ export function AnalyzeProgress({ step, count }: { step: number; count: number }
           </h2>
         </div>
         <ol className="grid gap-2.5 text-sm">
-          {ANALYSIS_STEPS.map((label, index) => {
+          {steps.map((label, index) => {
             const done = index < step;
             const active = index === step;
             return (
