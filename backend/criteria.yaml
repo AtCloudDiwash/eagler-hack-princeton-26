@@ -138,6 +138,10 @@
     tons_per_unit: 5        # also used to turn Vexcel rooftop AC unit counts into tons
     # Vexcel rooftop units are counted for the whole building. When the building footprint is known
     # and larger than the listing, evaluate the suite's share: tons x (size_sqft / footprint).
+    # Verify rule: a prorated share below the need is UNKNOWN ("ask the landlord which units serve
+    # your suite") and EXCLUDED from the score (like missing_data_policy: unknown, despite the
+    # assume_risk policy above), with no new-unit cost. Still RISK + hvac_rtu cost when the building
+    # has zero detected rooftop units, or when direct (non-prorated) tonnage is short.
     prorate_by_footprint: true
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]

@@ -10,6 +10,10 @@ thresholds, jurisdiction rules) and returns an `EvalOutcome`:
     questions           questions to ask the landlord
     definitive_failure  True only when a RISK is a known failure (not a data gap). Combined with a
                         criterion's `hard_block`, this disqualifies the property.
+    verify              True on an UNKNOWN that is a "verify with the landlord" finding (the data
+                        exists but cannot settle the question, e.g. a prorated share of building-level
+                        HVAC). The compliance engine excludes it from the score whatever the
+                        criterion's `missing_data_policy`.
 
 The compliance engine checks `required_inputs` before calling an evaluator, so evaluators may
 assume those inputs are present. When inputs are missing and the criterion's policy is
@@ -69,6 +73,7 @@ class EvalOutcome:
     cost_items: list[CostNeed] = field(default_factory=list)
     questions: list[str] = field(default_factory=list)
     definitive_failure: bool = False
+    verify: bool = False  # UNKNOWN to verify (not a data gap): excluded from the score, see module docstring
     source: str | None = None  # overrides the criterion's `source` when set (e.g. jurisdiction citation)
 
 
@@ -499,19 +504,31 @@ def _hvac_suite_share(ctx: EvalContext, building_tons: float) -> Evidence | None
     )
 
 
+HVAC_VERIFY_QUESTION = "Which rooftop HVAC units serve this suite, and what is their tonnage and age?"
+
+
 @evaluator("hvac_checker", fallback=_hvac_fallback)
 def hvac_checker(ctx: EvalContext) -> EvalOutcome:
+    """Rooftop tonnage vs the space's need.
+
+    * direct tonnage (fixture value, or footprint unknown / not larger than the suite): short -> RISK
+      with new-unit cost.
+    * building-level tonnage prorated to the suite (`prorate_by_footprint`): a short share is UNKNOWN
+      with `verify` (excluded from the score, no unit cost, landlord question) — the share is an
+      estimate, and the building's units may well serve this suite. Zero detected rooftop units
+      (or zero building tons) is still RISK with cost.
+    """
     building_tons = float(ctx.value("hvac_tons"))
     need = _hvac_need(ctx)
     per_unit = float(ctx.thresholds.get("tons_per_unit", 5))
     per_ton = ctx.business.get("hvac_sqft_per_ton", 250)
+    units = ctx.value("rooftop_hvac_units")
     # hvac_tons is a fixture observation or, live, Vexcel rooftop units x tons_per_unit (whole building).
     evidence = ctx.evidence("hvac_tons", "rooftop_hvac_units")
     share = _hvac_suite_share(ctx, building_tons)
     if share is not None:
         have = float(share.value)
         evidence += ctx.evidence("building_footprint_sqft") + [share]
-        units = ctx.value("rooftop_hvac_units")
         what = _plural(int(units), "rooftop unit") if units is not None else f"{building_tons:g} building tons"
         capacity = (
             f"≈{_plural(have, 'ton')} of rooftop HVAC (your share of {what}: "
@@ -523,10 +540,36 @@ def hvac_checker(ctx: EvalContext) -> EvalOutcome:
     evidence.append(ctx.derived("required_hvac_tons", need, f"{ctx.property.size_sqft} sq ft at {per_ton} sq ft/ton"))
     if have >= need:
         return EvalOutcome("PASS", f"{capacity} vs {need:g} tons needed.", evidence)
+
+    no_units = building_tons <= 0 or (units is not None and int(units) == 0)
+    if share is not None and not no_units:
+        building = (
+            f"Building has {_plural(int(units), 'rooftop unit')} (≈{building_tons:g} tons total)"
+            if units is not None
+            else f"Building has ≈{building_tons:g} tons of rooftop HVAC"
+        )
+        return EvalOutcome(
+            "UNKNOWN",
+            f"{building}; your prorated share ≈{_plural(have, 'ton')} vs {need:g} needed — "
+            "ask the landlord which units serve your suite.",
+            evidence,
+            questions=[HVAC_VERIFY_QUESTION],
+            verify=True,
+        )
+
     units_to_add = math.ceil(round(need - have, 1) / per_unit)
+    to_add = f"about {_plural(units_to_add, f'{per_unit:g}-ton unit')} to add"
+    if no_units:
+        return EvalOutcome(
+            "RISK",
+            f"No rooftop HVAC units detected on the building vs {need:g} tons needed; {to_add}.",
+            evidence,
+            [CostNeed("hvac_rtu", units_to_add, "No rooftop HVAC detected")],
+            ["Is this suite served by any HVAC (rooftop, split or ground units), and who is responsible for it?"],
+        )
     return EvalOutcome(
         "RISK",
-        f"{capacity} vs {need:g} tons needed; about {_plural(units_to_add, f'{per_unit:g}-ton unit')} to add.",
+        f"{capacity} vs {need:g} tons needed; {to_add}.",
         evidence,
         [CostNeed("hvac_rtu", units_to_add, f"{round(need - have, 1):g} ton shortfall")],
         ["How old are the rooftop HVAC units, which of them serve this suite, and who is responsible for replacement?"],

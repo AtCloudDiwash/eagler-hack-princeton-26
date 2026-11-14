@@ -103,7 +103,7 @@ Response (`AnalyzeResponse`):
   created_at: string;           // ISO-8601 UTC
   business_type: string;
   requirements: Requirements;
-  ranking_basis: string;        // human sentence, e.g. "Ranked by first-year cost (cost to open + 12 months rent) among properties with a fit score of at least 25; weak fits (score below 25) next, then disqualified properties; ties broken by criteria score."
+  ranking_basis: string;        // human sentence, e.g. "Ranked by first-year cost (cost to open + 12 months rent) among properties with a fit score of at least 55; weak fits (score below 55) next, then disqualified properties; ties broken by criteria score."
   min_score: number;            // costs.yaml ranking.min_score; non-disqualified results scoring below it are weak fits (0 = gate off / older runs)
   results: AnalysisResult[];    // already sorted by rank (1 = best)
   mode: { costar: string; matterport: string; vexcel: string; parser: "regex" | "claude" };
@@ -197,6 +197,14 @@ Evidence keys added by evaluators (in `CriterionResult.evidence`):
 | `code_required_parking` | jurisdiction | parking_sufficiency | city minimum for this property's size; note shows the math and citation (only where a minimum applies) |
 | `parking_rule` | jurisdiction | parking_sufficiency | the city's parking rule, e.g. `"10 per 1,000 sq ft GFA"`, `"no minimum (East Downtown (EaDo) market-based parking area)"`, `"no parking minimum"` (Austin); note = citation |
 | `hvac_tons_suite_share` | vexcel | hvac_capacity | building tons × min(1, `size_sqft` ÷ `building_footprint_sqft`) when the footprint is known and larger than the listing and `hvac_capacity.thresholds.prorate_by_footprint` is true; the criterion is evaluated against this value |
+
+HVAC verify rule (`hvac_capacity`): when the capacity is a prorated `hvac_tons_suite_share` and it is below
+the need, the result is `status: "UNKNOWN"` with `counted: false` / `score: null` (excluded from the fit
+score, like `missing_data_policy: unknown`), no `hvac_rtu` line item, and the landlord question "Which
+rooftop HVAC units serve this suite, and what is their tonnage and age?". Notes read "Building has N
+rooftop units (≈X tons total); your prorated share ≈Y tons vs Z needed — ask the landlord which units
+serve your suite." It stays `RISK` (scored 0, with `hvac_rtu` units priced) when the building has zero
+detected rooftop units or when direct (non-prorated) tonnage is short.
 
 The `parking_sufficiency` result's `source` is the jurisdiction's parking citation (e.g. Houston Code
 Ch. 26 §26-492, §26-471 in a market-based area, Austin's parking note); its `required_inputs` stay

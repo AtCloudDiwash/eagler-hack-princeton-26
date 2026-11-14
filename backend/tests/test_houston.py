@@ -11,7 +11,7 @@ from app.config import business_types, jurisdiction_for
 from app.providers import costar_provider
 from app.services.compliance_engine import build_inputs, evaluate_criterion, run_compliance
 from app.services.criteria_manager import applicable_criteria, get_criterion
-from app.services.evaluators import EvalContext
+from app.services.evaluators import HVAC_VERIFY_QUESTION, EvalContext
 from app.services.requirements_parser import (
     build_requirements,
     code_parking_minimum,
@@ -20,7 +20,6 @@ from app.services.requirements_parser import (
 )
 
 HOUSTON_IDS = [f"property-hou-0{i}" for i in range(1, 6)]
-RESTAURANT_IDS = HOUSTON_IDS[:4]
 RESTAURANT_RAW = {"capacity": 40, "bathrooms": 2, "parking": 20, "needs_kitchen": True}
 HOUSTON = jurisdiction_for("Houston", "TX")
 RESTAURANT = business_types()["restaurant"]
@@ -177,40 +176,61 @@ def test_houston_listings(client):
     assert next(p for p in props if p["id"] == "property-hou-03")["use_restrictions"] == ["no_food_service"]
 
 
-@pytest.mark.parametrize("details", [
+HOUSTON_RESTAURANT_DETAILS = [
     "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces",
     "40 seats, kitchen needed, 2 bathrooms",
-])
-def test_houston_restaurant_analysis_ranking(client, details):
+]
+
+
+def houston_restaurant_run(client, details):
     body = {
         "business_profile": {"type": "restaurant", "details": details, "city": "Houston", "state": "TX"},
-        # The restaurant listings. property-hou-05 is the medical-office (dental demo) listing: with
-        # building-level HVAC prorated to the suite, its large TI allowance can undercut hou-01 on
-        # first-year cost despite a much lower fit score, so it is left out of the restaurant story.
-        "property_ids": RESTAURANT_IDS,
+        "property_ids": HOUSTON_IDS,  # all 5, including property-hou-05 (medical office / dental demo listing)
     }
     response = client.post("/api/v1/analyze", json=body)
     assert response.status_code == 200
-    run = response.json()
-    results = {r["property_id"]: r for r in run["results"]}
+    return response.json()
 
-    top = run["results"][0]
-    assert top["property_id"] == "property-hou-01" and not top["disqualified"]  # second-gen restaurant wins
-    assert top["compliance"]["zoning_use"]["status"] == "PASS"
+
+@pytest.mark.parametrize("details", HOUSTON_RESTAURANT_DETAILS)
+def test_houston_restaurant_analysis(client, details):
+    run = houston_restaurant_run(client, details)
+    results = {r["property_id"]: r for r in run["results"]}
+    assert set(results) == set(HOUSTON_IDS)
 
     restricted = results["property-hou-03"]
     assert restricted["disqualified"] and restricted["disqualifiers"] == ["zoning_use"]
-    assert restricted["rank"] == len(RESTAURANT_IDS)
+    assert restricted["rank"] == len(HOUSTON_IDS)
     assert "no_food_service" in restricted["compliance"]["zoning_use"]["notes"]
+
+    heights = results["property-hou-01"]  # second-gen restaurant: best fit
+    assert not heights["disqualified"] and not heights["weak_fit"]
+    assert heights["score"] == max(r["score"] for r in results.values())
+    assert heights["compliance"]["zoning_use"]["status"] == "PASS"
 
     box = results["property-hou-02"]  # cheap retail box: full kitchen build-out
     assert any(item["item"] == "kitchen_install" for item in box["line_items"])
-    assert box["first_year_cost"]["min"] > top["first_year_cost"]["min"]
+    assert box["first_year_cost"]["min"] > heights["first_year_cost"]["min"]
 
     eado = results["property-hou-04"]
     if run["requirements"]["parking_source"] == "jurisdiction":
         assert eado["compliance"]["parking_sufficiency"]["status"] == "PASS"  # no minimum in EaDo
     assert all(r["compliance"]["zoning_use"]["status"] == "PASS" for pid, r in results.items() if pid != "property-hou-03")
+
+    # Every Houston listing's HVAC comes from building-level rooftop units prorated to the suite and
+    # is short: verify-with-landlord, never priced, never scored.
+    for r in results.values():
+        hvac = next(c for c in r["criteria_results"] if c["id"] == "hvac_capacity")
+        assert hvac["status"] == "UNKNOWN" and not hvac["counted"] and hvac["score"] is None
+        assert not any(item["item"] == "hvac_rtu" for item in r["line_items"])
+        assert HVAC_VERIFY_QUESTION in r["questions_for_landlord"]
+
+
+@pytest.mark.parametrize("details", HOUSTON_RESTAURANT_DETAILS)
+def test_houston_restaurant_top_pick(client, details):
+    run = houston_restaurant_run(client, details)
+    assert run["results"][0]["property_id"] == "property-hou-01"
+    assert run["results"][0]["property_id"] != "property-hou-05"
 
 
 # ----------------------------- parking wording / citation -----------------------------
@@ -273,14 +293,18 @@ def test_parking_guideline_wording_cites_austin_rule():
 # ----------------------------- HVAC: building-level tons prorated to the suite -----------------------------
 
 
-def hvac_result(prop, observations, prorate=True):
+def hvac_eval(prop, observations, prorate=True):
     criterion = get_criterion("hvac_capacity")
     criterion = criterion.model_copy(update={"thresholds": {**criterion.thresholds, "prorate_by_footprint": prorate}})
     req = houston_req()
     jurisdiction, business = jurisdiction_for(prop.city, prop.state), business_types()["restaurant"]
     ctx = EvalContext(req, prop, observations, criterion, jurisdiction, business,
                       build_inputs(req, prop, observations, jurisdiction, business))
-    return evaluate_criterion(criterion, ctx)[0]
+    return evaluate_criterion(criterion, ctx)
+
+
+def hvac_result(prop, observations, prorate=True):
+    return hvac_eval(prop, observations, prorate)[0]
 
 
 EADO_HVAC = dict(hvac_tons=90, rooftop_hvac_units=18, building_footprint_sqft=35049)
@@ -292,8 +316,59 @@ def test_hvac_prorated_by_footprint():
     share = next(e for e in result.evidence if e.key == "hvac_tons_suite_share")
     assert share.value == pytest.approx(round(90 * 2400 / 35049, 1)) == 6.2
     assert "your share of 18 rooftop units (35,049 sq ft building, 2,400 sq ft suite)" in share.note
-    assert result.status == "RISK" and result.notes.startswith("≈6.2 tons of rooftop HVAC (your share of 18 rooftop units")
     assert {"hvac_tons", "rooftop_hvac_units", "building_footprint_sqft"} <= {e.key for e in result.evidence}
+
+
+def test_hvac_prorated_short_share_is_verify_unknown():
+    """Prorated share below the need: UNKNOWN to verify with the landlord, excluded from the score
+    (despite assume_risk), no new-unit cost, and a landlord question."""
+    assert get_criterion("hvac_capacity").missing_data_policy == "assume_risk"
+    result, outcome = hvac_eval(houston_prop(size_sqft=2400), obs("vexcel", **EADO_HVAC))
+    assert result.status == "UNKNOWN" and outcome.verify
+    assert result.counted is False and result.score is None
+    assert result.notes == ("Building has 18 rooftop units (≈90 tons total); your prorated share ≈6.2 tons vs 12 "
+                            "needed — ask the landlord which units serve your suite.")
+    assert outcome.cost_items == []
+    assert outcome.questions == [HVAC_VERIFY_QUESTION]
+
+
+def test_hvac_verify_unknown_excluded_from_property_score():
+    prop = houston_prop(size_sqft=2400)
+    req = houston_req()
+    jurisdiction, business = jurisdiction_for(prop.city, prop.state), business_types()["restaurant"]
+    criteria = applicable_criteria("restaurant", "Houston", "TX")
+    report = run_compliance(criteria, req, prop, obs("vexcel", **EADO_HVAC), jurisdiction, business)
+    hvac = next(r for r in report.criteria_results if r.id == "hvac_capacity")
+    assert hvac.status == "UNKNOWN" and not hvac.counted
+    assert not any(n.item == "hvac_rtu" for n in report.cost_needs)
+    assert HVAC_VERIFY_QUESTION in report.questions
+    # the score is the same as if the criterion were not in the registry at all
+    without = run_compliance([c for c in criteria if c.id != "hvac_capacity"], req, prop,
+                             obs("vexcel", **EADO_HVAC), jurisdiction, business)
+    assert report.score == without.score
+
+
+def test_hvac_prorated_share_meeting_need_passes():
+    result, outcome = hvac_eval(houston_prop(size_sqft=2400), obs("vexcel", hvac_tons=200, rooftop_hvac_units=40,
+                                                                   building_footprint_sqft=35049))
+    assert result.status == "PASS" and result.counted and not outcome.verify
+    assert result.notes.startswith("≈13.7 tons of rooftop HVAC (your share of 40 rooftop units")
+
+
+def test_hvac_zero_rooftop_units_is_risk_with_cost():
+    result, outcome = hvac_eval(houston_prop(size_sqft=2400),
+                                obs("vexcel", hvac_tons=0, rooftop_hvac_units=0, building_footprint_sqft=35049))
+    assert result.status == "RISK" and result.counted and result.score == 0 and not outcome.verify
+    assert result.notes.startswith("No rooftop HVAC units detected on the building vs 12 tons needed")
+    assert [(n.item, n.qty) for n in outcome.cost_items] == [("hvac_rtu", 3)]
+
+
+def test_hvac_direct_tonnage_shortfall_is_risk_with_cost():
+    """Not prorated (footprint unknown): a short fixture value is the suite's own capacity -> RISK + cost."""
+    result, outcome = hvac_eval(houston_prop(size_sqft=2400), obs("vexcel", hvac_tons=5))
+    assert result.status == "RISK" and result.counted and not outcome.verify
+    assert result.notes.startswith("5 tons of rooftop HVAC vs 12 tons needed")
+    assert [(n.item, n.qty) for n in outcome.cost_items] == [("hvac_rtu", 2)]
 
 
 def test_hvac_proration_toggle_and_small_building():
@@ -306,12 +381,15 @@ def test_hvac_proration_toggle_and_small_building():
 
 
 def test_austin_fixture_hvac_unchanged(client):
+    """Austin fixtures give direct (non-prorated) tonnage: a shortfall stays RISK, scored, with unit cost."""
     body = {"business_profile": {"type": "restaurant", "details": "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces",
                                  "city": "Austin", "state": "TX"}, "property_ids": ["property-123"]}
     result = client.post("/api/v1/analyze", json=body).json()["results"][0]
     hvac = next(c for c in result["criteria_results"] if c["id"] == "hvac_capacity")
     assert hvac["notes"].startswith(f"{result['observations']['hvac_tons']['value']:g} tons of rooftop HVAC vs")
     assert "hvac_tons_suite_share" not in {e["key"] for e in hvac["evidence"]}
+    assert hvac["status"] == "RISK" and hvac["counted"] and hvac["score"] == 0
+    assert any(item["item"] == "hvac_rtu" for item in result["line_items"])
 
 
 # ----------------------------- AnalysisResult listing fields -----------------------------

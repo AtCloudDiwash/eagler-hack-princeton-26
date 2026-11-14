@@ -126,14 +126,16 @@ def test_demo_ranking_is_explainable(demo):
     assert demo["results"][-1]["property_id"] == "property-789"  # disqualified last
     assert "does not permit" in lo["compliance"]["zoning_use"]["notes"]
 
-    # Min-score gate (costs.yaml ranking.min_score): the cheap-but-poorly-fitting space ranks after 123.
-    assert demo["min_score"] == 25
-    assert [r["property_id"] for r in demo["results"]] == ["property-456", "property-123", "property-321", "property-789"]
-    assert [r["weak_fit"] for r in demo["results"]] == [False, False, True, False]
-    assert results["property-123"]["score"] >= 25 > results["property-321"]["score"]
-    qualified = [r for r in demo["results"] if not r["disqualified"] and not r["weak_fit"]]
-    assert [r["first_year_cost"]["min"] for r in qualified] == sorted(r["first_year_cost"]["min"] for r in qualified)
-    assert "first-year cost" in demo["ranking_basis"] and "at least 25" in demo["ranking_basis"]
+    # Min-score gate (costs.yaml ranking.min_score = 55): 123 (31.6) and 321 (0) are both weak fits, so they
+    # rank after 456 among themselves by first-year cost (321 is cheaper), then the disqualified 789.
+    assert demo["min_score"] == 55
+    assert [r["property_id"] for r in demo["results"]] == ["property-456", "property-321", "property-123", "property-789"]
+    assert [r["weak_fit"] for r in demo["results"]] == [False, True, True, False]
+    assert results["property-123"]["score"] == pytest.approx(31.6, abs=0.05)
+    assert results["property-321"]["score"] == 0
+    weak = [r for r in demo["results"] if r["weak_fit"]]
+    assert [r["first_year_cost"]["min"] for r in weak] == sorted(r["first_year_cost"]["min"] for r in weak)
+    assert "first-year cost" in demo["ranking_basis"] and "at least 55" in demo["ranking_basis"]
 
     # Retail space without a kitchen needs a full kitchen build-out
     r123 = results["property-123"]

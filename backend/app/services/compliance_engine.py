@@ -7,6 +7,8 @@ Registry semantics applied here (see criteria.yaml header):
                               assume_cost: counted, scored 0, evaluator fallback cost added
                               unknown / ignore: excluded from the score
   (the same policy applies when an evaluator itself returns UNKNOWN)
+* evaluator UNKNOWN + verify -> excluded from the score regardless of policy: the data exists but
+                              only the landlord can settle it (e.g. prorated building HVAC share).
 * evidence_required        -> a PASS with no observed (listing / Matterport / Vexcel) evidence
                               is downgraded to UNKNOWN.
 * hard_block               -> disqualifies only on a *definitive* failure. Missing data never blocks.
@@ -140,7 +142,7 @@ def evaluate_criterion(criterion: Criterion, ctx: EvalContext) -> tuple[Criterio
     if criterion.weight <= 0:
         counted, score = False, None
     elif status == "UNKNOWN":
-        counted = criterion.missing_data_policy in COUNTED_UNKNOWN_POLICIES
+        counted = not outcome.verify and criterion.missing_data_policy in COUNTED_UNKNOWN_POLICIES
         score = STATUS_SCORE["UNKNOWN"] if counted else None
     else:
         counted, score = True, STATUS_SCORE[status]

@@ -75,5 +75,7 @@ ranking:
   horizon_months: 12
   # Min-score gate: properties whose criteria fit score (0-100) is below this are ranked after all
   # qualifying properties (but before disqualified ones) and labelled "Weak fit" in the UI.
-  # Config-driven; set to 0 to disable and rank purely by first-year cost.
-  min_score: 25
+  # 55 = clearly more than half of the weighted, scored criteria pass (a space scoring exactly 50,
+  # e.g. a medical office searched for a restaurant, is a weak fit). Config-driven; set to 0 to
+  # disable and rank purely by first-year cost.
+  min_score: 55
