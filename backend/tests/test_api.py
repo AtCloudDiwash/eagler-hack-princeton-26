@@ -67,7 +67,7 @@ def test_properties(client):
     assert {"zoning", "previous_use", "ti_allowance_per_sqft", "latitude", "longitude", "matterport_url", "available"} <= set(props[0])
     assert [p["id"] for p in client.get("/api/v1/properties", params={"city": "78702"}).json()] == ["property-456", "property-321"]
     assert all(p["rent"] <= 4000 for p in client.get("/api/v1/properties", params={"budget": 4000}).json())
-    sized = client.get("/api/v1/properties", params={"min_size": 1700, "max_size": 2100}).json()
+    sized = client.get("/api/v1/properties", params={"city": "Austin", "min_size": 1700, "max_size": 2100}).json()
     assert {p["id"] for p in sized} == {"property-123", "property-456"}
     assert client.get("/api/v1/properties", params={"city": "Princeton"}).json() == []
     assert client.get("/api/v1/properties", params={"business_type": "spaceport"}).status_code == 400
@@ -93,7 +93,12 @@ def test_analyze_response_shape(demo):
     assert demo["disclaimer"].startswith("Preliminary estimates")
     for result in demo["results"]:
         assert set(result) == RESULT_KEYS
-        assert set(result["media"]) == {"aerial_url", "floor_plan_url", "matterport_embed_url", "image_url"}
+        assert set(result["media"]) == {"aerial_url", "oblique_url", "floor_plan_url", "matterport_embed_url",
+                                        "image_url", "aerial_source", "aerial_attribution"}
+        # mock mode: placeholder aerial, no oblique photo, no Vexcel attribution, no live facts
+        assert result["media"]["aerial_source"] == "placeholder"
+        assert result["media"]["oblique_url"] is None and result["media"]["aerial_attribution"] is None
+        assert not any(ev["live"] for ev in result["observations"].values())
         for rng in ("total_cost_estimate", "first_year_cost", "fit_out_estimate", "buildout_months"):
             assert result[rng]["min"] <= result[rng]["max"]
         assert set(result["compliance"]) == {c["id"] for c in result["criteria_results"]}
@@ -112,7 +117,9 @@ def test_demo_ranking_is_explainable(demo):
     top = demo["results"][0]
     assert top["property_id"] == "property-456"
     assert top["score"] == 100.0 and not top["disqualified"]
-    assert all(v["status"] == "PASS" for v in top["compliance"].values())
+    # every scored criterion passes; unscored ones are only data gaps (e.g. roof_condition needs live Vexcel data)
+    assert all(c["status"] == "PASS" for c in top["criteria_results"] if c["counted"])
+    assert all(c["status"] == "UNKNOWN" for c in top["criteria_results"] if not c["counted"] and c["weight"] > 0)
 
     lo = results["property-789"]
     assert lo["disqualified"] and lo["disqualifiers"] == ["zoning_use"]

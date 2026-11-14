@@ -47,7 +47,10 @@ def _to_evidence(key: str, raw: Any, source: str) -> Evidence:
 
 
 def gather_observations(prop: Property) -> tuple[dict[str, Evidence], Media]:
-    """Merge listing facts (CoStar), interior facts (Matterport) and aerial facts (Vexcel)."""
+    """Merge listing facts (CoStar), interior facts (Matterport) and aerial facts (Vexcel).
+
+    Live Vexcel facts (property/extract) win over fixture aerial facts of the same key;
+    fixture facts still fill any gaps."""
     interior = matterport_provider.get_interior(prop)
     aerial = vexcel_provider.get_aerial(prop)
 
@@ -65,12 +68,16 @@ def gather_observations(prop: Property) -> tuple[dict[str, Evidence], Media]:
         observations[key] = _to_evidence(key, raw, "matterport")
     for key, raw in aerial["observations"].items():
         observations[key] = _to_evidence(key, raw, "vexcel")
+    observations.update(aerial["live_observations"])
 
     media = Media(
         aerial_url=aerial["aerial_url"],
+        oblique_url=aerial["oblique_url"],
         floor_plan_url=interior["floor_plan_url"],
         matterport_embed_url=interior["matterport_embed_url"],
         image_url=prop.image_url,
+        aerial_source=aerial["aerial_source"],
+        aerial_attribution=aerial["aerial_attribution"],
     )
     return observations, media
 

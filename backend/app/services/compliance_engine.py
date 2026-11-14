@@ -19,6 +19,7 @@ from typing import Any
 
 from ..models import OBSERVED_SOURCES, Criterion, CriterionResult, Evidence, Property, Requirements, Status
 from .evaluators import CostNeed, EvalContext, EvalOutcome, get_evaluator
+from .requirements_parser import property_parking_requirement
 from .scoring import STATUS_SCORE, weighted_score
 
 COUNTED_UNKNOWN_POLICIES = {"assume_risk", "assume_cost"}
@@ -37,6 +38,7 @@ INPUT_LABELS = {
     "electrical_service_amps": "the electrical service size (amps)",
     "window_area": "the street-facing window area",
     "sprinklered": "whether the space is sprinklered",
+    "roof_condition": "the roof condition",
 }
 
 
@@ -58,9 +60,17 @@ class ComplianceReport:
 
 
 def build_inputs(
-    requirements: Requirements, prop: Property, observations: dict[str, Evidence]
+    requirements: Requirements,
+    prop: Property,
+    observations: dict[str, Evidence],
+    jurisdiction: dict[str, Any] | None = None,
+    business: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Everything an evaluator may name in `required_inputs`."""
+    """Everything an evaluator may name in `required_inputs`.
+
+    With `jurisdiction` + `business`, `business_required_parking` becomes this property's own
+    requirement: the city parking minimum for its size/location (jurisdictions.yaml), never below the
+    user's stated number. `code_required_parking` / `parking_requirement_note` explain it."""
     inputs: dict[str, Any] = {key: ev.value for key, ev in observations.items()}
     inputs.update(
         {
@@ -73,8 +83,14 @@ def build_inputs(
             "needs_kitchen": requirements.needs_kitchen,
             "size_sqft": prop.size_sqft,
             "monthly_rent": prop.rent,
+            "use_restrictions": prop.use_restrictions,
         }
     )
+    if jurisdiction is not None and business is not None:
+        required, rule = property_parking_requirement(requirements, prop, jurisdiction, business)
+        inputs["business_required_parking"] = required
+        inputs["code_required_parking"] = rule.spaces
+        inputs["parking_requirement_note"] = rule.note
     return inputs
 
 
@@ -155,7 +171,7 @@ def run_compliance(
     jurisdiction: dict[str, Any],
     business: dict[str, Any],
 ) -> ComplianceReport:
-    inputs = build_inputs(requirements, prop, observations)
+    inputs = build_inputs(requirements, prop, observations, jurisdiction, business)
     report = ComplianceReport(criteria_results=[])
     for criterion in criteria:
         ctx = EvalContext(requirements, prop, observations, criterion, jurisdiction, business, inputs)

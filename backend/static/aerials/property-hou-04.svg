@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-label="Aerial view of 801 St Emanuel Street">
+<title>Aerial view of 801 St Emanuel Street</title>
+<defs><pattern id="grain" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#1c2940" stroke-width="1"/></pattern></defs>
+<rect width="800" height="600" fill="#0b1220"/>
+<rect x="0" y="552" width="800" height="48" fill="#0f172a"/><line x1="0" y1="576" x2="800" y2="576" stroke="#facc15" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="18 14"/>
+<text x="784" y="581" fill="#64748b" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" text-anchor="end">St Emanuel Street</text>
+<rect x="60" y="50" width="400" height="300" fill="#131c2e" stroke="#2a3a55" stroke-width="3"/><rect x="60" y="50" width="400" height="300" fill="url(#grain)" opacity="0.5"/>
+<text x="76" y="78" fill="#64748b" font-family="Inter, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" text-anchor="start">801 ST EMANUEL STREET - ROOF</text>
+<rect x="120" y="123" width="54" height="42" rx="3" fill="#475569" stroke="#94a3b8" stroke-width="1.5"/><circle cx="147" cy="144" r="13.4" fill="#1e293b" stroke="#94a3b8"/>
+<rect x="190" y="123" width="54" height="42" rx="3" fill="#475569" stroke="#94a3b8" stroke-width="1.5"/><circle cx="217" cy="144" r="13.4" fill="#1e293b" stroke="#94a3b8"/>
+<rect x="260" y="123" width="54" height="42" rx="3" fill="#475569" stroke="#94a3b8" stroke-width="1.5"/><circle cx="287" cy="144" r="13.4" fill="#1e293b" stroke="#94a3b8"/>
+<text x="290" y="450" fill="#64748b" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" text-anchor="middle">no on-site parking lot (street parking)</text>
+<g transform="translate(760 40)"><circle r="18" fill="#131c2e" stroke="#2a3a55"/><path d="M0 -12 L5 4 L0 0 L-5 4 Z" fill="#22d3ee"/><text x="0" y="15" fill="#cbd5e1" font-family="Inter, Helvetica, Arial, sans-serif" font-size="9" font-weight="500" text-anchor="middle">N</text></g>
+<text x="16" y="30" fill="#475569" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" text-anchor="start">Placeholder aerial (offline mode) - live Vexcel imagery replaces this</text>
+</svg>

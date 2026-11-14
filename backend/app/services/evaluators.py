@@ -122,12 +122,71 @@ def base_zoning_district(code: str, known: set[str]) -> str:
     return parts[0]
 
 
+def _use_restriction_evidence(ctx: EvalContext) -> list[Evidence]:
+    """The listing's disclosed use restrictions as an observed (CoStar listing) fact, if the listing says."""
+    restrictions = ctx.property.use_restrictions
+    if restrictions is None:
+        return []
+    note = "Use restrictions disclosed in the listing" if restrictions else "Listing discloses no use restrictions"
+    return [Evidence(key="use_restrictions", value=list(restrictions), source="costar", note=note)]
+
+
+def _blocking_use_restriction(ctx: EvalContext, use: str) -> str | None:
+    """First disclosed restriction tag that prohibits `use` (jurisdictions.yaml `use_restriction_blocks`)."""
+    blocks = ctx.jurisdiction.get("use_restriction_blocks") or {}
+    for tag in ctx.property.use_restrictions or []:
+        if use in (blocks.get(str(tag).strip().lower()) or []):
+            return str(tag)
+    return None
+
+
 @evaluator("zoning_checker")
 def zoning_checker(ctx: EvalContext) -> EvalOutcome:
-    code = str(ctx.value("zoning_code")).strip().upper()
+    """Land-use check, config-driven per jurisdiction (jurisdictions.yaml):
+
+    1. A disclosed deed / lease use restriction that prohibits the use -> RISK, definitive (any city).
+    2. `zoning_mode: none` (e.g. Houston) -> PASS with the city's `zoning_note` (verify deed restrictions).
+    3. `zoning_mode: districts` -> look the listing's zoning code up in the city's use table.
+    """
     use = ctx.business.get("zoning_use", ctx.requirements.business_type)
-    table = (ctx.jurisdiction.get("zoning") or {}).get(use)
+    label = ctx.requirements.business_label.lower()
+    city = ctx.jurisdiction.get("name", "this city")
     source = ctx.jurisdiction.get("zoning_source") or ctx.criterion.source
+    restriction_evidence = _use_restriction_evidence(ctx)
+
+    blocking = _blocking_use_restriction(ctx, use)
+    if blocking:
+        return EvalOutcome(
+            "RISK",
+            f"Recorded use restriction '{blocking}' on this property prohibits {use.replace('_', ' ')} use; "
+            "a deed or lease restriction can't be permitted around, so the space is ruled out.",
+            restriction_evidence
+            + [ctx.derived("use_restriction_rule", f"{blocking}: prohibits {use}", f"{city} use-restriction rules", "jurisdiction")],
+            questions=[f"Can the '{blocking}' restriction be released or amended for a {label}?"],
+            definitive_failure=True,
+            source=ctx.jurisdiction.get("use_restriction_source") or source,
+        )
+
+    if ctx.jurisdiction.get("zoning_mode") == "none":
+        note = " ".join(str(ctx.jurisdiction.get("zoning_note") or f"{city} has no zoning; verify deed restrictions.").split())
+        return EvalOutcome(
+            "PASS",
+            note,
+            restriction_evidence + [ctx.derived("zoning_mode", "no zoning", note, "jurisdiction")],
+            questions=[f"Are there recorded deed restrictions or lease use clauses that limit a {label} at this property?"],
+            source=" ".join(str(source).split()),
+        )
+
+    if ctx.value("zoning_code") is None:
+        return EvalOutcome(
+            "UNKNOWN",
+            "Not enough data: could not confirm the zoning designation.",
+            restriction_evidence,
+            questions=[f"What is the zoning designation, and does it permit a {label} use?"],
+            source=source,
+        )
+    code = str(ctx.value("zoning_code")).strip().upper()
+    table = (ctx.jurisdiction.get("zoning") or {}).get(use)
     evidence = ctx.evidence("zoning_code")
     if not table:
         return EvalOutcome(
@@ -177,22 +236,37 @@ def zoning_checker(ctx: EvalContext) -> EvalOutcome:
 
 @evaluator("parking_checker")
 def parking_checker(ctx: EvalContext) -> EvalOutcome:
-    visible = float(ctx.value("visible_parking_count"))
+    """Visible (striped) parking count when known; otherwise the Vexcel estimate from paved area.
+
+    Missing both -> UNKNOWN (scored per the criterion's missing_data_policy)."""
     required = float(ctx.value("business_required_parking"))
     min_ratio = float(ctx.thresholds.get("min_ratio", 1.0))
     basis = "you stated" if ctx.requirements.parking_source == "user" else "the business guideline"
-    evidence = ctx.evidence("visible_parking_count") + [
-        ctx.derived("business_required_parking", int(required), f"Spaces needed ({basis})")
-    ]
     note = ctx.jurisdiction.get("parking_note", "")
     source = f"{ctx.criterion.source}. {note}".strip()
-    if required <= 0 or visible / required >= min_ratio:
-        return EvalOutcome("PASS", f"{visible:g} spaces visible vs {required:g} needed.", evidence, source=source)
+    needed = [ctx.derived("business_required_parking", int(required), f"Spaces needed ({basis})")]
+    if ctx.value("visible_parking_count") is not None:
+        count, fact, label = float(ctx.value("visible_parking_count")), "visible_parking_count", "visible"
+    elif ctx.value("estimated_parking_spaces") is not None:
+        count, fact, label = float(ctx.value("estimated_parking_spaces")), "estimated_parking_spaces", "estimated"
+    else:
+        return EvalOutcome(
+            "UNKNOWN",
+            "Not enough data: could not confirm the number of parking spaces available.",
+            needed,
+            questions=["Can you confirm the number of parking spaces available?"],
+            source=source,
+        )
+    facts = (fact, "paved_area_sqft") if label == "estimated" else (fact,)
+    evidence = ctx.evidence(*facts) + needed
+    caveat = " (estimated from paved area, not a striped-space count)" if label == "estimated" else ""
+    if required <= 0 or count / required >= min_ratio:
+        return EvalOutcome("PASS", f"{count:g} spaces {label} vs {required:g} needed{caveat}.", evidence, source=source)
     return EvalOutcome(
         "RISK",
-        f"Only {visible:g} spaces visible vs {required:g} needed ({basis}). {note}".strip(),
+        f"Only {count:g} spaces {label} vs {required:g} needed ({basis}){caveat}. {note}".strip(),
         evidence,
-        questions=[f"How many of the {visible:g} visible parking spaces are reserved for this unit, and is overflow parking available nearby?"],
+        questions=[f"How many of the {count:g} {label} parking spaces are reserved for this unit, and is overflow parking available nearby?"],
         source=source,
     )
 
@@ -350,7 +424,8 @@ def hvac_checker(ctx: EvalContext) -> EvalOutcome:
     need = _hvac_need(ctx)
     per_unit = float(ctx.thresholds.get("tons_per_unit", 5))
     per_ton = ctx.business.get("hvac_sqft_per_ton", 250)
-    evidence = ctx.evidence("hvac_tons") + [
+    # hvac_tons is a fixture observation or, live, Vexcel rooftop units x tons_per_unit.
+    evidence = ctx.evidence("hvac_tons", "rooftop_hvac_units") + [
         ctx.derived("required_hvac_tons", need, f"{ctx.property.size_sqft} sq ft at {per_ton} sq ft/ton")
     ]
     if have >= need:
@@ -362,6 +437,36 @@ def hvac_checker(ctx: EvalContext) -> EvalOutcome:
         evidence,
         [CostNeed("hvac_rtu", units, f"{need - have:g} ton shortfall")],
         ["How old are the rooftop HVAC units, and who is responsible for replacement?"],
+    )
+
+
+DEFAULT_SERIOUS_ROOF_DEFECTS = ("structural-damage", "tarp")
+
+
+@evaluator("roof_checker")
+def roof_checker(ctx: EvalContext) -> EvalOutcome:
+    """Vexcel AI roof condition (1-5) and detected defects. A tarp or structural damage is a RISK
+    regardless of the condition score. Never a definitive failure: roofs can be repaired."""
+    condition = float(ctx.value("roof_condition"))
+    min_condition = float(ctx.thresholds.get("min_condition", 3))
+    serious_names = ctx.thresholds.get("serious_defects", DEFAULT_SERIOUS_ROOF_DEFECTS)
+    defects = [str(d) for d in (ctx.value("roof_defects") or [])]
+    serious = [d for d in defects if d in serious_names]
+    evidence = ctx.evidence("roof_condition", "roof_defects", "roof_material", "building_footprint")
+    if condition >= min_condition and not serious:
+        others = f"; minor defects: {', '.join(defects)}" if defects else ""
+        return EvalOutcome("PASS", f"Roof condition {condition:g}/5 (needs {min_condition:g}+){others}.", evidence)
+    problems = []
+    if condition < min_condition:
+        problems.append(f"roof condition {condition:g}/5 is below {min_condition:g}")
+    if serious:
+        problems.append(f"{', '.join(d.replace('-', ' ') for d in serious)} detected from aerial imagery")
+    return EvalOutcome(
+        "RISK",
+        "Roof risk: " + "; ".join(problems) + ". Budget a repair/recoat unless the landlord fixes it.",
+        evidence,
+        [CostNeed("roof_repair", ctx.property.size_sqft, "; ".join(problems))],
+        ["When was the roof last replaced or recoated, and is roof repair the landlord's responsibility under the lease?"],
     )
 
 

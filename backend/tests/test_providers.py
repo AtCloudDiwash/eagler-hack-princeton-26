@@ -11,7 +11,9 @@ from app.services.agent_orchestrator import gather_observations
 
 def test_mock_mode_is_default():
     assert settings.mode_summary == {"costar": "mock", "matterport": "mock", "vexcel": "mock"}
-    assert len(costar_provider.all_properties()) == 4
+    ids = {p.id for p in costar_provider.all_properties()}
+    assert {"property-123", "property-456", "property-789", "property-321"} <= ids  # Austin
+    assert {f"property-hou-0{i}" for i in range(1, 6)} <= ids  # Houston (sample listings)
 
 
 def test_mock_interior_and_aerial():
@@ -51,7 +53,7 @@ def live_mode(monkeypatch):
 def test_live_failures_fall_back_to_fixtures(live_mode):
     assert settings.mode_summary["costar"] == "live"
     props = costar_provider.all_properties()
-    assert len(props) == 4
+    assert len(props) == len(costar_provider._fixture_properties()) >= 4
     prop = props[0]
     assert vexcel_provider.get_aerial_image(prop)["aerial_url"].startswith("/static/aerials/")
     images = matterport_provider.get_interior_images(prop.id, "https://my.matterport.com/show/?m=AbC123")

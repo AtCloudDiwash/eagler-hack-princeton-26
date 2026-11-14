@@ -60,7 +60,7 @@ class Settings:
         self.matterport_api_base_url = (
             os.getenv("MATTERPORT_API_BASE_URL") or "https://api.matterport.com/api/models/graph"
         ).rstrip("/")
-        self.vexcel_api_base_url = (os.getenv("VEXCEL_API_BASE_URL") or "https://api.vexcel.example/v1").rstrip("/")
+        self.vexcel_api_base_url = (os.getenv("VEXCEL_API_BASE_URL") or "https://api.vexcelgroup.com/v2").rstrip("/")
         self.provider_timeout_seconds = float(os.getenv("PROVIDER_TIMEOUT_SECONDS") or 8)
         self.database_url = _resolve_sqlite_url(os.getenv("DATABASE_URL") or "sqlite:///./turnkey.db")
         self.force_mock = _env_flag("USE_MOCK_DATA", default=True)

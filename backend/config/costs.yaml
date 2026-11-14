@@ -59,6 +59,11 @@ items:
     min: 3
     max: 7
     adds_months: { min: 1, max: 1 }
+  roof_repair:
+    label: "Roof repair / recoat (flat commercial roof)"
+    unit: per_sqft           # qty = the suite's size_sqft (a tenant's share, not the whole building)
+    min: 4
+    max: 9
 
 soft_costs:
   permits_fees: { label: "Permits and fees", min: 5000, max: 10000 }

@@ -35,6 +35,7 @@ class Evidence(BaseModel):
     note: str | None = None
     confidence: float | None = None
     box: list[float] | None = None  # normalized [x, y, w, h] overlay on the source image
+    live: bool = False  # True when the fact came from a live provider call (e.g. Vexcel property/extract)
 
 
 class CriterionResult(BaseModel):
@@ -58,13 +59,19 @@ class ComplianceStatus(BaseModel):
     source: str = ""
 
 
+AerialSource = Literal["vexcel-live", "placeholder"]
+
+
 class Media(BaseModel):
     """Image / tour links for a property. Evidence boxes overlay aerial_url (vexcel) or floor_plan_url (matterport)."""
 
     aerial_url: str | None = None
+    oblique_url: str | None = None  # angled Vexcel photo (live mode only)
     floor_plan_url: str | None = None
     matterport_embed_url: str | None = None
     image_url: str | None = None
+    aerial_source: AerialSource = "placeholder"  # "vexcel-live" only when the live ortho image was obtained
+    aerial_attribution: str | None = None  # must be shown under live Vexcel imagery
 
 
 class AnalysisResult(BaseModel):

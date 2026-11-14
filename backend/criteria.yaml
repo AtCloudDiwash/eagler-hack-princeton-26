@@ -15,16 +15,19 @@
 #   business_types       business types this applies to (["ALL"] = every type)
 #   applicable_jurisdictions  ["ALL"], a state code ("TX") or a city ("Austin")
 
+# zoning_use: no required_inputs on purpose — a no-zoning city (jurisdictions.yaml `zoning_mode: none`,
+# e.g. Houston) has no zoning code to require; the evaluator reports a missing code as UNKNOWN itself.
+# The city-specific citation comes from the jurisdiction's `zoning_source`.
 - id: "zoning_use"
-  description: "Zoning permits this business use"
+  description: "Zoning / land-use rules and recorded use restrictions permit this business use"
   domain: "regulatory"
   weight: 10
   hard_block: true
   evaluator: "zoning_checker"
-  required_inputs: ["zoning_code"]
+  required_inputs: []
   missing_data_policy: "unknown"
   evidence_required: true
-  source: "Austin LDC §25-2-491 use table (simplified)"
+  source: "Local zoning / land-use rules for the property's city (citation per jurisdiction)"
   thresholds: {}
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]
@@ -35,12 +38,15 @@
   weight: 10
   hard_block: false
   evaluator: "parking_checker"
-  required_inputs: ["visible_parking_count", "business_required_parking"]
+  # Space count comes from visible_parking_count (striped spaces) or, failing that, the Vexcel
+  # estimated_parking_spaces; the evaluator returns UNKNOWN (assume_risk) when neither is known.
+  required_inputs: ["business_required_parking"]
   missing_data_policy: "assume_risk"
   evidence_required: true
   source: "Business need; Austin has no minimum parking requirement (Nov 2023)"
   thresholds:
     min_ratio: 1.0          # visible / required spaces needed for PASS
+    sqft_per_space: 350     # paved sq ft per space when estimating from Vexcel hardscape area
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]
 
@@ -126,7 +132,7 @@
   evidence_required: true
   source: "Rule of thumb: sq ft per ton by business type"
   thresholds:
-    tons_per_unit: 5
+    tons_per_unit: 5        # also used to turn Vexcel rooftop AC unit counts into tons
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]
 
@@ -173,4 +179,21 @@
   thresholds:
     min_area: 10            # sq ft of street-facing glass
   business_types: ["restaurant"]
+  applicable_jurisdictions: ["ALL"]
+
+# Vexcel live data: roof condition score (1-5) and roof defects from /property/extract.
+# No fixture roof data -> UNKNOWN, excluded from the score.
+- id: "roof_condition"
+  description: "Roof in fair or better condition with no major defects"
+  domain: "space"
+  weight: 5
+  hard_block: false
+  evaluator: "roof_checker"
+  required_inputs: ["roof_condition"]
+  missing_data_policy: "unknown"
+  evidence_required: true
+  source: "Vexcel AI roof condition score (1–5) from aerial imagery"
+  thresholds:
+    min_condition: 3        # PASS needs >= 3 and no tarp / structural damage
+  business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]

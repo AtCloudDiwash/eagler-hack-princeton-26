@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-label="Floor plan of 4720 Washington Avenue">
+<title>Floor plan of 4720 Washington Avenue</title>
+<defs><pattern id="grain" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#1c2940" stroke-width="1"/></pattern></defs>
+<rect width="800" height="600" fill="#0b1220"/>
+<rect x="92" y="50" width="668" height="500" fill="#131c2e" stroke="#cbd5e1" stroke-width="6"/>
+<text x="400" y="280" fill="#cbd5e1" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" text-anchor="middle">OPEN SALES FLOOR</text>
+<text x="400" y="300" fill="#64748b" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" text-anchor="middle">no kitchen, no hood</text>
+<line x1="560" y1="420" x2="760" y2="420" stroke="#cbd5e1" stroke-opacity="0.8" stroke-width="3"/>
+<line x1="660" y1="420" x2="660" y2="550" stroke="#cbd5e1" stroke-opacity="0.8" stroke-width="3"/>
+<rect x="600" y="440" width="22" height="10" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><ellipse cx="611" cy="464" rx="10" ry="13" fill="none" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="610" y="500" fill="#94a3b8" font-family="Inter, Helvetica, Arial, sans-serif" font-size="10" font-weight="500" text-anchor="middle">RR 1</text>
+<rect x="700" y="440" width="22" height="10" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><ellipse cx="711" cy="464" rx="10" ry="13" fill="none" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="710" y="500" fill="#94a3b8" font-family="Inter, Helvetica, Arial, sans-serif" font-size="10" font-weight="500" text-anchor="middle">RR 2</text>
+<line x1="85.8" y1="424" x2="85.8" y2="476" stroke="#0b1220" stroke-width="10"/><path d="M85.8 424 A52 52 0 0 1 137.8 476" fill="none" stroke="#22d3ee" stroke-dasharray="4 3"/><line x1="85.8" y1="476" x2="137.8" y2="476" stroke="#22d3ee" stroke-width="3"/>
+<text x="134" y="414" fill="#22d3ee" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="700" text-anchor="start">ENTRY</text>
+<text x="16" y="586" fill="#475569" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" text-anchor="start">Placeholder floor plan (Matterport mock) - 2,000 sq ft, retail showroom in strip center</text>
+</svg>

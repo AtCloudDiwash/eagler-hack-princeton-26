@@ -69,5 +69,104 @@
       "visible_parking_count": { "value": 8, "confidence": 0.75, "note": "8 spaces behind the building", "box": [0.55, 0.6, 0.3, 0.25] },
       "hvac_tons": { "value": 4, "confidence": 0.55, "note": "One small rooftop unit" }
     }
+  },
+  "property-hou-01": {
+    "_comment": "Houston sample listing (real building, illustrative interior). Aerial facts are placeholders until scripts/snapshot_vexcel.py merges live Vexcel facts.",
+    "floor_plan_url": "/static/floorplans/property-hou-01.svg",
+    "aerial_url": "/static/aerials/property-hou-01.svg",
+    "interior": {
+      "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Front entry door, measured in 3D tour", "box": [0.1, 0.72, 0.06, 0.1] },
+      "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Entry is flush with the walkway" },
+      "kitchen_equipment_visible": { "value": true, "confidence": 0.95, "note": "Full cooking line and walk-in cooler left by the prior restaurant", "box": [0.55, 0.1, 0.4, 0.35] },
+      "hood_present": { "value": true, "confidence": 0.9, "note": "14 ft Type I hood with fire suppression over the line" },
+      "grease_interceptor_present": { "value": true, "confidence": 0.8, "note": "Interceptor manholes visible at the rear service drive" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.95, "note": "Two restrooms off the dining room", "box": [0.75, 0.7, 0.2, 0.22] },
+      "electrical_service_amps": { "value": 400, "confidence": 0.75, "note": "Panel label reads 400A, 3-phase" },
+      "sprinklered": { "value": false, "confidence": 0.7, "note": "No sprinkler heads visible" },
+      "window_area": { "value": 45, "confidence": 0.8, "note": "Storefront glass facing Yale St" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 24, "confidence": 0.75, "note": "Placeholder: ~24 spaces in the shared lot in front of the suite (verify reserved count)", "box": [0.05, 0.6, 0.55, 0.3] },
+      "hvac_tons": { "value": 10, "confidence": 0.6, "note": "Placeholder: two rooftop units over the suite" }
+    }
+  },
+  "property-hou-02": {
+    "_comment": "Houston sample listing (real building, illustrative interior). Aerial facts are placeholders until the Vexcel snapshot.",
+    "floor_plan_url": "/static/floorplans/property-hou-02.svg",
+    "aerial_url": "/static/aerials/property-hou-02.svg",
+    "interior": {
+      "door_width_inches": { "value": 34, "confidence": 0.85, "note": "Front entry door, measured in 3D tour", "box": [0.08, 0.72, 0.06, 0.1] },
+      "step_free_entrance": { "value": false, "confidence": 0.8, "note": "One 6 in. step up from the sidewalk (older Heights storefront)" },
+      "kitchen_equipment_visible": { "value": false, "confidence": 0.95, "note": "Open retail floor, no cooking line" },
+      "hood_present": { "value": false, "confidence": 0.9, "note": "No exhaust hood or roof curb" },
+      "grease_interceptor_present": { "value": false, "confidence": 0.6, "note": "No interceptor cleanout seen" },
+      "bathrooms_visible": { "value": 1, "confidence": 0.95, "note": "One single-user restroom at the rear", "box": [0.82, 0.12, 0.1, 0.14] },
+      "electrical_service_amps": { "value": 200, "confidence": 0.7, "note": "Panel label reads 200A" },
+      "sprinklered": { "value": false, "confidence": 0.8, "note": "No sprinkler heads visible" },
+      "window_area": { "value": 50, "confidence": 0.8, "note": "Full-height storefront glass on W 19th St" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 4, "confidence": 0.7, "note": "Placeholder: no private lot; ~4 head-in spaces at the curb, otherwise street parking", "box": [0.05, 0.78, 0.5, 0.12] },
+      "hvac_tons": { "value": 10, "confidence": 0.55, "note": "Placeholder: share of the building's rooftop units" }
+    }
+  },
+  "property-hou-03": {
+    "_comment": "Houston sample listing (real building, illustrative interior). The center's recorded restriction prohibits food service (see properties.json use_restrictions).",
+    "floor_plan_url": "/static/floorplans/property-hou-03.svg",
+    "aerial_url": "/static/aerials/property-hou-03.svg",
+    "interior": {
+      "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Storefront door, measured in 3D tour", "box": [0.1, 0.72, 0.06, 0.1] },
+      "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Level entry from the parking lot" },
+      "kitchen_equipment_visible": { "value": false, "confidence": 0.95, "note": "Showroom floor, no cooking line" },
+      "hood_present": { "value": false, "confidence": 0.9, "note": "No exhaust hood" },
+      "grease_interceptor_present": { "value": false, "confidence": 0.6, "note": "No interceptor seen" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.9, "note": "Two restrooms at the rear" },
+      "electrical_service_amps": { "value": 200, "confidence": 0.7, "note": "Panel label reads 200A" },
+      "sprinklered": { "value": true, "confidence": 0.85, "note": "Sprinkler heads throughout the center" },
+      "window_area": { "value": 70, "confidence": 0.8, "note": "Wide storefront facing Washington Ave" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 30, "confidence": 0.8, "note": "Placeholder: shared strip-center lot", "box": [0.05, 0.6, 0.6, 0.3] },
+      "hvac_tons": { "value": 10, "confidence": 0.6, "note": "Placeholder: two rooftop units serve the suite" }
+    }
+  },
+  "property-hou-04": {
+    "_comment": "Houston sample listing (real building, illustrative interior) inside the EaDo market-based parking area (no parking minimum).",
+    "floor_plan_url": "/static/floorplans/property-hou-04.svg",
+    "aerial_url": "/static/aerials/property-hou-04.svg",
+    "interior": {
+      "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Roll-up glass door plus 36 in. entry door", "box": [0.1, 0.72, 0.06, 0.1] },
+      "step_free_entrance": { "value": true, "confidence": 0.85, "note": "Level entry from St. Emanuel St" },
+      "kitchen_equipment_visible": { "value": true, "confidence": 0.85, "note": "Bar prep area with sinks and coolers, no cooking line", "box": [0.55, 0.1, 0.4, 0.3] },
+      "hood_present": { "value": false, "confidence": 0.85, "note": "No exhaust hood over the prep area" },
+      "grease_interceptor_present": { "value": false, "confidence": 0.55, "note": "Only an under-sink grease trap seen at the bar" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.95, "note": "Two multi-stall restrooms" },
+      "electrical_service_amps": { "value": 400, "confidence": 0.7, "note": "Panel label reads 400A" },
+      "sprinklered": { "value": true, "confidence": 0.85, "note": "Sprinklered warehouse conversion" },
+      "window_area": { "value": 30, "confidence": 0.8, "note": "Glass roll-up door on the street side" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 0, "confidence": 0.8, "note": "Placeholder: no on-site lot; street parking and paid lots nearby", "box": [0.05, 0.8, 0.9, 0.12] },
+      "hvac_tons": { "value": 15, "confidence": 0.55, "note": "Placeholder: share of the building's rooftop units" }
+    }
+  },
+  "property-hou-05": {
+    "_comment": "Houston sample listing (real medical office building, illustrative suite). Parking is in a structured garage, not countable from aerial imagery.",
+    "floor_plan_url": "/static/floorplans/property-hou-05.svg",
+    "aerial_url": "/static/aerials/property-hou-05.svg",
+    "interior": {
+      "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Suite door off the elevator lobby", "box": [0.45, 0.85, 0.05, 0.08] },
+      "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Elevator and level lobby entry" },
+      "kitchen_equipment_visible": { "value": false, "confidence": 0.95, "note": "Clinic layout, break room only" },
+      "hood_present": { "value": false, "confidence": 0.95, "note": "No exhaust hood" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.9, "note": "Two restrooms in the suite" },
+      "plumbed_operatories": { "value": 3, "confidence": 0.8, "note": "Three treatment rooms plumbed (water, drain, air and vacuum stubs) from a prior dental tenant", "box": [0.1, 0.1, 0.35, 0.3] },
+      "electrical_service_amps": { "value": 200, "confidence": 0.7, "note": "Suite panel reads 200A" },
+      "sprinklered": { "value": true, "confidence": 0.9, "note": "Sprinkler heads throughout" },
+      "window_area": { "value": 20, "confidence": 0.8, "note": "Exterior windows on the Kirby side" }
+    },
+    "aerial": {
+      "hvac_tons": { "value": 6, "confidence": 0.55, "note": "Placeholder: suite share of the building's rooftop equipment" }
+    }
   }
 }

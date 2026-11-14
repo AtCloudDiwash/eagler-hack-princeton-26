@@ -25,6 +25,17 @@ DEMO_DETAILS = "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces"
 ALL_IDS = ["property-123", "property-456", "property-789", "property-321"]
 
 
+@pytest.fixture(autouse=True)
+def isolated_vexcel_cache(tmp_path, monkeypatch):
+    """Live-mode tests must never read or write the real backend/static/vexcel-cache."""
+    from app.providers import vexcel_provider
+
+    monkeypatch.setattr(vexcel_provider, "CACHE_DIR", tmp_path / "vexcel-cache")
+    vexcel_provider.clear_failure_cache()
+    yield
+    vexcel_provider.clear_failure_cache()
+
+
 @pytest.fixture(scope="session")
 def client():
     from app.main import app

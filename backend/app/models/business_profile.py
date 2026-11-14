@@ -25,7 +25,11 @@ class Requirements(BaseModel):
     capacity_unit: str
     occupant_load: int
     parking_required: int
-    parking_source: Literal["user", "guideline"] = Field(..., description="'user' if stated, otherwise 'guideline'")
+    parking_source: Literal["user", "jurisdiction", "guideline"] = Field(
+        ...,
+        description="'user' if stated; else 'jurisdiction' when the city sets a parking ratio for this use; "
+        "else 'guideline' (business rule of thumb)",
+    )
     bathrooms_required: int
     min_sqft: int | None = None
     max_sqft: int | None = None

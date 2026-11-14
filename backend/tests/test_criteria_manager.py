@@ -121,7 +121,8 @@ def test_adding_a_criterion_via_config_changes_results(use_criteria):
     r456 = after["property-456"]
     assert r456.compliance["window_visibility"].status == "RISK"
     assert before["property-456"].score == 100.0
-    total = sum(e["weight"] for e in without if e["weight"] > 0 and e["id"] != "operatory_plumbing")
+    unscored = {"operatory_plumbing", "roof_condition"}  # n/a for restaurants / no roof data in mock mode
+    total = sum(e["weight"] for e in without if e["weight"] > 0 and e["id"] not in unscored)
     assert r456.score == round(100 * total / (total + 5), 1)  # max score re-normalized by the new weight
     assert after["property-123"].compliance["window_visibility"].status == "PASS"  # 60 sq ft
     # no window data on 789 -> ignore policy -> shown, not scored

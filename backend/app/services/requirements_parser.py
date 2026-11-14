@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import math
 import re
+from dataclasses import dataclass
 from typing import Any
 
-from ..config import business_types, log, settings
-from ..models import BusinessProfile, Requirements
+from ..config import business_types, jurisdiction_for, log, settings
+from ..models import BusinessProfile, Property, Requirements
 
 CLAUDE_TIMEOUT_SECONDS = 8.0
 RAW_FIELDS = ("capacity", "bathrooms", "parking", "min_sqft", "max_sqft", "max_rent", "needs_kitchen")
@@ -227,6 +228,88 @@ def restrooms_for(business: dict, load: int) -> int:
     return 2 * max(per_sex, 1)
 
 
+# --------------------------------------------------------------------------------------------
+# Parking: jurisdiction minimums (config/jurisdictions.yaml)
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass
+class ParkingMinimum:
+    """A city's off-street parking minimum for one use at one size / location.
+
+    spaces is None when the city sets no minimum for this use (then the business need applies);
+    0 inside an exempt area (e.g. Houston's market-based parking areas)."""
+
+    spaces: int | None
+    ratio: float | None = None  # spaces per 1,000 sq ft GFA
+    exempt_area: str | None = None
+    source: str | None = None
+    note: str = ""
+
+
+def _point_in_polygon(lon: float, lat: float, ring: list[list[float]]) -> bool:
+    """Ray casting; `ring` is [[lon, lat], ...] (closing point optional)."""
+    inside = False
+    n = len(ring)
+    for i in range(n):
+        x1, y1 = ring[i]
+        x2, y2 = ring[(i + 1) % n]
+        if (y1 > lat) != (y2 > lat) and lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
+def exempt_parking_area(jurisdiction: dict, latitude: float | None, longitude: float | None) -> dict | None:
+    """The jurisdiction's parking-exempt area containing this point, if any."""
+    if latitude is None or longitude is None:
+        return None
+    for area in jurisdiction.get("parking_exempt_areas") or []:
+        if area.get("polygon") and _point_in_polygon(longitude, latitude, area["polygon"]):
+            return area
+    return None
+
+
+def code_parking_minimum(
+    jurisdiction: dict, use: str, sqft: float, latitude: float | None = None, longitude: float | None = None
+) -> ParkingMinimum:
+    """Spaces the city requires for `use` (business_types.yaml `zoning_use`) at `sqft` GFA.
+
+    Config-driven: `parking_minimums`, `parking_ratios`, `parking_exempt_areas` in jurisdictions.yaml.
+    Without a location the city-wide ratio is used (exempt areas can't be checked)."""
+    ratio = (jurisdiction.get("parking_ratios") or {}).get(use)
+    name = jurisdiction.get("name", "This city")
+    if not jurisdiction.get("parking_minimums") or ratio is None:
+        return ParkingMinimum(spaces=None)
+    area = exempt_parking_area(jurisdiction, latitude, longitude)
+    if area:
+        return ParkingMinimum(
+            spaces=0, ratio=float(ratio), exempt_area=area.get("name"),
+            source=area.get("source") or jurisdiction.get("parking_ratio_source"),
+            note=f"In the {area.get('name')}: {name} sets no parking minimum here.",
+        )
+    spaces = int(math.ceil(float(ratio) * sqft / 1000))
+    source = jurisdiction.get("parking_ratio_source")
+    return ParkingMinimum(
+        spaces=spaces, ratio=float(ratio), source=source,
+        note=f"{name} code minimum: {float(ratio):g} spaces per 1,000 sq ft x {sqft:,.0f} sq ft = {spaces} spaces"
+        + (f" ({source})." if source else "."),
+    )
+
+
+def property_parking_requirement(
+    requirements: Requirements, prop: Property, jurisdiction: dict, business: dict
+) -> tuple[int, ParkingMinimum]:
+    """Spaces this specific property must provide: the city minimum for its actual size and location
+    (market-based / exempt areas -> 0), never below what the user said they need."""
+    use = business.get("zoning_use", requirements.business_type)
+    rule = code_parking_minimum(jurisdiction, use, prop.size_sqft, prop.latitude, prop.longitude)
+    if rule.spaces is None:
+        return requirements.parking_required, rule
+    if requirements.parking_source == "jurisdiction":
+        return rule.spaces, rule
+    return max(requirements.parking_required, rule.spaces), rule
+
+
 def build_requirements(profile: BusinessProfile, raw: dict[str, Any]) -> Requirements:
     """Turn raw extracted fields into full Requirements, filling defaults as recorded assumptions."""
     business = get_business(profile.type)
@@ -243,8 +326,28 @@ def build_requirements(profile: BusinessProfile, raw: dict[str, Any]) -> Require
         f"Occupant load {load} = {capacity} {unit} x {business.get('occupants_per_capacity_unit', 1)} + staff."
     )
 
+    # Space need is needed early for the city parking minimum; its assumption is recorded below.
+    min_sqft, max_sqft = raw.get("min_sqft"), raw.get("max_sqft")
+    sqft_need = min_sqft or int(capacity * business.get("sqft_per_capacity_unit", 0))
+
+    jurisdiction = jurisdiction_for(profile.city, profile.state)
+    code = code_parking_minimum(jurisdiction, business.get("zoning_use", profile.type), sqft_need)
+    city = jurisdiction.get("name", profile.city)
     if raw.get("parking") is not None:
         parking, parking_source = int(raw["parking"]), "user"
+        if code.spaces is not None:
+            assumptions.append(
+                f"{city} also sets a parking minimum ({code.ratio:g} spaces per 1,000 sq ft GFA, {code.source}); "
+                "each property is checked against the larger of that minimum and your number "
+                "(no minimum in market-based parking areas)."
+            )
+    elif code.spaces is not None:
+        parking, parking_source = code.spaces, "jurisdiction"
+        assumptions.append(
+            f"Parking not stated; using the {city} code minimum of {code.ratio:g} spaces per 1,000 sq ft GFA "
+            f"x {sqft_need} sq ft = {parking} spaces ({code.source}). Recomputed for each property's size; "
+            "no minimum in market-based parking areas."
+        )
     else:
         ratio = business.get("parking_per_capacity_unit", 0)
         parking, parking_source = int(math.ceil(capacity * ratio)), "guideline"
@@ -265,8 +368,6 @@ def build_requirements(profile: BusinessProfile, raw: dict[str, Any]) -> Require
         if needs_kitchen:
             assumptions.append(f"Assumed a commercial kitchen is needed (typical for a {business['label'].lower()}).")
 
-    min_sqft, max_sqft = raw.get("min_sqft"), raw.get("max_sqft")
-    sqft_need = min_sqft or int(capacity * business.get("sqft_per_capacity_unit", 0))
     if not min_sqft:
         assumptions.append(
             f"Space need estimated at {sqft_need} sq ft ({business.get('sqft_per_capacity_unit')} sq ft per {unit[:-1] if unit.endswith('s') else unit})."

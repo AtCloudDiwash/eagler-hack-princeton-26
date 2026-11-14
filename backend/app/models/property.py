@@ -21,3 +21,10 @@ class Property(BaseModel):
     image_url: str | None = None
     matterport_url: str | None = None
     available: bool = True
+    # Recorded deed / lease / shopping-center use restrictions disclosed with the listing, as tags
+    # (e.g. "no_food_service"). None = the listing says nothing; [] = the listing discloses none.
+    # jurisdictions.yaml `use_restriction_blocks` maps tags to the business uses they prohibit.
+    use_restrictions: list[str] | None = None
+    # Where the listing record came from: "costar" (live API) or "sample" (hand-made demo fixture
+    # at a real address; rent, size, previous use and TI are illustrative, not market data).
+    listing_source: str | None = None

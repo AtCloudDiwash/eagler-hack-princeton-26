@@ -12,6 +12,8 @@ backend/__pycache__/
 backend/**/*.pyc
 backend/.env
 backend/.env.local
+# Licensed Vexcel imagery / API responses cached by the backend: never commit
+backend/static/vexcel-cache/
 
 # General
 .DS_Store
