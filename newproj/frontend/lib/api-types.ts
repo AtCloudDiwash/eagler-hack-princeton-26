@@ -16,7 +16,15 @@
 export type GeoJSONGeometry = { type: "Polygon" | "MultiPolygon" | "Point"; coordinates: unknown };
 
 export type Health = {
-  llm: { ok: boolean; provider: string; model: string | null; error?: string | null }; // local Codex CLI
+  /** Provider analyses will use first, plus the whole fallback chain (Codex → Claude Code → Ollama). */
+  llm: {
+    ok: boolean;
+    provider: string;
+    label?: string | null;
+    model: string | null;
+    error?: string | null;
+    providers?: { provider: string; label: string; model: string | null; ok: boolean; error?: string | null; cooling_down?: boolean }[];
+  };
   vexcel: "live" | "demo";
   census: boolean;
   matterport: boolean;

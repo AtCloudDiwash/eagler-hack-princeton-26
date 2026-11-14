@@ -24,14 +24,13 @@ from pydantic import BaseModel, Field
 import db
 from agents import compliance_agent, cost_agent, matterport_agent, neighborhood_agent, vexcel_agent
 from agents.base import AGENT_LABELS, EvidenceStore, RunContext
-from config import business, metrics_registry
+from config import business, metrics_registry, settings
 from schemas import AgentMetricAssessment, AgentReport, AnalysisRequest, MetricResult
 from services import costs as cost_engine
 from services import external, neighborhood, rules, scoring
 from services.geo import haversine_m
 from services.intent import target_sqft
-from services.codex_chat import CodexUsageLimitError, default_model
-from services.llm import chat_model
+from services.llm import AllProvidersFailedError, chat_model, model_label, on_fallback, track_usage
 from services.vexcel import key_facts, imagery_meta
 
 log = logging.getLogger("turnkey.engine")
@@ -324,6 +323,8 @@ def compliance_items(ctx: RunContext) -> list[dict]:
 async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
     log_ = EventLog(analysis_id)
     db.update_analysis(analysis_id, status="running")
+    llm_counts = track_usage()
+    on_fallback(lambda msg: log_.emit("engine", "validation", msg))
     try:
         stored = db.get_property(req.property_id)
         if not stored:
@@ -348,7 +349,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
         phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
-        limit_hit = next((r for r in phase1 if isinstance(r, CodexUsageLimitError)), None)
+        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError)), None)
         if limit_hit:
             raise limit_hit
         for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
@@ -371,7 +372,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
         try:
             reports["cost"] = await cost_agent.run(ctx)
-        except CodexUsageLimitError:
+        except AllProvidersFailedError:
             raise
         except Exception as err:  # noqa: BLE001
             reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
@@ -442,7 +443,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             *nb.get("sources", [])[1:],
             {"name": "US Census ACS", "status": ctx.census.get("status", "unavailable"), "note": ctx.census.get("note", "")},
             {"name": "Verified jurisdiction rules", "status": "used" if ctx.jurisdiction_key != "_default" else "unavailable", "note": ctx.jurisdiction["name"]},
-            {"name": f"Codex CLI ({chat_model().model or default_model() or 'default model'})", "status": "used", "note": "All agent reasoning, via the local Codex login"},
+            *[{"name": f"LLM: {model_label(p)}", "status": "used" if llm_counts.get(p) else "unavailable",
+               "note": f"{llm_counts.get(p, 0)} calls" + (" (fallback)" if llm_counts.get(p) and p != settings.llm_providers[0] else "")}
+              for p in settings.llm_providers],
             {"name": "Matterport interior scan", "status": "used" if mp_ok else "unavailable", "note": mp_reason or "Interior model"},
             {"name": "CoStar listings / asking rent", "status": "unavailable", "note": "Not connected; rent uses documented planning bands"},
         ]

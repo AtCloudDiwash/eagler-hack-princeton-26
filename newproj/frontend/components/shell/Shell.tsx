@@ -49,14 +49,25 @@ export function HealthDots() {
   if (down) return <span className="flex items-center gap-1.5 text-[10px] text-rose-300">{dot(false)} Backend offline</span>;
   return (
     <span className="flex items-center gap-3 text-[10px] text-slate-400">
-      <span className="flex items-center gap-1.5" title={health?.llm.error ?? `Codex CLI${health?.llm.model ? ` · ${health.llm.model}` : ""}`}>
-        {dot(health ? health.llm.ok : null)} Codex
+      <span className="flex items-center gap-1.5" title={llmTitle(health)}>
+        {/* amber = a fallback is in use (the first provider in the chain is unavailable) */}
+        {dot(health ? health.llm.ok : null, !!health?.llm.providers?.length && health.llm.provider !== health.llm.providers[0].provider)}{" "}
+        {SHORT_LLM[health?.llm.provider ?? ""] ?? health?.llm.label ?? "LLM"}
       </span>
       <span className="flex items-center gap-1.5" title={`Vexcel ${health?.vexcel ?? ""}`}>
         {dot(health ? true : null, health?.vexcel === "demo")} Vexcel{health?.vexcel === "demo" ? " demo" : ""}
       </span>
     </span>
   );
+}
+
+const SHORT_LLM: Record<string, string> = { codex: "Codex", claude: "Claude", ollama: "Ollama" };
+
+/** Tooltip: the whole chain with each provider's state, e.g. "Codex ✕ usage limit · Claude ✓ sonnet · Ollama ✓". */
+function llmTitle(health: Health | null): string {
+  const chain = health?.llm.providers;
+  if (!chain?.length) return health?.llm.error ?? `${health?.llm.label ?? "LLM"}${health?.llm.model ? ` · ${health.llm.model}` : ""}`;
+  return "LLM fallback chain:\n" + chain.map((p) => `${p.ok ? "✓" : "✕"} ${p.label}${p.model ? ` (${p.model})` : ""}${p.ok ? "" : ` — ${p.error ?? "unavailable"}`}`).join("\n");
 }
 
 export const STEPS = [

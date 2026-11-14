@@ -1,4 +1,4 @@
-"""Shared agent harness: LangChain Deep Agents on the local Codex CLI, evidence tracking, bounded tool use,
+"""Shared agent harness: LangChain Deep Agents on the LLM fallback chain (Codex → Claude Code → Ollama), evidence tracking, bounded tool use,
 structured output with a constrained-JSON fallback, and live progress events.
 
 Every tool result is registered as evidence with an id (E1, E2...). Agents must cite those ids; the
@@ -25,20 +25,19 @@ from langchain_core.tools import StructuredTool
 
 from config import business, metrics_registry, settings
 from schemas import AgentFinding, AgentMetricAssessment, AgentOutput, AgentReport, Evidence, Finding
-from services.codex_chat import CodexUsageLimitError
-from services.llm import chat_model
+from services.llm import AllProvidersFailedError, chat_model
 
 log = logging.getLogger("turnkey.agents")
 
 # Deep Agents ships file-system, shell, todo and sub-agent tools. Our agents investigate through their
 # own domain tools only; extra tools waste steps and add prompt tokens to every call.
-register_harness_profile(
-    "codex",  # ChatCodexCLI reports ls_provider="codex"
-    HarnessProfile(
-        excluded_tools=frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute", "task", "write_todos"}),
-        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-    ),
+_LEAN = dict(
+    excluded_tools=frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute", "task", "write_todos"}),
+    general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
 )
+# "turnkey" = FallbackChat (Codex → Claude Code → Ollama); the others cover direct provider use.
+for _provider in ("turnkey", "codex", "claude", "ollama"):
+    register_harness_profile(_provider, HarnessProfile(**_LEAN))
 
 AGENT_LABELS = {
     "vexcel": "Vexcel Agent",
@@ -267,8 +266,8 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
         state = await asyncio.wait_for(drive(), timeout=settings.agent_timeout_s)
         messages = state.get("messages", [])
         output = state.get("structured_response")
-    except CodexUsageLimitError:
-        raise  # no point continuing: every other LLM call would fail the same way
+    except AllProvidersFailedError:
+        raise  # every provider is out: no point continuing
     except asyncio.TimeoutError:
         error = f"Timed out after {settings.agent_timeout_s:.0f}s"
     except Exception as err:  # noqa: BLE001 - one agent failing must not sink the analysis
@@ -287,7 +286,7 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
             try:
                 output = await _extract_output(_transcript(messages), metrics, evidence)
                 status = "partial" if error else "completed"
-            except CodexUsageLimitError:
+            except AllProvidersFailedError:
                 raise
             except Exception as err:  # noqa: BLE001
                 error = error or f"Report extraction failed: {err}"

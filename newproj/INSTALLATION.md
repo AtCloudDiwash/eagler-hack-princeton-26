@@ -7,9 +7,10 @@ Turnkey Matchmaker has two parts:
 | `backend/` | Python 3.12, FastAPI, LangChain Deep Agents, SQLite | 8000 |
 | `frontend/` | Next.js 15, TypeScript, Tailwind, MapLibre GL, Motion | 3000 (Docker) / any for dev |
 
-All LLM decisions (query parsing, every Deep Agent step, the final recommendation) run through the
-**Codex CLI on your machine**, using **your own Codex / ChatGPT login**. The app stores no LLM API key:
-Codex keeps its credentials in `~/.codex`. Data-source keys (Vexcel etc.) live in `backend/.env`; the
+All LLM decisions (query parsing, every Deep Agent step, the final recommendation) run through a
+**fallback chain on your machine**: the **Codex CLI** (your Codex / ChatGPT login) → the **Claude Code CLI**
+(your Claude login) → a local **Ollama** model. If Codex is out of usage, the app switches to Claude Code,
+then Ollama, automatically. The app stores no LLM API key; each CLI keeps its own login. Data-source keys (Vexcel etc.) live in `backend/.env`; the
 frontend holds no secrets.
 
 ---
@@ -18,7 +19,9 @@ frontend holds no secrets.
 
 | Need | For | Install |
 |---|---|---|
-| **Codex CLI**, logged in | All agent reasoning | The ChatGPT desktop app bundles it (auto-detected), or `npm install -g @openai/codex`. Then `codex login` (ChatGPT account or API key). |
+| **Codex CLI**, logged in | LLM (first choice) | The ChatGPT desktop app bundles it (auto-detected), or `npm install -g @openai/codex`. Then `codex login`. |
+| **Claude Code CLI**, logged in | LLM fallback #1 | `npm install -g @anthropic-ai/claude-code` (or the native installer), then `claude auth login`. |
+| **Ollama** + `qwen3:8b` | LLM fallback #2 (local) | https://ollama.com/download, then `ollama pull qwen3:8b`. |
 | **Docker Desktop** (Engine ≥ 24, Compose ≥ 2.24) | Option A | https://www.docker.com/products/docker-desktop |
 | **Python 3.12** and **Node.js 20+** | Option B | `brew install python@3.12 node` (macOS) |
 
@@ -40,10 +43,15 @@ cp backend/.env.example backend/.env
 | Variable | Required? | Notes |
 |---|---|---|
 | `VEXCEL_API_KEY` | Recommended | Vexcel API 2.0 key (sent as `X-API-KEY`). The hackathon key works in **Los Angeles and Houston** only. Without it, searches use OpenStreetMap footprints (or demo mode, below). |
+| `LLM_PROVIDERS` | No | Fallback order, default `codex,claude,ollama`. Remove one to skip it. |
+| `LLM_COOLDOWN_S` | No | How long an out-of-usage / logged-out provider is skipped (default 1200 s). |
 | `CODEX_MODEL` | No | Empty = the model in your `~/.codex/config.toml`. |
 | `CODEX_REASONING_EFFORT` | No | `low` (default, fast) · `medium` · `high`. |
 | `CODEX_BIN` | No | Path to the CLI if it isn't auto-detected. |
 | `CODEX_MAX_CONCURRENCY` | No | Parallel Codex calls (default 4); agents run concurrently. |
+| `CLAUDE_MODEL` | No | Claude Code model: `sonnet` (default), `opus`, `haiku` or a full id. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Docker only | Lets Claude Code work inside the container (`claude setup-token`); or set `ANTHROPIC_API_KEY`. |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | No | Default `http://localhost:11434`, `qwen3:8b` (Docker uses `host.docker.internal`). |
 | `CENSUS_API_KEY` | No | Free key from https://api.census.gov/data/key_signup.html; enables tract demographics. |
 | `MATTERPORT_API_KEY` / `_SECRET` | No | Enables the optional interior agent (needs a tour linked to the property). |
 | `AGENT_MAX_MODEL_CALLS`, `AGENT_TIMEOUT_S` | No | Bounds on each agent's investigation. |
@@ -66,9 +74,12 @@ structured answers. See `backend/services/codex_chat.py`.
 3. Open **http://localhost:3000**. The API is at http://localhost:8000 (`/api/health` shows the Codex login
    and Vexcel status).
 
-The backend image contains the Linux Codex CLI (`@openai/codex`). It uses your login by mounting your
-`~/.codex` folder into the container (read-write, because Codex refreshes its token there). Only run this
-image on machines you trust with that login. Use a different folder with
+The backend image contains the Linux Codex and Claude Code CLIs. Codex uses your login by mounting your
+`~/.codex` folder into the container (read-write, because Codex refreshes its token there). Claude Code's
+macOS login lives in the Keychain, which a container can't read, so set `CLAUDE_CODE_OAUTH_TOKEN` (from
+`claude setup-token`) or `ANTHROPIC_API_KEY` in `backend/.env` to use it in Docker; otherwise it is skipped.
+Ollama runs on your host and is reached at `host.docker.internal:11434`. Only run this image on machines
+you trust with these logins. Use a different folder with
 `CODEX_HOME_DIR=/path/to/codex-home docker compose up`.
 
 **Ports in use?**
@@ -137,7 +148,9 @@ Afterwards, removing `VEXCEL_API_KEY` switches downtown-Houston searches to the 
 
 | Symptom | Fix |
 |---|---|
-| `/api/health` shows `llm.ok: false`, "Codex CLI not found" | Install Codex or the ChatGPT app, or set `CODEX_BIN` to the binary path. |
+| Badge shows **Claude** or **Ollama** (amber dot) | Codex is out of usage or logged out, so a fallback is in use; hover the badge for each provider's status. Codex is retried after `LLM_COOLDOWN_S`. |
+| `/api/health` shows `llm.ok: false` | Every provider is unavailable; `llm.providers` lists why for each (not installed, not logged in, usage limit, Ollama not running). |
+| "Codex CLI not found" | Install Codex or the ChatGPT app, or set `CODEX_BIN` to the binary path. |
 | `llm.ok: false`, "Not logged in" | Run `codex login` on the host (Docker uses the same `~/.codex`). |
 | Analyses fail with "codex exec failed" | Run `codex exec "say hi"` in a terminal to see the error (usage limit, expired login, network). |
 | Analyses are slow | Keep `CODEX_REASONING_EFFORT=low`; raise `CODEX_MAX_CONCURRENCY` if your plan allows more parallel requests. |

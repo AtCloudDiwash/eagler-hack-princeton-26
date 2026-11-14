@@ -29,6 +29,15 @@ class Settings:
     codex_reasoning_effort = (os.getenv("CODEX_REASONING_EFFORT") or "low").strip()
     codex_timeout_s = float(os.getenv("CODEX_TIMEOUT_S") or 180)
     codex_max_concurrency = int(os.getenv("CODEX_MAX_CONCURRENCY") or 4)
+    # Fallback chain, tried in order (codex, claude, ollama). Exhausted providers are skipped for a cooldown.
+    llm_providers = [p.strip().lower() for p in (os.getenv("LLM_PROVIDERS") or "codex,claude,ollama").split(",") if p.strip()]
+    llm_cooldown_s = float(os.getenv("LLM_COOLDOWN_S") or 1200)
+    claude_bin = (os.getenv("CLAUDE_BIN") or "").strip() or None
+    claude_model = (os.getenv("CLAUDE_MODEL") or "sonnet").strip()
+    claude_timeout_s = float(os.getenv("CLAUDE_TIMEOUT_S") or 180)
+    claude_max_concurrency = int(os.getenv("CLAUDE_MAX_CONCURRENCY") or 4)
+    ollama_base_url = (os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
+    ollama_model = (os.getenv("OLLAMA_MODEL") or "qwen3:8b").strip()
     census_api_key = _key("CENSUS_API_KEY")
     matterport_api_key = _key("MATTERPORT_API_KEY")
     matterport_api_secret = _key("MATTERPORT_API_SECRET")

@@ -13,11 +13,14 @@ User query ─▶ Vexcel discovery ─▶ map ─▶ select building ─▶ Vexc
 
 Full instructions, including **Docker Compose** (`docker compose up --build`), are in [INSTALLATION.md](INSTALLATION.md).
 
-Prerequisites: Python 3.12, Node 20+, and the **Codex CLI logged in on this machine** (`codex login`; the
-ChatGPT desktop app's bundled CLI is auto-detected). All LLM decisions run through your own Codex login.
+Prerequisites: Python 3.12, Node 20+, and at least one LLM provider on this machine. The fallback chain
+tries them in order: the **Codex CLI** (`codex login`; the ChatGPT desktop app's bundled CLI is
+auto-detected), the **Claude Code CLI** (`claude auth login`), then **Ollama** (`ollama pull qwen3:8b`).
 
 ```bash
-codex login status                # must say "Logged in"
+codex login status                # Codex (first choice)
+claude auth status                # Claude Code (fallback #1)
+ollama list                       # Ollama (fallback #2)
 
 # backend (FastAPI, port 8000)
 cd backend
@@ -37,10 +40,12 @@ Tests: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --
 **Credentials:** `backend/.env` only (see `backend/.env.example`). The frontend never sees an API key;
 map tiles are proxied through `GET /api/tiles/{z}/{x}/{y}`.
 
-**LLM:** `backend/services/codex_chat.py` is a LangChain chat model that runs `codex exec` (ephemeral,
-read-only sandbox, empty temp folder, JSON-schema output). Deep Agents' tools are described in the prompt
-and Codex answers with schema-validated tool calls, which LangGraph executes as with any provider.
-Agents run truly in parallel (a full analysis takes ~1–3 min). Codex usage counts against your plan.
+**LLM fallback chain:** `backend/services/llm.py` returns a `FallbackChat` that tries **Codex CLI →
+Claude Code CLI → Ollama** (`LLM_PROVIDERS`). The CLI adapters (`codex_chat.py`, `claude_chat.py`, shared
+`cli_chat.py`) run one-shot, tool-less, schema-constrained calls in an empty temp folder; Deep Agents' tools
+are described in the prompt and the CLI answers with schema-validated tool calls, which LangGraph executes
+as with any provider. A provider that hits a usage limit is skipped for a cooldown, every analysis records
+which provider served how many calls, and switches appear in the live log. Usage counts against your plans.
 
 ## The flow
 

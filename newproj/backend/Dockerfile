@@ -1,10 +1,13 @@
-# Turnkey Matchmaker backend (FastAPI + LangChain Deep Agents). All LLM calls go through the Codex CLI,
-# authenticated with the host user's Codex login (~/.codex mounted at runtime by docker-compose).
+# Turnkey Matchmaker backend (FastAPI + LangChain Deep Agents). LLM fallback chain: Codex CLI (host login,
+# ~/.codex mounted by docker-compose) → Claude Code CLI (needs CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in
+# a container) → Ollama on the host (host.docker.internal).
 
 # --- Codex CLI (Linux build of the same CLI the desktop app bundles; native binary for the build arch)
 FROM node:20-slim AS codex
 ARG CODEX_VERSION=0.169.0
-RUN npm install -g @openai/codex@${CODEX_VERSION} && codex --version
+ARG CLAUDE_CODE_VERSION=2.1.316
+RUN npm install -g @openai/codex@${CODEX_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+ && codex --version && claude --version
 
 # --- App
 FROM python:3.12-slim
@@ -18,7 +21,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Node runtime + Codex package from the build stage (codex.js launches the native binary).
 COPY --from=codex /usr/local/bin/node /usr/local/bin/node
 COPY --from=codex /usr/local/lib/node_modules/@openai/codex /opt/codex
-RUN ln -s /opt/codex/bin/codex.js /usr/local/bin/codex && codex --version
+COPY --from=codex /usr/local/lib/node_modules/@anthropic-ai/claude-code /opt/claude-code
+RUN ln -s /opt/codex/bin/codex.js /usr/local/bin/codex \
+ && ln -s "/opt/claude-code/$(node -p "require('/opt/claude-code/package.json').bin.claude")" /usr/local/bin/claude \
+ && codex --version && claude --version
 
 WORKDIR /app
 COPY requirements.txt .
