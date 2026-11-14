@@ -16,7 +16,12 @@ const nextConfig: NextConfig = {
     },
   },
   async rewrites() {
-    return [{ source: "/api/v1/:path*", destination: `${API_ORIGIN}/api/v1/:path*` }];
+    return [
+      { source: "/api/v1/:path*", destination: `${API_ORIGIN}/api/v1/:path*` },
+      // Placeholder aerials, floor plans and listing photos served by FastAPI.
+      { source: "/static/:path*", destination: `${API_ORIGIN}/static/:path*` },
+      { source: "/health", destination: `${API_ORIGIN}/health` },
+    ];
   },
 };
 

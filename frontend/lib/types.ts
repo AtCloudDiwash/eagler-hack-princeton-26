@@ -1,0 +1,207 @@
+// TypeScript mirror of docs/API_CONTRACT.md (v1). Keep in sync with backend/app/models/.
+// If a shape changes in the contract, change it here and in the backend together.
+
+export type Status = "PASS" | "RISK" | "UNKNOWN";
+
+/** USD (or month) range; the cost engine always returns ranges, never point estimates. */
+export interface CostRange {
+  min: number;
+  max: number;
+}
+
+export type ProviderMode = "mock" | "live";
+export type ParserMode = "regex" | "claude";
+
+export interface HealthResponse {
+  status: "ok";
+  mode: { costar: ProviderMode; matterport: ProviderMode; vexcel: ProviderMode; parser: ParserMode };
+}
+
+export interface BusinessType {
+  id: string;
+  label: string;
+  capacity_unit: string;
+  default_capacity: number;
+  needs_kitchen: boolean;
+}
+
+export type MissingDataPolicy = "assume_risk" | "assume_cost" | "unknown" | "ignore";
+
+export interface Criterion {
+  id: string;
+  description: string;
+  domain: string;
+  weight: number;
+  hard_block: boolean;
+  evaluator: string;
+  required_inputs: string[];
+  missing_data_policy: MissingDataPolicy;
+  evidence_required: boolean;
+  source: string;
+  thresholds: Record<string, unknown>;
+  business_types: string[];
+  applicable_jurisdictions: string[];
+}
+
+export interface Property {
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  size_sqft: number;
+  /** Monthly rent in USD. */
+  rent: number;
+  zoning: string | null;
+  previous_use: string | null;
+  ti_allowance_per_sqft: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  image_url: string | null;
+  matterport_url: string | null;
+  available: boolean;
+}
+
+export interface BusinessProfile {
+  type: string;
+  details: string;
+  city: string;
+  state: string;
+}
+
+export interface AnalyzeRequest {
+  business_profile: BusinessProfile;
+  property_ids: string[];
+}
+
+export interface Requirements {
+  business_type: string;
+  business_label: string;
+  city: string;
+  state: string;
+  capacity: number;
+  capacity_unit: string;
+  occupant_load: number;
+  parking_required: number;
+  parking_source: "user" | "guideline";
+  bathrooms_required: number;
+  min_sqft: number | null;
+  max_sqft: number | null;
+  max_rent: number | null;
+  needs_kitchen: boolean;
+  required_hvac_tons: number;
+  required_electrical_amps: number;
+  assumptions: string[];
+}
+
+export type EvidenceSource = "costar" | "matterport" | "vexcel" | "requirements" | "jurisdiction";
+
+/** Normalized [x, y, w, h] in 0..1, relative to the source image. */
+export type OverlayBox = [number, number, number, number];
+
+export interface Evidence {
+  key: string;
+  value: unknown;
+  source: EvidenceSource;
+  note: string | null;
+  confidence: number | null;
+  box: OverlayBox | null;
+}
+
+export interface CriterionResult {
+  id: string;
+  description: string;
+  domain: string;
+  weight: number;
+  status: Status;
+  /** 0..1, null when excluded from the score. */
+  score: number | null;
+  counted: boolean;
+  hard_block: boolean;
+  blocking: boolean;
+  notes: string;
+  source: string;
+  evidence: Evidence[];
+}
+
+export interface LineItem {
+  item: string;
+  label: string;
+  qty: number;
+  min: number;
+  max: number;
+  reason: string;
+}
+
+export interface ComplianceEntry {
+  status: Status;
+  notes: string;
+  source: string;
+}
+
+export interface ResultMedia {
+  aerial_url: string | null;
+  floor_plan_url: string | null;
+  matterport_embed_url: string | null;
+  image_url: string | null;
+}
+
+export interface AnalysisResult {
+  property_id: string;
+  address: string;
+  rank: number;
+  /** Criteria fit, 0-100. */
+  score: number;
+  disqualified: boolean;
+  /** Criterion ids that hard-blocked this property. */
+  disqualifiers: string[];
+  monthly_rent: number;
+  /** Cost to open: net fit-out + rent during build-out. */
+  total_cost_estimate: CostRange;
+  /** Cost to open + rent for the ranking horizon. */
+  first_year_cost: CostRange;
+  /** Gross fit-out before TI allowance. */
+  fit_out_estimate: CostRange;
+  ti_allowance: number;
+  buildout_months: CostRange;
+  breakdown: Record<string, CostRange>;
+  line_items: LineItem[];
+  compliance: Record<string, ComplianceEntry>;
+  criteria_results: CriterionResult[];
+  questions_for_landlord: string[];
+  landlord_request: string;
+  observations: Record<string, Evidence>;
+  media: ResultMedia;
+  assumptions: string[];
+}
+
+export interface AnalysisMode {
+  costar: string;
+  matterport: string;
+  vexcel: string;
+  parser: ParserMode;
+}
+
+export interface AnalyzeResponse {
+  analysis_id: string;
+  created_at: string;
+  business_type: string;
+  requirements: Requirements;
+  ranking_basis: string;
+  /** Already sorted by rank (1 = best). */
+  results: AnalysisResult[];
+  mode: AnalysisMode;
+  disclaimer: string;
+}
+
+export interface AnalysisSummary {
+  analysis_id: string;
+  created_at: string;
+  business_type: string;
+  business_label: string;
+  city: string;
+  state: string;
+  property_count: number;
+  top_property_id: string | null;
+  top_address: string | null;
+}

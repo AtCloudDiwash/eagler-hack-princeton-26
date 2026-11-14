@@ -1,0 +1,1654 @@
+{
+  "analysis_id": "3f2b9c1d4e5a4b6c8d7e9f0a1b2c3d4e",
+  "created_at": "2026-11-14T15:30:00Z",
+  "business_type": "restaurant",
+  "requirements": {
+    "business_type": "restaurant",
+    "business_label": "Restaurant",
+    "city": "Austin",
+    "state": "TX",
+    "capacity": 40,
+    "capacity_unit": "seats",
+    "occupant_load": 49,
+    "parking_required": 20,
+    "parking_source": "user",
+    "bathrooms_required": 2,
+    "min_sqft": null,
+    "max_sqft": null,
+    "max_rent": null,
+    "needs_kitchen": true,
+    "required_hvac_tons": 9,
+    "required_electrical_amps": 400,
+    "assumptions": [
+      "Occupant load = 40 seats + 9 staff.",
+      "HVAC sized at 1 ton per 200 sq ft for restaurants."
+    ]
+  },
+  "ranking_basis": "Ranked by first-year cost (cost to open + 12 months rent); disqualified properties last.",
+  "results": [
+    {
+      "property_id": "property-456",
+      "address": "456 Oak Avenue",
+      "rank": 1,
+      "score": 86,
+      "disqualified": false,
+      "disqualifiers": [],
+      "monthly_rent": 4800,
+      "total_cost_estimate": {
+        "min": 94600,
+        "max": 154400
+      },
+      "first_year_cost": {
+        "min": 152200,
+        "max": 212000
+      },
+      "fit_out_estimate": {
+        "min": 85000,
+        "max": 140000
+      },
+      "ti_allowance": 0,
+      "buildout_months": {
+        "min": 2,
+        "max": 3
+      },
+      "breakdown": {
+        "hood_system": {
+          "min": 6000,
+          "max": 12000
+        },
+        "kitchen_equipment": {
+          "min": 25000,
+          "max": 45000
+        },
+        "ada_restroom": {
+          "min": 12000,
+          "max": 20000
+        },
+        "finishes": {
+          "min": 27000,
+          "max": 45000
+        },
+        "permits_fees": {
+          "min": 4000,
+          "max": 9000
+        },
+        "design_fees": {
+          "min": 5500,
+          "max": 8800
+        },
+        "contingency": {
+          "min": 8800,
+          "max": 13200
+        }
+      },
+      "line_items": [
+        {
+          "item": "hood_system",
+          "label": "Kitchen hood service & re-certification",
+          "qty": 1,
+          "min": 6000,
+          "max": 12000,
+          "reason": "Existing Type I hood found in the floor plan; needs cleaning, inspection and fire-suppression re-tag."
+        },
+        {
+          "item": "kitchen_equipment",
+          "label": "Kitchen equipment refresh",
+          "qty": 1,
+          "min": 25000,
+          "max": 45000,
+          "reason": "Second-generation restaurant: partial equipment replacement assumed."
+        },
+        {
+          "item": "ada_restroom",
+          "label": "ADA restroom upgrade",
+          "qty": 1,
+          "min": 12000,
+          "max": 20000,
+          "reason": "One restroom lacks a 60 in turning radius."
+        },
+        {
+          "item": "finishes",
+          "label": "Dining room finishes",
+          "qty": 1800,
+          "min": 27000,
+          "max": 45000,
+          "reason": "Cosmetic refresh at $15–$25 per sq ft."
+        }
+      ],
+      "compliance": {
+        "zoning_use": {
+          "status": "PASS",
+          "notes": "GR (Community Commercial) permits restaurant (general) by right.",
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)"
+        },
+        "parking_sufficiency": {
+          "status": "PASS",
+          "notes": "22 striped spaces observed; 20 required (you said).",
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline"
+        },
+        "ada_accessibility": {
+          "status": "PASS",
+          "notes": "Front door measures 36 in clear width.",
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)"
+        },
+        "kitchen_equipment": {
+          "status": "PASS",
+          "notes": "Type I hood present from prior restaurant use.",
+          "source": "2021 International Mechanical Code §507; Austin Public Health"
+        },
+        "grease_interceptor": {
+          "status": "PASS",
+          "notes": "Existing 1,000 gal interceptor listed by landlord.",
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10"
+        },
+        "bathroom_count": {
+          "status": "RISK",
+          "notes": "2 restrooms found; one is not ADA compliant.",
+          "source": "2021 International Plumbing Code Table 2902.1"
+        },
+        "hvac_capacity": {
+          "status": "PASS",
+          "notes": "3 rooftop units (est. 15 tons) vs 9 tons required.",
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)"
+        },
+        "electrical_service": {
+          "status": "UNKNOWN",
+          "notes": "Panel rating not visible in the tour; ask the landlord.",
+          "source": "NEC Article 220 load calculation"
+        },
+        "fire_safety": {
+          "status": "PASS",
+          "notes": "Hood suppression system present; two exits.",
+          "source": "2021 International Fire Code §904.13; Austin Fire Department"
+        }
+      },
+      "criteria_results": [
+        {
+          "id": "zoning_use",
+          "description": "Zoning permits the intended use",
+          "domain": "regulatory",
+          "weight": 3,
+          "hard_block": true,
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "GR (Community Commercial) permits restaurant (general) by right.",
+          "evidence": [
+            {
+              "key": "zoning",
+              "value": "GR",
+              "source": "costar",
+              "note": "From CoStar listing",
+              "confidence": 0.95,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "parking_sufficiency",
+          "description": "Enough off-street parking for the use",
+          "domain": "site",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "22 striped spaces observed; 20 required (you said).",
+          "evidence": [
+            {
+              "key": "parking_spaces_visible",
+              "value": 22,
+              "source": "vexcel",
+              "note": "Counted from aerial",
+              "confidence": 0.8,
+              "box": [
+                0.05,
+                0.55,
+                0.5,
+                0.4
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ada_accessibility",
+          "description": "Accessible entrance and route (ADA)",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Front door measures 36 in clear width.",
+          "evidence": [
+            {
+              "key": "door_width_inches",
+              "value": 36,
+              "source": "matterport",
+              "note": "Main entrance",
+              "confidence": 0.85,
+              "box": [
+                0.45,
+                0.88,
+                0.1,
+                0.08
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kitchen_equipment",
+          "description": "Commercial kitchen hood and ventilation",
+          "domain": "space",
+          "weight": 3,
+          "hard_block": false,
+          "source": "2021 International Mechanical Code §507; Austin Public Health",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Type I hood present from prior restaurant use.",
+          "evidence": [
+            {
+              "key": "hood_present",
+              "value": true,
+              "source": "matterport",
+              "note": "Kitchen line, rear wall",
+              "confidence": 0.9,
+              "box": [
+                0.62,
+                0.08,
+                0.3,
+                0.12
+              ]
+            }
+          ]
+        },
+        {
+          "id": "grease_interceptor",
+          "description": "Grease interceptor for food service",
+          "domain": "regulatory",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Existing 1,000 gal interceptor listed by landlord.",
+          "evidence": [
+            {
+              "key": "grease_interceptor",
+              "value": true,
+              "source": "costar",
+              "note": "Listing amenities",
+              "confidence": 0.7,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "bathroom_count",
+          "description": "Required restroom fixtures for occupant load",
+          "domain": "space",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Plumbing Code Table 2902.1",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "2 restrooms found; one is not ADA compliant.",
+          "evidence": [
+            {
+              "key": "restrooms",
+              "value": 2,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.85,
+              "box": [
+                0.05,
+                0.1,
+                0.18,
+                0.2
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hvac_capacity",
+          "description": "HVAC capacity for the occupant load and kitchen",
+          "domain": "building",
+          "weight": 2,
+          "hard_block": false,
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "3 rooftop units (est. 15 tons) vs 9 tons required.",
+          "evidence": [
+            {
+              "key": "rooftop_hvac_units",
+              "value": 3,
+              "source": "vexcel",
+              "note": "3 RTUs on roof",
+              "confidence": 0.75,
+              "box": [
+                0.6,
+                0.12,
+                0.25,
+                0.18
+              ]
+            }
+          ]
+        },
+        {
+          "id": "electrical_service",
+          "description": "Electrical service sized for equipment",
+          "domain": "building",
+          "weight": 1,
+          "hard_block": false,
+          "source": "NEC Article 220 load calculation",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Panel rating not visible in the tour; ask the landlord.",
+          "evidence": []
+        },
+        {
+          "id": "fire_safety",
+          "description": "Fire suppression and egress",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Fire Code §904.13; Austin Fire Department",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Hood suppression system present; two exits.",
+          "evidence": [
+            {
+              "key": "exits",
+              "value": 2,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.8,
+              "box": null
+            }
+          ]
+        }
+      ],
+      "questions_for_landlord": [
+        "What is the amperage of the main electrical panel?",
+        "When was the grease interceptor last pumped and inspected?",
+        "Will you cover the ADA restroom upgrade?"
+      ],
+      "landlord_request": "Dear Property Manager,\n\nI am planning to open a 40-seat restaurant and am interested in leasing 456 Oak Avenue. Before signing, I would like to discuss the following:\n\n1. What is the amperage of the main electrical panel?\n2. When was the grease interceptor last pumped and inspected?\n3. Will you cover the ADA restroom upgrade?\n\nCould you share the most recent inspection reports and confirm these items in the LOI? I look forward to your reply.\n\nSincerely,\n[Your name]",
+      "observations": {
+        "zoning": {
+          "key": "zoning",
+          "value": "GR",
+          "source": "costar",
+          "note": "From CoStar listing",
+          "confidence": 0.95,
+          "box": null
+        },
+        "parking_spaces_visible": {
+          "key": "parking_spaces_visible",
+          "value": 22,
+          "source": "vexcel",
+          "note": "Counted from aerial",
+          "confidence": 0.8,
+          "box": [
+            0.05,
+            0.55,
+            0.5,
+            0.4
+          ]
+        },
+        "door_width_inches": {
+          "key": "door_width_inches",
+          "value": 36,
+          "source": "matterport",
+          "note": "Main entrance",
+          "confidence": 0.85,
+          "box": [
+            0.45,
+            0.88,
+            0.1,
+            0.08
+          ]
+        },
+        "hood_present": {
+          "key": "hood_present",
+          "value": true,
+          "source": "matterport",
+          "note": "Kitchen line, rear wall",
+          "confidence": 0.9,
+          "box": [
+            0.62,
+            0.08,
+            0.3,
+            0.12
+          ]
+        },
+        "grease_interceptor": {
+          "key": "grease_interceptor",
+          "value": true,
+          "source": "costar",
+          "note": "Listing amenities",
+          "confidence": 0.7,
+          "box": null
+        },
+        "restrooms": {
+          "key": "restrooms",
+          "value": 2,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.85,
+          "box": [
+            0.05,
+            0.1,
+            0.18,
+            0.2
+          ]
+        },
+        "rooftop_hvac_units": {
+          "key": "rooftop_hvac_units",
+          "value": 3,
+          "source": "vexcel",
+          "note": "3 RTUs on roof",
+          "confidence": 0.75,
+          "box": [
+            0.6,
+            0.12,
+            0.25,
+            0.18
+          ]
+        },
+        "exits": {
+          "key": "exits",
+          "value": 2,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.8,
+          "box": null
+        }
+      },
+      "media": {
+        "aerial_url": "/static/aerials/property-456.svg",
+        "floor_plan_url": "/static/floorplans/property-456.svg",
+        "matterport_embed_url": null,
+        "image_url": "/static/properties/property-456.svg"
+      },
+      "assumptions": [
+        "Existing kitchen equipment assumed 50% reusable.",
+        "Build-out timeline assumes permits in 4–6 weeks."
+      ]
+    },
+    {
+      "property_id": "property-321",
+      "address": "2100 E Cesar Chavez Street",
+      "rank": 2,
+      "score": 78,
+      "disqualified": false,
+      "disqualifiers": [],
+      "monthly_rent": 4200,
+      "total_cost_estimate": {
+        "min": 124600,
+        "max": 198800
+      },
+      "first_year_cost": {
+        "min": 175000,
+        "max": 249200
+      },
+      "fit_out_estimate": {
+        "min": 120000,
+        "max": 190000
+      },
+      "ti_allowance": 8000,
+      "buildout_months": {
+        "min": 3,
+        "max": 4
+      },
+      "breakdown": {
+        "hood_system": {
+          "min": 30000,
+          "max": 50000
+        },
+        "kitchen_equipment": {
+          "min": 45000,
+          "max": 70000
+        },
+        "hvac_upgrade": {
+          "min": 15000,
+          "max": 25000
+        },
+        "permits_fees": {
+          "min": 4000,
+          "max": 9000
+        },
+        "design_fees": {
+          "min": 7500,
+          "max": 12000
+        },
+        "contingency": {
+          "min": 12000,
+          "max": 18000
+        }
+      },
+      "line_items": [
+        {
+          "item": "hood_system",
+          "label": "New Type I kitchen hood",
+          "qty": 1,
+          "min": 30000,
+          "max": 50000,
+          "reason": "Coffee shop has no cooking hood; full hood and duct to roof required."
+        },
+        {
+          "item": "kitchen_equipment",
+          "label": "Commercial kitchen equipment",
+          "qty": 1,
+          "min": 45000,
+          "max": 70000,
+          "reason": "Full cook line for a 40-seat menu."
+        },
+        {
+          "item": "hvac_upgrade",
+          "label": "HVAC make-up air",
+          "qty": 1,
+          "min": 15000,
+          "max": 25000,
+          "reason": "Make-up air needed to balance the new hood."
+        }
+      ],
+      "compliance": {
+        "zoning_use": {
+          "status": "PASS",
+          "notes": "LR-V permits restaurant (limited).",
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)"
+        },
+        "parking_sufficiency": {
+          "status": "RISK",
+          "notes": "Only 12 spaces visible; 20 required.",
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline"
+        },
+        "ada_accessibility": {
+          "status": "PASS",
+          "notes": "Level entry, 36 in door.",
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)"
+        },
+        "kitchen_equipment": {
+          "status": "RISK",
+          "notes": "No hood; new hood system required.",
+          "source": "2021 International Mechanical Code §507; Austin Public Health"
+        },
+        "grease_interceptor": {
+          "status": "RISK",
+          "notes": "Coffee shop likely has a small under-sink trap only.",
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10"
+        },
+        "bathroom_count": {
+          "status": "PASS",
+          "notes": "2 restrooms present.",
+          "source": "2021 International Plumbing Code Table 2902.1"
+        },
+        "hvac_capacity": {
+          "status": "RISK",
+          "notes": "2 RTUs (est. 7.5 tons) vs 9 tons required.",
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)"
+        },
+        "electrical_service": {
+          "status": "UNKNOWN",
+          "notes": "Panel not documented.",
+          "source": "NEC Article 220 load calculation"
+        },
+        "fire_safety": {
+          "status": "PASS",
+          "notes": "Sprinklered building.",
+          "source": "2021 International Fire Code §904.13; Austin Fire Department"
+        }
+      },
+      "criteria_results": [
+        {
+          "id": "zoning_use",
+          "description": "Zoning permits the intended use",
+          "domain": "regulatory",
+          "weight": 3,
+          "hard_block": true,
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "LR-V permits restaurant (limited).",
+          "evidence": [
+            {
+              "key": "zoning",
+              "value": "LR-V",
+              "source": "costar",
+              "note": null,
+              "confidence": 0.95,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "parking_sufficiency",
+          "description": "Enough off-street parking for the use",
+          "domain": "site",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "Only 12 spaces visible; 20 required.",
+          "evidence": [
+            {
+              "key": "parking_spaces_visible",
+              "value": 12,
+              "source": "vexcel",
+              "note": "Shared lot",
+              "confidence": 0.7,
+              "box": [
+                0.55,
+                0.6,
+                0.4,
+                0.35
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ada_accessibility",
+          "description": "Accessible entrance and route (ADA)",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Level entry, 36 in door.",
+          "evidence": [
+            {
+              "key": "door_width_inches",
+              "value": 36,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.8,
+              "box": [
+                0.4,
+                0.9,
+                0.12,
+                0.08
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kitchen_equipment",
+          "description": "Commercial kitchen hood and ventilation",
+          "domain": "space",
+          "weight": 3,
+          "hard_block": false,
+          "source": "2021 International Mechanical Code §507; Austin Public Health",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No hood; new hood system required.",
+          "evidence": []
+        },
+        {
+          "id": "grease_interceptor",
+          "description": "Grease interceptor for food service",
+          "domain": "regulatory",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "Coffee shop likely has a small under-sink trap only.",
+          "evidence": []
+        },
+        {
+          "id": "bathroom_count",
+          "description": "Required restroom fixtures for occupant load",
+          "domain": "space",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Plumbing Code Table 2902.1",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "2 restrooms present.",
+          "evidence": [
+            {
+              "key": "restrooms",
+              "value": 2,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.8,
+              "box": [
+                0.7,
+                0.1,
+                0.2,
+                0.2
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hvac_capacity",
+          "description": "HVAC capacity for the occupant load and kitchen",
+          "domain": "building",
+          "weight": 2,
+          "hard_block": false,
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "2 RTUs (est. 7.5 tons) vs 9 tons required.",
+          "evidence": [
+            {
+              "key": "rooftop_hvac_units",
+              "value": 2,
+              "source": "vexcel",
+              "note": null,
+              "confidence": 0.7,
+              "box": [
+                0.3,
+                0.15,
+                0.2,
+                0.15
+              ]
+            }
+          ]
+        },
+        {
+          "id": "electrical_service",
+          "description": "Electrical service sized for equipment",
+          "domain": "building",
+          "weight": 1,
+          "hard_block": false,
+          "source": "NEC Article 220 load calculation",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Panel not documented.",
+          "evidence": []
+        },
+        {
+          "id": "fire_safety",
+          "description": "Fire suppression and egress",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Fire Code §904.13; Austin Fire Department",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Sprinklered building.",
+          "evidence": []
+        }
+      ],
+      "questions_for_landlord": [
+        "Can the landlord fund part of the hood installation?",
+        "Is overflow parking available nearby?"
+      ],
+      "landlord_request": "Dear Property Manager,\n\nI am planning to open a 40-seat restaurant and am interested in leasing 2100 E Cesar Chavez Street. Before signing, I would like to discuss the following:\n\n1. Can the landlord fund part of the hood installation?\n2. Is overflow parking available nearby?\n\nCould you share the most recent inspection reports and confirm these items in the LOI? I look forward to your reply.\n\nSincerely,\n[Your name]",
+      "observations": {
+        "zoning": {
+          "key": "zoning",
+          "value": "LR-V",
+          "source": "costar",
+          "note": null,
+          "confidence": 0.95,
+          "box": null
+        },
+        "parking_spaces_visible": {
+          "key": "parking_spaces_visible",
+          "value": 12,
+          "source": "vexcel",
+          "note": "Shared lot",
+          "confidence": 0.7,
+          "box": [
+            0.55,
+            0.6,
+            0.4,
+            0.35
+          ]
+        },
+        "door_width_inches": {
+          "key": "door_width_inches",
+          "value": 36,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.8,
+          "box": [
+            0.4,
+            0.9,
+            0.12,
+            0.08
+          ]
+        },
+        "restrooms": {
+          "key": "restrooms",
+          "value": 2,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.8,
+          "box": [
+            0.7,
+            0.1,
+            0.2,
+            0.2
+          ]
+        },
+        "rooftop_hvac_units": {
+          "key": "rooftop_hvac_units",
+          "value": 2,
+          "source": "vexcel",
+          "note": null,
+          "confidence": 0.7,
+          "box": [
+            0.3,
+            0.15,
+            0.2,
+            0.15
+          ]
+        }
+      },
+      "media": {
+        "aerial_url": "/static/aerials/property-321.svg",
+        "floor_plan_url": "/static/floorplans/property-321.svg",
+        "matterport_embed_url": null,
+        "image_url": "/static/properties/property-321.svg"
+      },
+      "assumptions": [
+        "Hood duct run assumed under 30 ft."
+      ]
+    },
+    {
+      "property_id": "property-123",
+      "address": "123 Elm Street",
+      "rank": 3,
+      "score": 71,
+      "disqualified": false,
+      "disqualifiers": [],
+      "monthly_rent": 4000,
+      "total_cost_estimate": {
+        "min": 206000,
+        "max": 324000
+      },
+      "first_year_cost": {
+        "min": 254000,
+        "max": 372000
+      },
+      "fit_out_estimate": {
+        "min": 210000,
+        "max": 320000
+      },
+      "ti_allowance": 20000,
+      "buildout_months": {
+        "min": 4,
+        "max": 6
+      },
+      "breakdown": {
+        "hood_system": {
+          "min": 30000,
+          "max": 50000
+        },
+        "grease_interceptor": {
+          "min": 15000,
+          "max": 35000
+        },
+        "plumbing_rough_in": {
+          "min": 25000,
+          "max": 40000
+        },
+        "kitchen_equipment": {
+          "min": 45000,
+          "max": 70000
+        },
+        "electrical_upgrade": {
+          "min": 15000,
+          "max": 30000
+        },
+        "permits_fees": {
+          "min": 4000,
+          "max": 9000
+        },
+        "design_fees": {
+          "min": 13000,
+          "max": 20800
+        },
+        "contingency": {
+          "min": 20800,
+          "max": 31200
+        }
+      },
+      "line_items": [
+        {
+          "item": "hood_system",
+          "label": "New Type I kitchen hood",
+          "qty": 1,
+          "min": 30000,
+          "max": 50000,
+          "reason": "Former retail: no kitchen infrastructure."
+        },
+        {
+          "item": "grease_interceptor",
+          "label": "Grease interceptor install",
+          "qty": 1,
+          "min": 15000,
+          "max": 35000,
+          "reason": "Required by Austin Water for food service."
+        },
+        {
+          "item": "plumbing_rough_in",
+          "label": "Kitchen plumbing rough-in",
+          "qty": 1,
+          "min": 25000,
+          "max": 40000,
+          "reason": "Floor drains, hand sinks and 3-compartment sink."
+        },
+        {
+          "item": "kitchen_equipment",
+          "label": "Commercial kitchen equipment",
+          "qty": 1,
+          "min": 45000,
+          "max": 70000,
+          "reason": "Full cook line."
+        },
+        {
+          "item": "electrical_upgrade",
+          "label": "Electrical service upgrade",
+          "qty": 1,
+          "min": 15000,
+          "max": 30000,
+          "reason": "200 A retail panel vs 400 A required."
+        }
+      ],
+      "compliance": {
+        "zoning_use": {
+          "status": "PASS",
+          "notes": "CS-MU permits restaurant (general).",
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)"
+        },
+        "parking_sufficiency": {
+          "status": "PASS",
+          "notes": "24 spaces in shared lot.",
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline"
+        },
+        "ada_accessibility": {
+          "status": "RISK",
+          "notes": "Entrance door measures 30 in (< 32 in).",
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)"
+        },
+        "kitchen_equipment": {
+          "status": "RISK",
+          "notes": "No hood or kitchen; full build required.",
+          "source": "2021 International Mechanical Code §507; Austin Public Health"
+        },
+        "grease_interceptor": {
+          "status": "RISK",
+          "notes": "No interceptor; install required.",
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10"
+        },
+        "bathroom_count": {
+          "status": "RISK",
+          "notes": "1 restroom; 2 required for occupant load 49.",
+          "source": "2021 International Plumbing Code Table 2902.1"
+        },
+        "hvac_capacity": {
+          "status": "RISK",
+          "notes": "1 RTU (est. 5 tons) vs 9 tons required.",
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)"
+        },
+        "electrical_service": {
+          "status": "RISK",
+          "notes": "200 A panel vs 400 A required.",
+          "source": "NEC Article 220 load calculation"
+        },
+        "fire_safety": {
+          "status": "UNKNOWN",
+          "notes": "Sprinkler status not documented.",
+          "source": "2021 International Fire Code §904.13; Austin Fire Department"
+        }
+      },
+      "criteria_results": [
+        {
+          "id": "zoning_use",
+          "description": "Zoning permits the intended use",
+          "domain": "regulatory",
+          "weight": 3,
+          "hard_block": true,
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "CS-MU permits restaurant (general).",
+          "evidence": [
+            {
+              "key": "zoning",
+              "value": "CS-MU",
+              "source": "costar",
+              "note": null,
+              "confidence": 0.95,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "parking_sufficiency",
+          "description": "Enough off-street parking for the use",
+          "domain": "site",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "24 spaces in shared lot.",
+          "evidence": [
+            {
+              "key": "parking_spaces_visible",
+              "value": 24,
+              "source": "vexcel",
+              "note": null,
+              "confidence": 0.75,
+              "box": [
+                0.1,
+                0.6,
+                0.6,
+                0.35
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ada_accessibility",
+          "description": "Accessible entrance and route (ADA)",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "Entrance door measures 30 in (< 32 in).",
+          "evidence": [
+            {
+              "key": "door_width_inches",
+              "value": 30,
+              "source": "matterport",
+              "note": "Measured from tour",
+              "confidence": 0.8,
+              "box": [
+                0.42,
+                0.9,
+                0.1,
+                0.07
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kitchen_equipment",
+          "description": "Commercial kitchen hood and ventilation",
+          "domain": "space",
+          "weight": 3,
+          "hard_block": false,
+          "source": "2021 International Mechanical Code §507; Austin Public Health",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No hood or kitchen; full build required.",
+          "evidence": []
+        },
+        {
+          "id": "grease_interceptor",
+          "description": "Grease interceptor for food service",
+          "domain": "regulatory",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No interceptor; install required.",
+          "evidence": []
+        },
+        {
+          "id": "bathroom_count",
+          "description": "Required restroom fixtures for occupant load",
+          "domain": "space",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Plumbing Code Table 2902.1",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "1 restroom; 2 required for occupant load 49.",
+          "evidence": [
+            {
+              "key": "restrooms",
+              "value": 1,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.9,
+              "box": [
+                0.08,
+                0.12,
+                0.15,
+                0.2
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hvac_capacity",
+          "description": "HVAC capacity for the occupant load and kitchen",
+          "domain": "building",
+          "weight": 2,
+          "hard_block": false,
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "1 RTU (est. 5 tons) vs 9 tons required.",
+          "evidence": [
+            {
+              "key": "rooftop_hvac_units",
+              "value": 1,
+              "source": "vexcel",
+              "note": null,
+              "confidence": 0.7,
+              "box": [
+                0.45,
+                0.2,
+                0.12,
+                0.12
+              ]
+            }
+          ]
+        },
+        {
+          "id": "electrical_service",
+          "description": "Electrical service sized for equipment",
+          "domain": "building",
+          "weight": 1,
+          "hard_block": false,
+          "source": "NEC Article 220 load calculation",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "200 A panel vs 400 A required.",
+          "evidence": [
+            {
+              "key": "electrical_amps",
+              "value": 200,
+              "source": "costar",
+              "note": "Listing spec sheet",
+              "confidence": 0.6,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "fire_safety",
+          "description": "Fire suppression and egress",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Fire Code §904.13; Austin Fire Department",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Sprinkler status not documented.",
+          "evidence": []
+        }
+      ],
+      "questions_for_landlord": [
+        "Will you increase the TI allowance above $10/sq ft for a kitchen conversion?",
+        "Can the entrance door be widened before move-in?"
+      ],
+      "landlord_request": "Dear Property Manager,\n\nI am planning to open a 40-seat restaurant and am interested in leasing 123 Elm Street. Before signing, I would like to discuss the following:\n\n1. Will you increase the TI allowance above $10/sq ft for a kitchen conversion?\n2. Can the entrance door be widened before move-in?\n\nCould you share the most recent inspection reports and confirm these items in the LOI? I look forward to your reply.\n\nSincerely,\n[Your name]",
+      "observations": {
+        "zoning": {
+          "key": "zoning",
+          "value": "CS-MU",
+          "source": "costar",
+          "note": null,
+          "confidence": 0.95,
+          "box": null
+        },
+        "parking_spaces_visible": {
+          "key": "parking_spaces_visible",
+          "value": 24,
+          "source": "vexcel",
+          "note": null,
+          "confidence": 0.75,
+          "box": [
+            0.1,
+            0.6,
+            0.6,
+            0.35
+          ]
+        },
+        "door_width_inches": {
+          "key": "door_width_inches",
+          "value": 30,
+          "source": "matterport",
+          "note": "Measured from tour",
+          "confidence": 0.8,
+          "box": [
+            0.42,
+            0.9,
+            0.1,
+            0.07
+          ]
+        },
+        "restrooms": {
+          "key": "restrooms",
+          "value": 1,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.9,
+          "box": [
+            0.08,
+            0.12,
+            0.15,
+            0.2
+          ]
+        },
+        "rooftop_hvac_units": {
+          "key": "rooftop_hvac_units",
+          "value": 1,
+          "source": "vexcel",
+          "note": null,
+          "confidence": 0.7,
+          "box": [
+            0.45,
+            0.2,
+            0.12,
+            0.12
+          ]
+        },
+        "electrical_amps": {
+          "key": "electrical_amps",
+          "value": 200,
+          "source": "costar",
+          "note": "Listing spec sheet",
+          "confidence": 0.6,
+          "box": null
+        }
+      },
+      "media": {
+        "aerial_url": "/static/aerials/property-123.svg",
+        "floor_plan_url": "/static/floorplans/property-123.svg",
+        "matterport_embed_url": null,
+        "image_url": "/static/properties/property-123.svg"
+      },
+      "assumptions": [
+        "Full kitchen conversion priced at mid-market Austin rates."
+      ]
+    },
+    {
+      "property_id": "property-789",
+      "address": "789 Congress Avenue, Suite 110",
+      "rank": 4,
+      "score": 52,
+      "disqualified": true,
+      "disqualifiers": [
+        "zoning_use"
+      ],
+      "monthly_rent": 3600,
+      "total_cost_estimate": {
+        "min": 215000,
+        "max": 342200
+      },
+      "first_year_cost": {
+        "min": 258200,
+        "max": 385400
+      },
+      "fit_out_estimate": {
+        "min": 230000,
+        "max": 350000
+      },
+      "ti_allowance": 33000,
+      "buildout_months": {
+        "min": 5,
+        "max": 7
+      },
+      "breakdown": {
+        "hood_system": {
+          "min": 35000,
+          "max": 55000
+        },
+        "kitchen_equipment": {
+          "min": 45000,
+          "max": 70000
+        },
+        "permits_fees": {
+          "min": 4000,
+          "max": 9000
+        },
+        "design_fees": {
+          "min": 14500,
+          "max": 23200
+        },
+        "contingency": {
+          "min": 23200,
+          "max": 34800
+        }
+      },
+      "line_items": [
+        {
+          "item": "hood_system",
+          "label": "New Type I kitchen hood",
+          "qty": 1,
+          "min": 35000,
+          "max": 55000,
+          "reason": "Office suite in a multi-story building; long duct run to roof."
+        },
+        {
+          "item": "kitchen_equipment",
+          "label": "Commercial kitchen equipment",
+          "qty": 1,
+          "min": 45000,
+          "max": 70000,
+          "reason": "Full cook line."
+        }
+      ],
+      "compliance": {
+        "zoning_use": {
+          "status": "RISK",
+          "notes": "LO (Limited Office) does not permit restaurant use; rezoning required.",
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)"
+        },
+        "parking_sufficiency": {
+          "status": "UNKNOWN",
+          "notes": "Garage parking; count not visible from aerial.",
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline"
+        },
+        "ada_accessibility": {
+          "status": "PASS",
+          "notes": "Building lobby is accessible.",
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)"
+        },
+        "kitchen_equipment": {
+          "status": "RISK",
+          "notes": "No kitchen infrastructure.",
+          "source": "2021 International Mechanical Code §507; Austin Public Health"
+        },
+        "grease_interceptor": {
+          "status": "RISK",
+          "notes": "No interceptor.",
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10"
+        },
+        "bathroom_count": {
+          "status": "PASS",
+          "notes": "Shared building restrooms on floor.",
+          "source": "2021 International Plumbing Code Table 2902.1"
+        },
+        "hvac_capacity": {
+          "status": "UNKNOWN",
+          "notes": "Central building system; capacity unknown.",
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)"
+        },
+        "electrical_service": {
+          "status": "UNKNOWN",
+          "notes": "Not documented.",
+          "source": "NEC Article 220 load calculation"
+        },
+        "fire_safety": {
+          "status": "PASS",
+          "notes": "High-rise sprinklered.",
+          "source": "2021 International Fire Code §904.13; Austin Fire Department"
+        }
+      },
+      "criteria_results": [
+        {
+          "id": "zoning_use",
+          "description": "Zoning permits the intended use",
+          "domain": "regulatory",
+          "weight": 3,
+          "hard_block": true,
+          "source": "Austin Land Development Code §25-2-491 (permitted uses by district)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": true,
+          "notes": "LO (Limited Office) does not permit restaurant use; rezoning required.",
+          "evidence": [
+            {
+              "key": "zoning",
+              "value": "LO",
+              "source": "costar",
+              "note": null,
+              "confidence": 0.95,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "parking_sufficiency",
+          "description": "Enough off-street parking for the use",
+          "domain": "site",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin LDC Appendix A (off-street parking) / ITE guideline",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Garage parking; count not visible from aerial.",
+          "evidence": []
+        },
+        {
+          "id": "ada_accessibility",
+          "description": "Accessible entrance and route (ADA)",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Building lobby is accessible.",
+          "evidence": [
+            {
+              "key": "door_width_inches",
+              "value": 36,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.7,
+              "box": [
+                0.48,
+                0.88,
+                0.1,
+                0.08
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kitchen_equipment",
+          "description": "Commercial kitchen hood and ventilation",
+          "domain": "space",
+          "weight": 3,
+          "hard_block": false,
+          "source": "2021 International Mechanical Code §507; Austin Public Health",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No kitchen infrastructure.",
+          "evidence": []
+        },
+        {
+          "id": "grease_interceptor",
+          "description": "Grease interceptor for food service",
+          "domain": "regulatory",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Austin Water Pretreatment Program, City Code Ch. 15-10",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No interceptor.",
+          "evidence": []
+        },
+        {
+          "id": "bathroom_count",
+          "description": "Required restroom fixtures for occupant load",
+          "domain": "space",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Plumbing Code Table 2902.1",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "Shared building restrooms on floor.",
+          "evidence": []
+        },
+        {
+          "id": "hvac_capacity",
+          "description": "HVAC capacity for the occupant load and kitchen",
+          "domain": "building",
+          "weight": 2,
+          "hard_block": false,
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)",
+          "status": "UNKNOWN",
+          "score": 0.5,
+          "counted": true,
+          "blocking": false,
+          "notes": "Central building system; capacity unknown.",
+          "evidence": [
+            {
+              "key": "rooftop_hvac_units",
+              "value": 0,
+              "source": "vexcel",
+              "note": "No dedicated RTU",
+              "confidence": 0.5,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "electrical_service",
+          "description": "Electrical service sized for equipment",
+          "domain": "building",
+          "weight": 1,
+          "hard_block": false,
+          "source": "NEC Article 220 load calculation",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Not documented.",
+          "evidence": []
+        },
+        {
+          "id": "fire_safety",
+          "description": "Fire suppression and egress",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Fire Code §904.13; Austin Fire Department",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "High-rise sprinklered.",
+          "evidence": []
+        }
+      ],
+      "questions_for_landlord": [
+        "Is the landlord willing to support a zoning change application?"
+      ],
+      "landlord_request": "Dear Property Manager,\n\nI am planning to open a 40-seat restaurant and am interested in leasing 789 Congress Avenue, Suite 110. Before signing, I would like to discuss the following:\n\n1. Is the landlord willing to support a zoning change application?\n\nCould you share the most recent inspection reports and confirm these items in the LOI? I look forward to your reply.\n\nSincerely,\n[Your name]",
+      "observations": {
+        "zoning": {
+          "key": "zoning",
+          "value": "LO",
+          "source": "costar",
+          "note": null,
+          "confidence": 0.95,
+          "box": null
+        },
+        "door_width_inches": {
+          "key": "door_width_inches",
+          "value": 36,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.7,
+          "box": [
+            0.48,
+            0.88,
+            0.1,
+            0.08
+          ]
+        },
+        "rooftop_hvac_units": {
+          "key": "rooftop_hvac_units",
+          "value": 0,
+          "source": "vexcel",
+          "note": "No dedicated RTU",
+          "confidence": 0.5,
+          "box": null
+        }
+      },
+      "media": {
+        "aerial_url": "/static/aerials/property-789.svg",
+        "floor_plan_url": "/static/floorplans/property-789.svg",
+        "matterport_embed_url": null,
+        "image_url": "/static/properties/property-789.svg"
+      },
+      "assumptions": [
+        "Rezoning not included in the cost range."
+      ]
+    }
+  ],
+  "mode": {
+    "costar": "mock",
+    "matterport": "mock",
+    "vexcel": "mock",
+    "parser": "regex"
+  },
+  "disclaimer": "Estimates are planning ranges from a rule-based cost model, not contractor quotes or legal advice. Confirm zoning and code requirements with the City of Austin before signing a lease."
+}

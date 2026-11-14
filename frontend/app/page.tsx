@@ -1,17 +1,53 @@
-// Placeholder home page from the bootstrap phase. Phase 03 (prompts/03-frontend-skeleton.md)
-// replaces this with the business profile form.
+import { BuildingStorefrontIcon, ClipboardDocumentCheckIcon, CurrencyDollarIcon } from "@heroicons/react/24/outline";
+import { BusinessProfileForm } from "@/components/BusinessProfileForm";
+import { RecentAnalyses } from "@/components/RecentAnalyses";
+
+const highlights = [
+  {
+    Icon: CurrencyDollarIcon,
+    title: "Total cost to open",
+    text: "Fit-out plus rent during build-out, as a range, not just the asking rent.",
+  },
+  {
+    Icon: ClipboardDocumentCheckIcon,
+    title: "Compliance check",
+    text: "Zoning, parking, ADA, health and building code rules flagged PASS / RISK / UNKNOWN with sources.",
+  },
+  {
+    Icon: BuildingStorefrontIcon,
+    title: "Evidence you can see",
+    text: "Aerial and floor-plan overlays, plus a drafted letter asking the landlord for fixes and TI.",
+  },
+];
+
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4 px-4 py-16">
-      <p className="text-sm font-medium uppercase tracking-widest text-accent">HackPrinceton Fall 2026</p>
-      <h1 className="text-4xl font-semibold tracking-tight">Turnkey Matchmaker</h1>
-      <p className="text-lg text-ink-muted">
-        Compare commercial spaces by the total cost to open, not just the rent.
-      </p>
-      <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-muted">
-        Backend API docs: <code className="text-accent">http://localhost:8000/docs</code>. The profile form arrives in
-        phase 03.
-      </p>
-    </main>
+    <div className="grid gap-12">
+      <section className="grid items-start gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-12">
+        <div className="grid gap-5 lg:pt-6">
+          <p className="text-sm font-medium uppercase tracking-widest text-accent">For small business owners</p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+            Find the space that&apos;s actually cheapest to open.
+          </h1>
+          <p className="text-base text-ink-muted sm:text-lg">
+            A cheap lease can hide a $150k kitchen build-out. Turnkey Matchmaker compares commercial spaces by what it
+            really costs to open your doors, and tells you why.
+          </p>
+          <ul className="grid gap-4 pt-2">
+            {highlights.map(({ Icon, title, text }) => (
+              <li key={title} className="flex gap-3">
+                <Icon className="mt-0.5 size-6 shrink-0 text-accent" aria-hidden />
+                <div>
+                  <p className="font-medium">{title}</p>
+                  <p className="text-sm text-ink-muted">{text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <BusinessProfileForm />
+      </section>
+      <RecentAnalyses />
+    </div>
   );
 }
