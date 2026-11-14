@@ -74,6 +74,9 @@ class AnalysisResult(BaseModel):
     score: float = Field(..., description="Criteria fit score, 0-100 (higher is better)")
     disqualified: bool
     disqualifiers: list[str] = Field(default_factory=list)
+    weak_fit: bool = Field(
+        False, description="Not disqualified but score < AnalyzeResponse.min_score; ranked after qualifying properties"
+    )
     monthly_rent: float
     total_cost_estimate: CostRange = Field(..., description="Cost to open: net fit-out + rent during build-out")
     first_year_cost: CostRange = Field(..., description="Cost to open + rent for the ranking horizon")
@@ -102,6 +105,7 @@ class AnalyzeResponse(BaseModel):
     business_type: str
     requirements: Requirements
     ranking_basis: str
+    min_score: float = Field(0, description="Fit-score threshold below which a property is a weak fit (0 = gate off)")
     results: list[AnalysisResult]
     mode: dict[str, str] = Field(..., description="costar/matterport/vexcel: mock|live, parser: regex|claude")
     disclaimer: str

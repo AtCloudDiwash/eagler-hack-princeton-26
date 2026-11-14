@@ -9,6 +9,7 @@ import { CriteriaResults } from "./CriteriaResults";
 import { LandlordLetter } from "./LandlordLetter";
 import { MediaPanel } from "./MediaPanel";
 import { ScoreRing } from "./ScoreRing";
+import { WeakFitBadge } from "./WeakFitBadge";
 
 function KeyNumber({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
   return (
@@ -28,8 +29,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** Full report for one property: numbers, costs, criteria, evidence overlays, landlord materials. */
-export function AnalysisCard({ result }: { result: AnalysisResult }) {
+/**
+ * Full report for one property: numbers, costs, criteria, evidence overlays, landlord materials.
+ * `minScore` (AnalyzeResponse.min_score) feeds the "Weak fit" explanation.
+ */
+export function AnalysisCard({ result, minScore }: { result: AnalysisResult; minScore?: number }) {
   const descriptions = new Map((result.criteria_results ?? []).map((c) => [c.id, c.description]));
   const observations = Object.entries(result.observations ?? {});
 
@@ -40,6 +44,7 @@ export function AnalysisCard({ result }: { result: AnalysisResult }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="accent">Rank #{result.rank}</Badge>
+            <WeakFitBadge weakFit={result.weak_fit} minScore={minScore} />
             {result.disqualified && (
               <Badge tone="danger">
                 <NoSymbolIcon className="size-3" aria-hidden /> Disqualified

@@ -4,7 +4,7 @@
     2. vision agent                Matterport + Vexcel + CoStar facts -> observations (Evidence by fact)
     3. compliance / criteria agent criteria.yaml evaluators -> PASS / RISK / UNKNOWN, score, blockers
     4. cost agent                  fix items -> cost ranges, TI, build-out, cost to open, first-year cost
-    5. recommendation agent        rank, landlord questions, drafted landlord request letter
+    5. recommendation agent        rank (min-score gate), landlord questions, drafted landlord request letter
 
 Each agent is a plain function with typed inputs/outputs so it can be tested on its own.
 """
@@ -160,12 +160,38 @@ def draft_landlord_request(
     return "\n".join(lines)
 
 
-def rank_results(results: list[AnalysisResult]) -> list[AnalysisResult]:
-    """Qualified first, cheapest first-year cost first; ties broken by higher score."""
-    ordered = sorted(results, key=lambda r: (r.disqualified, r.first_year_cost.min, r.first_year_cost.max, -r.score))
+def ranking_settings() -> tuple[int, float]:
+    """(horizon_months, min_score) from the `ranking:` section of costs.yaml."""
+    ranking = cost_config().get("ranking") or {}
+    return int(ranking.get("horizon_months", 12)), float(ranking.get("min_score", 0) or 0)
+
+
+def rank_results(results: list[AnalysisResult], min_score: float = 0) -> list[AnalysisResult]:
+    """Three tiers, each cheapest first-year cost first with ties broken by higher score:
+    qualifying (score >= min_score), weak fit (score < min_score), then disqualified.
+    Sets `weak_fit` and `rank` on each result."""
+    for result in results:
+        result.weak_fit = not result.disqualified and result.score < min_score
+
+    def key(r: AnalysisResult) -> tuple:
+        tier = 2 if r.disqualified else 1 if r.weak_fit else 0
+        return (tier, r.first_year_cost.min, r.first_year_cost.max, -r.score)
+
+    ordered = sorted(results, key=key)
     for rank, result in enumerate(ordered, start=1):
         result.rank = rank
     return ordered
+
+
+def ranking_basis(horizon: int, min_score: float) -> str:
+    cost = f"first-year cost (cost to open + {horizon} months rent)"
+    if min_score <= 0:
+        return f"Ranked by {cost}; disqualified properties last; ties broken by criteria score."
+    return (
+        f"Ranked by {cost} among properties with a fit score of at least {min_score:g}; "
+        f"weak fits (score below {min_score:g}) next, then disqualified properties; "
+        "ties broken by criteria score."
+    )
 
 
 # --------------------------------------------------------------------------------------------
@@ -216,17 +242,15 @@ def analyze_property(requirements: Requirements, prop: Property) -> AnalysisResu
 
 def analyze_properties(profile: BusinessProfile, properties: list[Property]) -> AnalyzeResponse:
     requirements, parser_used = parse_requirements(profile)
-    results = rank_results([analyze_property(requirements, prop) for prop in properties])
-    horizon = cost_config().get("ranking", {}).get("horizon_months", 12)
+    horizon, min_score = ranking_settings()
+    results = rank_results([analyze_property(requirements, prop) for prop in properties], min_score)
     return AnalyzeResponse(
         analysis_id=uuid.uuid4().hex,
         created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         business_type=requirements.business_type,
         requirements=requirements,
-        ranking_basis=(
-            f"Ranked by first-year cost (cost to open + {horizon} months rent); "
-            "disqualified properties last; ties broken by criteria score."
-        ),
+        ranking_basis=ranking_basis(horizon, min_score),
+        min_score=min_score,
         results=results,
         mode={**settings.mode_summary, "parser": parser_used},
         disclaimer=" ".join(str(cost_config().get("disclaimer", "")).split()),

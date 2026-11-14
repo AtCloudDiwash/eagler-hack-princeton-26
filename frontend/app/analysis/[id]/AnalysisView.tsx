@@ -56,11 +56,11 @@ export function AnalysisView() {
         <>
           <section className="grid gap-3">
             <h2 className="text-lg font-semibold">Side-by-side</h2>
-            <ComparisonTable results={results} />
+            <ComparisonTable results={results} minScore={data.min_score} />
           </section>
           <section className="grid gap-6">
             {results.map((result) => (
-              <AnalysisCard key={result.property_id} result={result} />
+              <AnalysisCard key={result.property_id} result={result} minScore={data.min_score} />
             ))}
           </section>
         </>

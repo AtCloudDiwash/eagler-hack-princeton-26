@@ -51,6 +51,26 @@ describe("AnalysisCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Zoning permits the intended use");
     expect(screen.getAllByText("Blocking").length).toBeGreaterThan(0);
   });
+
+  it("shows a Weak fit badge with the min-score explanation only for weak_fit results", () => {
+    const weak = analysisFixture.results.find((r) => r.weak_fit)!;
+    const { unmount } = render(<AnalysisCard result={weak} minScore={analysisFixture.min_score} />);
+    expect(screen.getByText("Weak fit").closest("span")?.className).toContain("text-risk");
+    expect(within(screen.getByTestId("weak-fit")).getByRole("tooltip")).toHaveTextContent(
+      `Fit score below ${analysisFixture.min_score} — ranked after better-fitting spaces`,
+    );
+    unmount();
+
+    render(<AnalysisCard result={top} minScore={analysisFixture.min_score} />);
+    expect(screen.queryByText("Weak fit")).not.toBeInTheDocument();
+  });
+
+  it("treats results from older runs without weak_fit as not weak", () => {
+    const legacy = { ...analysisFixture.results.find((r) => r.weak_fit)! };
+    delete legacy.weak_fit;
+    render(<AnalysisCard result={legacy} />);
+    expect(screen.queryByTestId("weak-fit")).not.toBeInTheDocument();
+  });
 });
 
 describe("ComparisonTable", () => {
@@ -61,5 +81,14 @@ describe("ComparisonTable", () => {
     expect(headers[0]).toHaveTextContent("456 Oak Avenue");
     expect(headers[0]).toHaveTextContent("Best value");
     expect(screen.getByText("Disqualified")).toBeInTheDocument();
+  });
+
+  it("marks only weak_fit columns with a Weak fit badge next to the rank", () => {
+    render(<ComparisonTable results={analysisFixture.results} minScore={analysisFixture.min_score} />);
+    const badges = screen.getAllByTestId("weak-fit");
+    const weak = analysisFixture.results.filter((r) => r.weak_fit);
+    expect(badges).toHaveLength(weak.length);
+    expect(badges[0].closest("td")).toHaveTextContent(`#${weak[0].rank}`);
+    expect(badges[0]).toHaveTextContent(`Fit score below ${analysisFixture.min_score}`);
   });
 });

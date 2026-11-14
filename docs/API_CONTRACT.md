@@ -95,7 +95,8 @@ Response (`AnalyzeResponse`):
   created_at: string;           // ISO-8601 UTC
   business_type: string;
   requirements: Requirements;
-  ranking_basis: string;        // human sentence, e.g. "Ranked by first-year cost (cost to open + 12 months rent); disqualified properties last."
+  ranking_basis: string;        // human sentence, e.g. "Ranked by first-year cost (cost to open + 12 months rent) among properties with a fit score of at least 25; weak fits (score below 25) next, then disqualified properties; ties broken by criteria score."
+  min_score: number;            // costs.yaml ranking.min_score; non-disqualified results scoring below it are weak fits (0 = gate off / older runs)
   results: AnalysisResult[];    // already sorted by rank (1 = best)
   mode: { costar: string; matterport: string; vexcel: string; parser: "regex" | "claude" };
   disclaimer: string;
@@ -115,6 +116,7 @@ AnalysisResult = {
   property_id: string; address: string; rank: number;
   score: number;                     // criteria fit 0-100
   disqualified: boolean; disqualifiers: string[];   // criterion ids that hard-blocked
+  weak_fit: boolean;                 // not disqualified but score < min_score; ranked after qualifying results, before disqualified
   monthly_rent: number;
   total_cost_estimate: CostRange;    // cost to open: net fit-out + rent during build-out
   first_year_cost: CostRange;        // cost to open + rent for ranking horizon

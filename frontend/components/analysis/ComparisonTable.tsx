@@ -3,14 +3,23 @@ import type { ReactNode } from "react";
 import { formatCompactCurrency, formatMonths, formatRange, formatRent } from "@/lib/format";
 import type { AnalysisResult } from "@/lib/types";
 import { Badge } from "../ui/Badge";
+import { WeakFitBadge } from "./WeakFitBadge";
 
 interface Row {
   label: string;
-  render: (result: AnalysisResult) => ReactNode;
+  render: (result: AnalysisResult, minScore?: number) => ReactNode;
 }
 
 const ROWS: Row[] = [
-  { label: "Rank", render: (r) => `#${r.rank}` },
+  {
+    label: "Rank",
+    render: (r, minScore) => (
+      <span className="inline-flex items-center gap-2">
+        #{r.rank}
+        <WeakFitBadge weakFit={r.weak_fit} minScore={minScore} />
+      </span>
+    ),
+  },
   { label: "Fit score", render: (r) => `${Math.round(r.score)} / 100` },
   { label: "Cost to open", render: (r) => <span className="font-semibold text-accent">{formatRange(r.total_cost_estimate)}</span> },
   { label: "First-year cost", render: (r) => formatRange(r.first_year_cost) },
@@ -30,10 +39,14 @@ const ROWS: Row[] = [
   },
 ];
 
-/** One column per property, sorted by rank. Only this table scrolls horizontally on small screens. */
-export function ComparisonTable({ results }: { results: AnalysisResult[] }) {
+/**
+ * One column per property, sorted by rank. Only this table scrolls horizontally on small screens.
+ * `minScore` (AnalyzeResponse.min_score) feeds the "Weak fit" explanation.
+ */
+export function ComparisonTable({ results, minScore }: { results: AnalysisResult[]; minScore?: number }) {
   const sorted = [...results].sort((a, b) => a.rank - b.rank);
-  const best = sorted.find((r) => !r.disqualified);
+  // Weak fits are never "best value"; if every eligible space is weak, no column is highlighted.
+  const best = sorted.find((r) => !r.disqualified && !r.weak_fit);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -69,7 +82,7 @@ export function ComparisonTable({ results }: { results: AnalysisResult[] }) {
               </th>
               {sorted.map((r) => (
                 <td key={r.property_id} className={`px-4 py-2.5 tabular-nums ${r === best ? "bg-accent/5" : ""}`}>
-                  {row.render(r)}
+                  {row.render(r, minScore)}
                 </td>
               ))}
             </tr>

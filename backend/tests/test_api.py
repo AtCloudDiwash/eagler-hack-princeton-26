@@ -1,6 +1,8 @@
 """API integration tests via TestClient: every endpoint, error codes, SQLite round-trip, demo sanity."""
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import ALL_IDS, DEMO_DETAILS
 
@@ -12,7 +14,7 @@ DEMO_BODY = {
 }
 
 RESULT_KEYS = {
-    "property_id", "address", "rank", "score", "disqualified", "disqualifiers", "monthly_rent",
+    "property_id", "address", "rank", "score", "disqualified", "disqualifiers", "weak_fit", "monthly_rent",
     "total_cost_estimate", "first_year_cost", "fit_out_estimate", "ti_allowance", "buildout_months",
     "breakdown", "line_items", "compliance", "criteria_results", "questions_for_landlord", "landlord_request",
     "observations", "media", "assumptions",
@@ -83,7 +85,8 @@ def test_analyze_errors(client):
 
 
 def test_analyze_response_shape(demo):
-    assert set(demo) == {"analysis_id", "created_at", "business_type", "requirements", "ranking_basis", "results", "mode", "disclaimer"}
+    assert set(demo) == {"analysis_id", "created_at", "business_type", "requirements", "ranking_basis", "min_score", "results",
+                         "mode", "disclaimer"}
     assert len(demo["analysis_id"]) == 32 and demo["created_at"].endswith("Z")
     assert set(demo["requirements"]) == REQUIREMENT_KEYS
     assert demo["mode"] == {"costar": "mock", "matterport": "mock", "vexcel": "mock", "parser": "regex"}
@@ -116,9 +119,14 @@ def test_demo_ranking_is_explainable(demo):
     assert demo["results"][-1]["property_id"] == "property-789"  # disqualified last
     assert "does not permit" in lo["compliance"]["zoning_use"]["notes"]
 
-    qualified = [r for r in demo["results"] if not r["disqualified"]]
+    # Min-score gate (costs.yaml ranking.min_score): the cheap-but-poorly-fitting space ranks after 123.
+    assert demo["min_score"] == 25
+    assert [r["property_id"] for r in demo["results"]] == ["property-456", "property-123", "property-321", "property-789"]
+    assert [r["weak_fit"] for r in demo["results"]] == [False, False, True, False]
+    assert results["property-123"]["score"] >= 25 > results["property-321"]["score"]
+    qualified = [r for r in demo["results"] if not r["disqualified"] and not r["weak_fit"]]
     assert [r["first_year_cost"]["min"] for r in qualified] == sorted(r["first_year_cost"]["min"] for r in qualified)
-    assert "first-year cost" in demo["ranking_basis"]
+    assert "first-year cost" in demo["ranking_basis"] and "at least 25" in demo["ranking_basis"]
 
     # Retail space without a kitchen needs a full kitchen build-out
     r123 = results["property-123"]
@@ -145,6 +153,29 @@ def test_analyses_round_trip(client, demo):
     assert stored.status_code == 200
     assert stored.json() == demo  # exactly what POST returned
     assert client.get("/api/v1/analyses/doesnotexist").status_code == 404
+
+
+def test_analyses_from_before_min_score_gate_still_load(client, demo):
+    """Runs stored before `min_score` / `weak_fit` existed come back with neutral defaults."""
+    from sqlmodel import Session
+
+    from app import db
+
+    old = {k: v for k, v in demo.items() if k != "min_score"}
+    old["analysis_id"] = "0" * 32
+    old["results"] = [{k: v for k, v in r.items() if k != "weak_fit"} for r in demo["results"]]
+    with Session(db.get_engine()) as session:
+        session.add(db.AnalysisRun(
+            id=old["analysis_id"], created_at="2000-01-01T00:00:00.000Z", business_type="restaurant",
+            business_label="Restaurant", city="Austin", state="TX", property_count=4, response_json=json.dumps(old),
+        ))
+        session.commit()
+    stored = client.get(f"/api/v1/analyses/{old['analysis_id']}")
+    assert stored.status_code == 200
+    body = stored.json()
+    assert body["min_score"] == 0
+    assert [r["weak_fit"] for r in body["results"]] == [False] * 4
+    assert [r["property_id"] for r in body["results"]] == [r["property_id"] for r in demo["results"]]
 
 
 def test_analyses_newest_first_and_limit(client):

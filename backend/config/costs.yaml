@@ -68,3 +68,7 @@ soft_costs:
 ranking:
   # Properties are ranked by first-year cost = cost to open + this many months of rent after opening.
   horizon_months: 12
+  # Min-score gate: properties whose criteria fit score (0-100) is below this are ranked after all
+  # qualifying properties (but before disqualified ones) and labelled "Weak fit" in the UI.
+  # Config-driven; set to 0 to disable and rank purely by first-year cost.
+  min_score: 25

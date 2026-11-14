@@ -135,3 +135,30 @@ def test_weight_change_takes_effect_without_code_change(use_criteria):
     base_score = _analyze(["property-123"])["property-123"].score
     use_criteria(bumped)
     assert _analyze(["property-123"])["property-123"].score < base_score  # 123 fails parking
+
+
+def test_min_score_gate_is_config_driven(monkeypatch):
+    """costs.yaml ranking.min_score: weak fits rank after qualifying spaces; 0 restores cost-only order."""
+    from app.services import agent_orchestrator
+
+    real = agent_orchestrator.cost_config()
+
+    def with_min_score(value):
+        cfg = {**real, "ranking": {**real.get("ranking", {}), "min_score": value}}
+        monkeypatch.setattr(agent_orchestrator, "cost_config", lambda: cfg)
+        return analyze_properties(profile(), [get_property(i) for i in ALL_IDS])
+
+    gated = with_min_score(25)
+    assert gated.min_score == 25
+    assert [r.property_id for r in gated.results] == ["property-456", "property-123", "property-321", "property-789"]
+    assert {r.property_id for r in gated.results if r.weak_fit} == {"property-321"}
+
+    cost_only = with_min_score(0)
+    assert cost_only.min_score == 0 and not any(r.weak_fit for r in cost_only.results)
+    assert [r.property_id for r in cost_only.results] == ["property-456", "property-321", "property-123", "property-789"]
+    assert "at least" not in cost_only.ranking_basis
+
+    # A high bar makes every eligible space a weak fit; disqualified still ranks last and is never "weak".
+    strict = with_min_score(101)
+    assert [r.weak_fit for r in strict.results] == [True, True, True, False]
+    assert strict.results[-1].disqualified

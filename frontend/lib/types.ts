@@ -155,6 +155,8 @@ export interface AnalysisResult {
   disqualified: boolean;
   /** Criterion ids that hard-blocked this property. */
   disqualifiers: string[];
+  /** Not disqualified but score < AnalyzeResponse.min_score; ranked after qualifying results. Absent on older runs. */
+  weak_fit?: boolean;
   monthly_rent: number;
   /** Cost to open: net fit-out + rent during build-out. */
   total_cost_estimate: CostRange;
@@ -188,6 +190,8 @@ export interface AnalyzeResponse {
   business_type: string;
   requirements: Requirements;
   ranking_basis: string;
+  /** Fit-score threshold (costs.yaml ranking.min_score) for weak fits; 0 = gate off. Absent on older runs. */
+  min_score?: number;
   /** Already sorted by rank (1 = best). */
   results: AnalysisResult[];
   mode: AnalysisMode;
