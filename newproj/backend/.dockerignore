@@ -1,0 +1,17 @@
+# Keep secrets, local state and build junk out of the image.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+*.db-*
+# Licensed Vexcel sample: record it locally if you need demo mode (scripts/record_demo_fixture.py)
+fixtures/vexcel_*.json
+Dockerfile
+.dockerignore
+.DS_Store

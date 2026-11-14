@@ -19,3 +19,36 @@ backend/static/vexcel-cache/
 .DS_Store
 *.log
 backend/.pytest_cache/
+
+# ---- Repo-wide safety net (applies to v1 and newproj/) ----
+# Secrets: only *.env.example templates are committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Python
+**/.venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+**/.pytest_cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/out/
+*.tsbuildinfo
+npm-debug.log*
+**/test-results/
+**/playwright-report/
+# Licensed Vexcel API responses (record locally, never commit)
+newproj/backend/fixtures/vexcel_*.json
+# Local tooling / OS
+.claude/
+.idea/
+.vscode/
+Thumbs.db

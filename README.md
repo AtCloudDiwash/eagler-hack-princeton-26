@@ -1,5 +1,9 @@
 # Turnkey Matchmaker
 
+> **Turnkey Matchmaker v2** (map-first discovery + LangChain Deep Agents on Ollama, Docker Compose) lives in
+> [`newproj/`](newproj/README.md). Setup: [`newproj/INSTALLATION.md`](newproj/INSTALLATION.md). The rest of this
+> README describes the original v1 prototype in `backend/` and `frontend/`.
+
 **HackPrinceton Fall 2026.** Turnkey Matchmaker helps small business owners pick a commercial space by
 comparing the **total cost to open** (fit-out + rent during build-out + first-year rent) instead of
 the asking rent alone. It combines listing data (CoStar), interior scans (Matterport) and **live

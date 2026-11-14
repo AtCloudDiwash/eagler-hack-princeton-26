@@ -11,6 +11,8 @@ User query ─▶ Vexcel discovery ─▶ map ─▶ select building ─▶ Vexc
 
 ## Run it
 
+Full instructions, including **Docker Compose** (`docker compose up --build`), are in [INSTALLATION.md](INSTALLATION.md).
+
 Prerequisites: Python 3.12, Node 20+, [Ollama](https://ollama.com) with a tool-calling model.
 
 ```bash
