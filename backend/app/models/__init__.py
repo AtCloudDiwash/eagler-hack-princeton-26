@@ -1,6 +1,8 @@
 """Pydantic schemas shared by the API, services and providers."""
 from .analysis_result import (
+    OBSERVED_SOURCES,
     AnalysisResult,
+    AnalysisSummary,
     AnalyzeRequest,
     AnalyzeResponse,
     ComplianceStatus,
@@ -8,12 +10,15 @@ from .analysis_result import (
     CostRange,
     CriterionResult,
     Evidence,
+    Media,
+    Status,
 )
 from .business_profile import BusinessProfile, Requirements
 from .criterion import Criterion
 from .property import Property
 
 __all__ = [
-    "AnalysisResult", "AnalyzeRequest", "AnalyzeResponse", "BusinessProfile", "ComplianceStatus",
-    "CostLineItem", "CostRange", "Criterion", "CriterionResult", "Evidence", "Property", "Requirements",
+    "OBSERVED_SOURCES", "AnalysisResult", "AnalysisSummary", "AnalyzeRequest", "AnalyzeResponse",
+    "BusinessProfile", "ComplianceStatus", "CostLineItem", "CostRange", "Criterion", "CriterionResult",
+    "Evidence", "Media", "Property", "Requirements", "Status",
 ]

@@ -1,8 +1,8 @@
 {
   "_comment": "Mock output of the vision agent. 'interior' facts stand in for Matterport measurements, 'aerial' facts for Vexcel imagery. A fact that is absent is treated as unknown. 'box' is a normalized [x, y, w, h] overlay on the image.",
   "property-123": {
-    "floor_plan_url": "/static/floorplans/property-123.png",
-    "aerial_url": "/static/aerials/property-123.jpg",
+    "floor_plan_url": "/static/floorplans/property-123.svg",
+    "aerial_url": "/static/aerials/property-123.svg",
     "interior": {
       "door_width_inches": { "value": 34, "confidence": 0.85, "note": "Front entry door, measured in 3D tour", "box": [0.08, 0.72, 0.06, 0.1] },
       "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Entry is flush with the sidewalk" },
@@ -20,8 +20,8 @@
     }
   },
   "property-456": {
-    "floor_plan_url": "/static/floorplans/property-456.png",
-    "aerial_url": "/static/aerials/property-456.jpg",
+    "floor_plan_url": "/static/floorplans/property-456.svg",
+    "aerial_url": "/static/aerials/property-456.svg",
     "interior": {
       "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Front entry door, measured in 3D tour", "box": [0.1, 0.7, 0.06, 0.1] },
       "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Ramp at the entry" },
@@ -38,8 +38,8 @@
     }
   },
   "property-789": {
-    "floor_plan_url": "/static/floorplans/property-789.png",
-    "aerial_url": "/static/aerials/property-789.jpg",
+    "floor_plan_url": "/static/floorplans/property-789.svg",
+    "aerial_url": "/static/aerials/property-789.svg",
     "interior": {
       "door_width_inches": { "value": 30, "confidence": 0.8, "note": "Suite door narrower than ADA clear width", "box": [0.45, 0.85, 0.05, 0.08] },
       "step_free_entrance": { "value": false, "confidence": 0.85, "note": "Two steps up from the street" },
@@ -56,8 +56,8 @@
     }
   },
   "property-321": {
-    "floor_plan_url": "/static/floorplans/property-321.png",
-    "aerial_url": "/static/aerials/property-321.jpg",
+    "floor_plan_url": "/static/floorplans/property-321.svg",
+    "aerial_url": "/static/aerials/property-321.svg",
     "interior": {
       "step_free_entrance": { "value": true, "confidence": 0.7, "note": "Entry appears level" },
       "kitchen_equipment_visible": { "value": true, "confidence": 0.85, "note": "Coffee-bar prep line, no cooking equipment" },

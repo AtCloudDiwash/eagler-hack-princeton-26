@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" role="img" aria-label="Floor plan of 2100 E Cesar Chavez Street">
+<title>Floor plan of 2100 E Cesar Chavez Street</title>
+<defs><pattern id="grain" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#1c2940" stroke-width="1"/></pattern></defs>
+<rect width="800" height="600" fill="#0b1220"/>
+<rect x="70" y="50" width="660" height="480" fill="#131c2e" stroke="#cbd5e1" stroke-width="6"/>
+<line x1="70" y1="300" x2="380" y2="300" stroke="#cbd5e1" stroke-opacity="0.8" stroke-width="3"/>
+<text x="225" y="180" fill="#cbd5e1" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" text-anchor="middle">SEATING</text><text x="225" y="198" fill="#64748b" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" text-anchor="middle">cafe tables</text>
+<rect x="420" y="80" width="280" height="40" fill="#1e293b" stroke="#475569"/>
+<text x="560" y="105" fill="#94a3b8" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="700" text-anchor="middle">COFFEE BAR / PREP (no hood)</text>
+<text x="560" y="220" fill="#cbd5e1" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" text-anchor="middle">BACK OF HOUSE</text>
+<line x1="560" y1="400" x2="730" y2="400" stroke="#cbd5e1" stroke-opacity="0.8" stroke-width="3"/>
+<line x1="560" y1="400" x2="560" y2="530" stroke="#cbd5e1" stroke-opacity="0.8" stroke-width="3"/>
+<rect x="610" y="420" width="22" height="10" rx="2" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><ellipse cx="621" cy="444" rx="10" ry="13" fill="none" stroke="#cbd5e1" stroke-width="1.5"/>
+<rect x="660" y="480" width="24" height="18" rx="6" fill="none" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="645" y="520" fill="#94a3b8" font-family="Inter, Helvetica, Arial, sans-serif" font-size="10" font-weight="500" text-anchor="middle">RESTROOM</text>
+<text x="225" y="420" fill="#cbd5e1" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" text-anchor="middle">PATIO ACCESS</text>
+<text x="16" y="586" fill="#475569" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" text-anchor="start">Placeholder floor plan (Matterport mock) - 1,600 sq ft former coffee shop; door not measured</text>
+</svg>

@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from .business_profile import BusinessProfile, Requirements
 
 Status = Literal["PASS", "RISK", "UNKNOWN"]
+EvidenceSource = Literal["costar", "matterport", "vexcel", "requirements", "jurisdiction"]
+# Evidence from these sources counts as "observed" for criteria with evidence_required: true.
+OBSERVED_SOURCES = frozenset({"costar", "matterport", "vexcel"})
 
 
 class CostRange(BaseModel):
@@ -28,7 +31,7 @@ class Evidence(BaseModel):
 
     key: str
     value: Any
-    source: str  # costar | matterport | vexcel | requirements
+    source: EvidenceSource
     note: str | None = None
     confidence: float | None = None
     box: list[float] | None = None  # normalized [x, y, w, h] overlay on the source image
@@ -55,6 +58,15 @@ class ComplianceStatus(BaseModel):
     source: str = ""
 
 
+class Media(BaseModel):
+    """Image / tour links for a property. Evidence boxes overlay aerial_url (vexcel) or floor_plan_url (matterport)."""
+
+    aerial_url: str | None = None
+    floor_plan_url: str | None = None
+    matterport_embed_url: str | None = None
+    image_url: str | None = None
+
+
 class AnalysisResult(BaseModel):
     property_id: str
     address: str
@@ -73,8 +85,9 @@ class AnalysisResult(BaseModel):
     compliance: dict[str, ComplianceStatus]
     criteria_results: list[CriterionResult]
     questions_for_landlord: list[str]
+    landlord_request: str = Field("", description="Drafted plain-text letter asking for TI allowance / fixes")
     observations: dict[str, Evidence]
-    media: dict[str, str | None]
+    media: Media
     assumptions: list[str] = Field(default_factory=list)
 
 
@@ -84,9 +97,25 @@ class AnalyzeRequest(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
+    analysis_id: str = Field(..., description="uuid4 hex; use with GET /api/v1/analyses/{id}")
+    created_at: str = Field(..., description="ISO-8601 UTC timestamp")
     business_type: str
     requirements: Requirements
     ranking_basis: str
     results: list[AnalysisResult]
-    mode: dict[str, str]
+    mode: dict[str, str] = Field(..., description="costar/matterport/vexcel: mock|live, parser: regex|claude")
     disclaimer: str
+
+
+class AnalysisSummary(BaseModel):
+    """One row of GET /api/v1/analyses."""
+
+    analysis_id: str
+    created_at: str
+    business_type: str
+    business_label: str
+    city: str
+    state: str
+    property_count: int
+    top_property_id: str | None = None
+    top_address: str | None = None

@@ -157,3 +157,20 @@
   thresholds: {}
   business_types: ["ALL"]
   applicable_jurisdictions: ["ALL"]
+
+# Added via prompts/scale-criteria.md — config only; evaluator `check_window_visibility` in
+# app/services/evaluators.py. Below min_area -> RISK (scored 0); no window data -> ignored.
+- id: "window_visibility"
+  description: "Restaurant windows visible from street"
+  domain: "marketing"
+  weight: 5
+  hard_block: false
+  evaluator: "check_window_visibility"
+  required_inputs: ["window_area"]
+  missing_data_policy: "ignore"
+  evidence_required: false
+  source: "Business importance (street visibility drives walk-in traffic)"
+  thresholds:
+    min_area: 10            # sq ft of street-facing glass
+  business_types: ["restaurant"]
+  applicable_jurisdictions: ["ALL"]

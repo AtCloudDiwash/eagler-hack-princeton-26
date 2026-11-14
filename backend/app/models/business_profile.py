@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -23,7 +25,7 @@ class Requirements(BaseModel):
     capacity_unit: str
     occupant_load: int
     parking_required: int
-    parking_source: str = Field(..., description="'user' if stated, otherwise 'guideline'")
+    parking_source: Literal["user", "guideline"] = Field(..., description="'user' if stated, otherwise 'guideline'")
     bathrooms_required: int
     min_sqft: int | None = None
     max_sqft: int | None = None

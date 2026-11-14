@@ -12,7 +12,7 @@
     "ti_allowance_per_sqft": 10,
     "latitude": 30.2672,
     "longitude": -97.7431,
-    "image_url": "/images/property-123.jpg",
+    "image_url": "/static/properties/property-123.svg",
     "matterport_url": null,
     "available": true
   },
@@ -29,7 +29,7 @@
     "ti_allowance_per_sqft": 0,
     "latitude": 30.2621,
     "longitude": -97.7225,
-    "image_url": "/images/property-456.jpg",
+    "image_url": "/static/properties/property-456.svg",
     "matterport_url": null,
     "available": true
   },
@@ -46,7 +46,7 @@
     "ti_allowance_per_sqft": 15,
     "latitude": 30.2705,
     "longitude": -97.7420,
-    "image_url": "/images/property-789.jpg",
+    "image_url": "/static/properties/property-789.svg",
     "matterport_url": null,
     "available": true
   },
@@ -63,7 +63,7 @@
     "ti_allowance_per_sqft": 5,
     "latitude": 30.2559,
     "longitude": -97.7203,
-    "image_url": "/images/property-321.jpg",
+    "image_url": "/static/properties/property-321.svg",
     "matterport_url": null,
     "available": true
   }

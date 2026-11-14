@@ -16,3 +16,4 @@ backend/.env.local
 # General
 .DS_Store
 *.log
+backend/.pytest_cache/
