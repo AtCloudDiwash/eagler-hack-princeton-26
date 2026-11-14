@@ -7,8 +7,41 @@ import { LiveDot } from "../ui/LiveDot";
  * Image with absolutely positioned evidence boxes. Boxes are normalized, so percentages keep them
  * aligned at any rendered size. A building footprint is drawn dashed and beneath the other boxes,
  * with a visible "Building footprint" tag.
+ *
+ * frame="square" reserves a fixed 1:1 box (live Vexcel orthos are 800x800) so nothing shifts when the
+ * image loads. The image and its boxes sit in an inner layer that follows the image's own aspect and
+ * is centred in the square, so non-square images (4:3 placeholder SVGs) letterbox without distortion
+ * and the percentage boxes stay aligned to the picture rather than to the frame.
  */
 export function OverlayImage({
+  src,
+  alt,
+  evidence,
+  placeholder,
+  frame = "natural",
+}: {
+  src: string | null;
+  alt: string;
+  evidence: BoxedEvidence[];
+  placeholder: string;
+  frame?: "natural" | "square";
+}) {
+  const layer = <OverlayLayer src={src} alt={alt} evidence={evidence} placeholder={placeholder} />;
+  if (frame === "square") {
+    return (
+      <div
+        data-testid="overlay-frame"
+        className="relative flex aspect-square items-center overflow-hidden rounded-lg border border-line bg-navy-900"
+      >
+        <div className="relative w-full">{layer}</div>
+      </div>
+    );
+  }
+  return <div className="relative overflow-hidden rounded-lg border border-line bg-navy-900">{layer}</div>;
+}
+
+/** The image plus its absolutely positioned boxes; must be wrapped in a `relative` box the image sizes. */
+function OverlayLayer({
   src,
   alt,
   evidence,
@@ -20,7 +53,7 @@ export function OverlayImage({
   placeholder: string;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-lg border border-line bg-navy-900">
+    <>
       <MediaImage src={src} alt={alt} fit="natural" placeholder={placeholder} />
       {src &&
         evidence.map((item, index) => {
@@ -45,7 +78,7 @@ export function OverlayImage({
             </div>
           );
         })}
-    </div>
+    </>
   );
 }
 

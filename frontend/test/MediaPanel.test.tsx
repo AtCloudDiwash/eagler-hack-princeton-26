@@ -128,3 +128,13 @@ describe("parking source label", () => {
     expect(screen.getByText("Parking (city code)")).toBeInTheDocument();
   });
 });
+
+describe("MediaPanel aerial frame", () => {
+  it("reserves a square frame for the top-down aerial (live Vexcel orthos are 800x800)", () => {
+    render(<MediaPanel result={liveResult} />);
+    const image = screen.getByRole("img", { name: `Aerial view of ${liveResult.address}` });
+    const frame = screen.getByTestId("overlay-frame");
+    expect(frame).toHaveClass("aspect-square");
+    expect(frame).toContainElement(image);
+  });
+});

@@ -45,7 +45,13 @@ export function AerialPanel({ result }: { result: AnalysisResult }) {
   }
 
   const topDown = (
-    <OverlayImage src={aerialUrl} alt={`Aerial view of ${result.address}`} evidence={evidence} placeholder="No aerial image" />
+    <OverlayImage
+      src={aerialUrl}
+      alt={`Aerial view of ${result.address}`}
+      evidence={evidence}
+      placeholder="No aerial image"
+      frame="square"
+    />
   );
 
   return (
@@ -101,8 +107,8 @@ export function AerialPanel({ result }: { result: AnalysisResult }) {
             {topDown}
           </div>
           <div role="tabpanel" id={panelId("angled")} aria-labelledby={tabId("angled")} hidden={activeView !== "angled"}>
-            {/* Fixed 4:3 frame so switching tabs doesn't shift the layout; the whole photo stays visible. */}
-            <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-line bg-navy-900">
+            {/* Same square frame as the top-down view so switching tabs doesn't shift the layout; the whole photo stays visible. */}
+            <div className="relative aspect-square overflow-hidden rounded-lg border border-line bg-navy-900">
               <MediaImage src={obliqueUrl} alt={`Angled aerial view of ${result.address}`} fit="contain" placeholder="No angled image" />
             </div>
             <p className="mt-1 text-xs text-ink-muted">Overlays are drawn on the top-down view.</p>

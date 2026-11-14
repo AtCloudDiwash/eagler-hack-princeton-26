@@ -60,6 +60,16 @@ export interface Property {
   image_url: string | null;
   matterport_url: string | null;
   available: boolean;
+  /**
+   * Where the listing came from: "costar" (live API) or "sample" (real building, but rent, size and
+   * previous use are illustrative until CoStar listings are connected). Optional: older backends omit it.
+   */
+  listing_source?: string | null;
+  /**
+   * Recorded use-restriction tags disclosed with the listing (e.g. "no_food_service").
+   * null/absent = listing says nothing; [] = listing discloses none.
+   */
+  use_restrictions?: string[] | null;
 }
 
 export interface BusinessProfile {

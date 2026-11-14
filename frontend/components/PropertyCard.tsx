@@ -1,10 +1,14 @@
 "use client";
 
-import { CheckIcon } from "@heroicons/react/20/solid";
+import { CheckIcon, ExclamationTriangleIcon } from "@heroicons/react/20/solid";
 import { formatCurrency, formatRent, formatSqft, orNA } from "@/lib/format";
 import type { Property } from "@/lib/types";
 import { MediaImage } from "./MediaImage";
 import { Badge } from "./ui/Badge";
+import { InfoTip } from "./ui/InfoTip";
+
+export const SAMPLE_LISTING_NOTE =
+  "Real building; rent, size and previous use are illustrative until CoStar listings are connected.";
 
 interface PropertyCardProps {
   property: Property;
@@ -23,6 +27,25 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** "no_food_service" -> "no food service" (tags are lower-case phrases, so keep them lower-case). */
+function formatRestriction(tag: string): string {
+  return tag.replace(/[_-]+/g, " ").trim();
+}
+
+/** "Sample listing" badge with an explanatory tooltip (listing_source === "sample"). */
+export function SampleListingBadge() {
+  return (
+    <span data-testid="sample-listing-badge">
+      <Badge tone="neutral">
+        <InfoTip label="About sample listings" align="start">
+          {SAMPLE_LISTING_NOTE}
+        </InfoTip>
+        Sample listing
+      </Badge>
+    </span>
+  );
+}
+
 /** One listing on the selection page. The whole card toggles selection (via its checkbox label). */
 export function PropertyCard({ property, selected, onToggle }: PropertyCardProps) {
   const ti =
@@ -30,6 +53,8 @@ export function PropertyCard({ property, selected, onToggle }: PropertyCardProps
       ? "N/A"
       : `${formatCurrency(property.ti_allowance_per_sqft)}/sq ft`;
   const inputId = `select-${property.id}`;
+  const isSample = property.listing_source === "sample";
+  const restrictions = (property.use_restrictions ?? []).map(formatRestriction).filter(Boolean);
 
   return (
     <label
@@ -66,8 +91,21 @@ export function PropertyCard({ property, selected, onToggle }: PropertyCardProps
             <p className="text-sm text-ink-muted">
               {property.city}, {property.state} {property.zip}
             </p>
+            {isSample && (
+              <div className="mt-1.5">
+                <SampleListingBadge />
+              </div>
+            )}
           </div>
         </div>
+        {restrictions.length > 0 && (
+          <p data-testid="use-restriction" className="flex items-start gap-1.5 text-xs font-medium text-risk">
+            <ExclamationTriangleIcon className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>
+              {restrictions.length === 1 ? "Use restriction" : "Use restrictions"}: {restrictions.join(", ")}
+            </span>
+          </p>
+        )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
           <Stat label="Size" value={formatSqft(property.size_sqft)} />
           <Stat label="Rent" value={formatRent(property.rent)} />
