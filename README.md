@@ -1,111 +1,159 @@
 # Turnkey Matchmaker
 
-Turnkey Matchmaker is a **HackPrinceton 2026** project that helps small business owners evaluate and choose commercial spaces by comparing the **total cost to open** (rent + renovation + compliance) rather than just monthly rent. The system uses property data from CoStar, 3D tours from Matterport, and aerial imagery from Vexcel to analyze spaces. A compliance agent checks zoning, ADA, and building-code issues for the chosen business type (e.g. restaurant), flagging any risks or requirements.
+**HackPrinceton Fall 2026.** Turnkey Matchmaker helps small business owners pick a commercial space by
+comparing the **total cost to open** (fit-out + rent during build-out + first-year rent) instead of
+the asking rent alone. It combines listing data (CoStar), interior scans (Matterport) and aerial
+imagery (Vexcel), runs a config-driven compliance/criteria agent (zoning, parking, ADA, kitchen,
+grease interceptor, restrooms, HVAC, electrical, sprinklers, storefront visibility) and returns a
+ranked comparison with cost ranges, citations, evidence overlays and a drafted landlord letter.
 
-## Features
+Everything runs offline in **mock mode** by default; no API keys are needed for the demo.
 
-- **Property Search & Filtering**: Enter business type and requirements (e.g. "4-chair dental clinic", location, parking needs).
-- **Space Analysis**: Retrieve available spaces (using mock CoStar data) and analyze interior (Matterport) and exterior (aerial) features.
-- **Fit-out Estimation**: Rule-based engine calculates rough renovation costs (HVAC, plumbing, etc.) and highlights missing infrastructure.
-- **Compliance Check**: Automated checks for local regulations (ADA accessibility, zoning parking, restaurant health, etc.) with clear PASS/RISK/UNKNOWN statuses.
-- **Ranked Recommendations**: Shows a scorecard comparing total cost-to-open for each property, with cost breakdown and uncertainties.
-- **Landlord Request Drafting**: Generates a sample letter to the landlord listing needed improvements and tenant improvement (TI) allowance.
+## Features (as built)
 
-## Tech Stack
+- **Business profile form**: business type (from `backend/config/business_types.yaml`), plain-English
+  requirements ("40 seats, kitchen needed, 2 bathrooms, 20 parking spaces"), city/ZIP and state.
+- **Requirements parser agent**: deterministic regex parser; optional Claude parser when
+  `ANTHROPIC_API_KEY` is set (falls back to regex on any error). Unstated needs are filled from the
+  business profile and listed as assumptions.
+- **Candidate spaces**: CoStar listings (4 Austin, TX fixtures) with photo, size, rent, zoning, TI allowance.
+- **Compliance / criteria agent**: every criterion in `backend/criteria.yaml` returns
+  PASS / RISK / UNKNOWN with notes, a source citation and evidence. Hard-block criteria (zoning)
+  disqualify a space.
+- **Deterministic cost engine**: cost bands from `backend/config/costs.yaml`, ranges only (no ML),
+  with general conditions, contingency, permits, TI allowance and build-out months.
+- **Ranking**: spaces that clear the minimum fit score (`ranking.min_score`, default 25) rank by
+  first-year cost, then "weak fit" spaces, then disqualified ones. Ties are broken by score.
+- **Analysis report**: side-by-side table, per-property cost breakdown, criteria grouped by domain,
+  aerial and floor-plan overlays, observations with confidence, assumptions, landlord questions, and
+  a copyable landlord request letter.
+- **Run history**: every analysis is stored in SQLite and has a shareable URL `/analysis/{id}`;
+  recent runs are listed on the home page.
+- **Config-only scaling**: add or re-weight criteria in `criteria.yaml`. The backend reloads it on
+  the next request and the UI renders any number of criteria.
 
-- **Frontend**: Next.js (React, TypeScript), Tailwind CSS (dark navy theme with teal/cyan accent), Shadcn UI components.
-- **Backend**: Python FastAPI, Pydantic models, SQLite (using SQLModel) for data.
-- **Data Providers**: CoStar, Matterport, Vexcel (integrated via APIs or mock data).
-- **AI/Agents**: The system uses LLM agents (Claude/Anthropic) to process user input and evidence, but core logic (cost calculations, rule checks) is deterministic.
-- **Environment**: Docker optional. `.env` file for API keys.
-- **Testing**: Pytest for backend, Jest/React Testing Library for frontend.
-- **Deployment**: Can run locally or deployed to AWS (optional).
+## Tech stack
 
-## Getting Started
+| Layer | Stack |
+|---|---|
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 (`@theme` tokens in `app/globals.css`), Heroicons, hand-rolled UI components |
+| Backend | Python 3.12, FastAPI, Pydantic v2, SQLModel/SQLite, PyYAML, httpx, optional `anthropic` SDK |
+| Tests | pytest (backend), Vitest + React Testing Library (frontend), Playwright E2E (`npm run e2e`) |
 
-1. **Clone the repository** (or generate with Claude Code):
-   ```bash
-   git clone https://github.com/your-org/turnkey-matchmaker.git
-   cd turnkey-matchmaker
-   ```
-2. **Backend**:
-   - Create `backend/.env` from `.env.example` and fill in your API keys.
-   - Install dependencies and run the server:
-     ```bash
-     cd backend
-     pip install -r requirements.txt
-     uvicorn app.main:app --reload
-     ```
-   - The backend runs on `http://localhost:8000` with API docs at `/docs`.
-3. **Frontend**:
-   - Navigate to `frontend` and install dependencies:
-     ```bash
-     cd frontend
-     npm install
-     npm run dev
-     ```
-   - The frontend runs on `http://localhost:3000`.
-4. **Using the App**:
-   - Open `http://localhost:3000` in your browser.
-   - Enter a business profile (e.g. "Open a 40-seat restaurant in Austin, TX, with a kitchen and bathroom requirements").
-   - The app will display a comparison of candidate spaces with cost and compliance info.
+## Quickstart
 
-## Folder Structure
+Prerequisites: Python 3.10+ (built with 3.12) and Node 20+ (built with 24).
+
+**Backend** (http://localhost:8000, interactive docs at `/docs`):
+
+```bash
+cd backend
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+cp ../.env.example .env          # optional; placeholders mean mock mode
+venv/bin/uvicorn app.main:app --reload
+```
+
+**Frontend** (http://localhost:3000), in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend calls relative URLs; `next.config.ts` proxies `/api/v1`, `/static` and `/health` to
+`API_ORIGIN` (default `http://localhost:8000`). To point it elsewhere, set `API_ORIGIN` in
+`frontend/.env.local`.
+
+**Try it:** choose *Restaurant*, click **Use example** (or type "40 seats, kitchen needed, 2 bathrooms,
+20 parking spaces"), keep *Austin, TX*, click **Find spaces**, then **Select all** and **Compare 4 selected**.
+Expected result: 456 Oak Avenue ranks #1 and 789 Congress Avenue is disqualified on zoning. The full script is in
+[docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md).
+
+Quick API check:
+
+```bash
+curl localhost:8000/health
+curl -X POST localhost:8000/api/v1/analyze -H 'Content-Type: application/json' -d '{
+  "business_profile": {"type": "restaurant", "details": "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces", "city": "Austin", "state": "TX"},
+  "property_ids": ["property-123", "property-456", "property-789", "property-321"]}'
+```
+
+## Tests
+
+```bash
+cd backend && venv/bin/pytest -q     # 88 tests
+cd frontend && npm test              # Vitest, 28 tests
+cd frontend && npm run lint          # ESLint
+cd frontend && npm run e2e           # Playwright, 4 tests: demo flow + error state on desktop and 375px mobile
+```
+
+See [docs/TEST_PLAN.md](docs/TEST_PLAN.md) for what each suite covers and the manual checks.
+
+## Configuration
+
+| File | What it controls |
+|---|---|
+| `backend/criteria.yaml` | Criteria registry: weights, hard blocks, evaluators, missing-data policies, citations |
+| `backend/config/costs.yaml` | Cost bands, soft costs, ranking horizon and minimum fit score |
+| `backend/config/business_types.yaml` | Business profiles (capacity unit, occupant load, parking guideline, HVAC, electrical, sprinkler trigger) |
+| `backend/config/jurisdictions.yaml` | Local rules (Austin zoning use table, parking note, plumbing code) with a generic default |
+| `.env.example` → `backend/.env` | API keys, mock mode, DB path, CORS. See [docs/SECURITY_AND_ENV.md](docs/SECURITY_AND_ENV.md) |
+
+All YAML files are re-read when they change on disk, so no restart is needed.
+
+## Repository layout
 
 ```
-turnkey-matchmaker/
-├── backend/               # FastAPI backend
+.
+├── .env.example               # every env var the code reads (placeholders)
+├── CLAUDE.md                  # project rules for Claude Code
+├── prompts/                   # phase prompts 00-05 + scale-criteria
+├── docs/                      # design docs (index below)
+├── backend/
+│   ├── requirements.txt  pytest.ini
+│   ├── criteria.yaml          # criteria registry
+│   ├── config/                # business_types.yaml, costs.yaml, jurisdictions.yaml
+│   ├── fixtures/              # properties.json (CoStar mock), observations.json (Matterport/Vexcel mock)
+│   ├── static/                # placeholder SVGs: aerials/, floorplans/, properties/
 │   ├── app/
-│   ├── analysis/          # analysis engine modules
-│   ├── models/            # Pydantic and SQLModel schemas
-│   ├── providers/         # API adapter modules for CoStar, Matterport, Vexcel, etc.
-│   ├── services/          # Core business logic (cost engine, compliance checks)
-│   ├── main.py            # FastAPI app entrypoint
-│   └── ...                
-├── frontend/              # Next.js frontend
-│   ├── pages/
-│   ├── components/
-│   ├── public/            # static assets
-│   └── ...
-├── prompts/               # Claude Code instruction prompts
-│   ├── 00-bootstrap.md
-│   ├── 01-backend-skeleton.md
-│   ├── 02-agent-workflow.md
-│   ├── 03-frontend-skeleton.md
-│   ├── 04-integrations.md
-│   ├── 05-demo-polish.md
-│   └── scale-criteria.md
-├── .env.example
-├── .gitignore
-├── criteria.yaml          # initial criteria registry
-└── docs/                  # Additional documentation files (see below)
-    ├── PROJECT_BRIEF.md
-    ├── PRD.md
-    ├── ARCHITECTURE.md
-    ├── BACKEND.md
-    ├── API_CONTRACT.md
-    ├── DATA_MODELS.md
-    ├── AGENT_ORCHESTRATION.md
-    ├── COMPLIANCE_AGENT.md
-    ├── COMPLIANCE_RULE_SOURCES.md
-    ├── VISION_OVERLAYS.md
-    ├── COST_ENGINE.md
-    ├── CRITERIA_REGISTRY.md
-    ├── FRONTEND_DESIGN.md
-    ├── INTEGRATIONS.md
-    ├── SECURITY_AND_ENV.md
-    ├── SPONSOR_STRATEGY.md
-    ├── TEST_PLAN.md
-    ├── DEMO_RUNBOOK.md
-    ├── BUILD_PLAN.md
-    └── DECISIONS_AND_RISKS.md
+│   │   ├── main.py            # FastAPI app, CORS, routers, /static mount
+│   │   ├── config.py          # env settings + hot-reloading YAML loader
+│   │   ├── db.py              # SQLModel run history (analysis_runs)
+│   │   ├── models/            # analysis_result, business_profile, criterion, property
+│   │   ├── providers/         # costar_provider, matterport_provider, vexcel_provider, _fixtures
+│   │   ├── routers/           # health, business_types, criteria, properties, analyze, analyses
+│   │   └── services/          # requirements_parser, criteria_manager, evaluators,
+│   │                          # compliance_engine, cost_engine, scoring, agent_orchestrator
+│   └── tests/                 # pytest suites + conftest.py
+└── frontend/
+    ├── next.config.ts         # rewrites to API_ORIGIN
+    ├── vitest.config.mts
+    ├── app/                   # layout, page (home), properties/, analysis/[id]/
+    ├── components/            # form, cards, tables, analysis/*, ui/*
+    ├── lib/                   # api.ts, types.ts, format.ts, overlay.ts, useAsync.ts
+    └── test/                  # Vitest specs + fixtures
 ```
 
-## Authors
+## Documentation
 
-- Hackathon Team: [Name1], [Name2], ...
-- Claude Code (AI) for code scaffolding and documentation.
+| Doc | Topic |
+|---|---|
+| [PROJECT_BRIEF](docs/PROJECT_BRIEF.md), [PRD](docs/PRD.md) | Problem, users, requirements |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | Modules and data flow |
+| [API_CONTRACT](docs/API_CONTRACT.md) | REST endpoints and shapes (source of truth) |
+| [BACKEND](docs/BACKEND.md), [DATA_MODELS](docs/DATA_MODELS.md) | Backend files and schemas |
+| [AGENT_ORCHESTRATION](docs/AGENT_ORCHESTRATION.md) | The five-step analysis pipeline |
+| [COMPLIANCE_AGENT](docs/COMPLIANCE_AGENT.md), [COMPLIANCE_RULE_SOURCES](docs/COMPLIANCE_RULE_SOURCES.md) | Evaluators, statuses, citations |
+| [COST_ENGINE](docs/COST_ENGINE.md) | Cost formula and worked example |
+| [CRITERIA_REGISTRY](docs/CRITERIA_REGISTRY.md) | Registry fields, adding criteria and evaluators |
+| [FRONTEND_DESIGN](docs/FRONTEND_DESIGN.md), [VISION_OVERLAYS](docs/VISION_OVERLAYS.md) | Routes, components, theme, overlays |
+| [INTEGRATIONS](docs/INTEGRATIONS.md), [SECURITY_AND_ENV](docs/SECURITY_AND_ENV.md) | Providers, mock vs live, env vars |
+| [TEST_PLAN](docs/TEST_PLAN.md), [DEMO_RUNBOOK](docs/DEMO_RUNBOOK.md) | Testing and the live demo |
+| [BUILD_PLAN](docs/BUILD_PLAN.md), [DECISIONS_AND_RISKS](docs/DECISIONS_AND_RISKS.md), [SPONSOR_STRATEGY](docs/SPONSOR_STRATEGY.md) | Status, trade-offs, sponsors |
 
-## License
+## Disclaimer
 
-Open source for educational purposes. See `LICENSE` for details.
+Cost figures are preliminary planning ranges from fixed bands, not contractor quotes. Compliance
+results are decision support only; verify with the city and a licensed professional.

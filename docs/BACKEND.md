@@ -1,70 +1,99 @@
-# Backend Design
+# Backend
 
-The backend is built with **Python 3.10+** and **FastAPI**. It exposes versioned REST APIs under `/api/v1/...`. Pydantic is used for request/response models.
+Python 3.12 (3.10+ works), FastAPI, Pydantic v2, SQLModel on SQLite. All business endpoints are
+under `/api/v1`. Run from `backend/`: `venv/bin/uvicorn app.main:app --reload`.
 
-### Directory Structure (`backend/`)
+## Directory structure (`backend/`)
 
-- `app/main.py`: Entry point. Sets up FastAPI app, middleware, and includes routers.
-- `app/routers/`: Contains API route definitions.
-  - `analyze.py`: Endpoint for `/api/v1/analyze` (POST) – analyze a user query.
-  - `properties.py`: Endpoint for `/api/v1/properties` (GET) – list/filter properties.
-  - `compliance.py`: Endpoint for `/api/v1/compliance` (GET) – (optional) checks compliance for a property.
-- `app/models/`: Pydantic/SQLModel definitions.
-  - `BusinessProfile.py`: input schema (business type, requirements).
-  - `Property.py`: schema for property metadata (location, size, etc.).
-  - `AnalysisResult.py`: output schema (scores, costs, compliance flags).
-  - `Criterion.py`: schema for scoring criteria.
-- `app/providers/`: Adapters to external data.
-  - `costar_provider.py`: Stub for CoStar API (returns hard-coded or JSON fixtures).
-  - `matterport_provider.py`: Returns sample Matterport links or images.
-  - `vexcel_provider.py`: Returns static aerial images or processed data.
-  - `geocode_provider.py`: (Optional) Converts address to coordinates.
-- `app/services/`: Core logic.
-  - `agent_orchestrator.py`: Implements the sequence of analysis steps.
-  - `cost_engine.py`: Contains functions to compute cost estimates from identified issues.
-  - `compliance_engine.py`: Contains functions to check rules and return PASS/RISK/UNKNOWN.
-  - `criteria_manager.py`: Loads and applies criteria weights to generate scores.
-  - `utils.py`: Helper functions (e.g. unit conversions, logging).
-- `app/analysis/`: Contains any long-running analysis jobs or scripts (if needed).
-- `app/config.py`: Reads `criteria.yaml`, environment variables, etc.
-- `backend/.env.example`: Example environment file listing all needed keys.
-- `backend/requirements.txt`: Python dependencies (FastAPI, Uvicorn, Pydantic, SQLModel, requests, Pillow, etc.)
-- `backend/tests/`: Pytest test cases for backend modules.
+```
+backend/
+├── requirements.txt         pinned deps (fastapi, uvicorn, pydantic, PyYAML, python-dotenv,
+│                            sqlmodel, SQLAlchemy, httpx, anthropic, pytest)
+├── pytest.ini               testpaths=tests, pythonpath=.
+├── criteria.yaml            criteria registry (CRITERIA_PATH overrides)
+├── config/
+│   ├── business_types.yaml  restaurant, dental_clinic profiles
+│   ├── costs.yaml           cost item bands, soft costs, ranking settings, disclaimer
+│   └── jurisdictions.yaml   default + austin-tx rules (zoning use table, parking note, plumbing code)
+├── fixtures/
+│   ├── properties.json      4 mock CoStar listings (Austin, TX)
+│   └── observations.json    mock Matterport ("interior") and Vexcel ("aerial") facts per property
+├── static/                  placeholder SVGs served at /static: aerials/, floorplans/, properties/
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── db.py
+│   ├── models/              analysis_result.py, business_profile.py, criterion.py, property.py
+│   ├── providers/           _fixtures.py, costar_provider.py, matterport_provider.py, vexcel_provider.py
+│   ├── routers/             health.py, business_types.py, criteria.py, properties.py, analyze.py, analyses.py
+│   └── services/            requirements_parser.py, criteria_manager.py, evaluators.py,
+│                            compliance_engine.py, cost_engine.py, scoring.py, agent_orchestrator.py
+└── tests/                   conftest.py + 7 test modules (see TEST_PLAN.md)
+```
 
-### API Endpoints (see API_CONTRACT.md)
+## Endpoints
 
-- **GET** `/api/v1/properties?business=<type>&city=<city>`: Returns candidate properties.
-- **POST** `/api/v1/analyze`: Accepts user requirements + selected property IDs; returns analysis report.
+| Method | Path | Router | Notes |
+|---|---|---|---|
+| GET | `/health` | `health.py` | `{status, mode: {costar, matterport, vexcel, parser}}` |
+| GET | `/api/v1/business-types` | `business_types.py` | From `business_types.yaml` |
+| GET | `/api/v1/criteria?business_type=&city=&state=` | `criteria.py` | Filtered registry; unknown type → 400 |
+| GET | `/api/v1/properties?business_type=&city=&state=&min_size=&max_size=&budget=` | `properties.py` | `city` matches name or ZIP; `budget` = max monthly rent |
+| POST | `/api/v1/analyze` | `analyze.py` | Runs the pipeline and stores the run |
+| GET | `/api/v1/analyses?limit=20` | `analyses.py` | History, newest first (`limit` 1-100) |
+| GET | `/api/v1/analyses/{id}` | `analyses.py` | Stored `AnalyzeResponse` as originally returned, re-validated so fields added later get defaults (`min_score` 0, `weak_fit` false); 404 if unknown |
 
-### Workflow in Code
+Shapes: [API_CONTRACT.md](API_CONTRACT.md).
 
-1. **BusinessProfile Parsing**: 
-   - The backend receives a JSON from the frontend. Validate it using a Pydantic model (`BusinessProfile`). If invalid, return 400.
-2. **Fetch Properties**: 
-   - Call `costar_provider.search_properties(profile)`. In MVP, this reads from a local JSON fixture or in-memory list and filters by city and size.
-3. **Analyze Property**:
-   - For each property:
-     - Load 3D tour (or static image) via `matterport_provider`.
-     - Load aerial image via `vexcel_provider`.
-     - Detect visible features (placeholder functions; real image analysis is optional).
-     - Run `cost_engine.estimate(...)` with a list of detected missing features.
-     - Run `compliance_engine.check(...)` with location and business type.
-   - Collect results.
-4. **Scoring**:
-   - Use `criteria_manager.apply_criteria(profile, properties, analysis_results)`:
-     - Load `criteria.yaml` registry.
-     - Compute a weighted score for each property.
-     - Mark any `hard_block` failures that exclude a property.
-5. **Response**:
-   - Construct an `AnalysisResult` containing:
-     - Observations (rooms, fixtures).
-     - Compliance flags.
-     - Cost breakdown.
-     - Overall score.
-     - Any recommended landlord questions.
-   - Return JSON to frontend.
+## Modules and key functions
 
-### Caching and Mock Mode
+### `app/config.py`
+- `settings` (`Settings`): API keys (placeholders starting with `your_` count as unset), base URLs,
+  `provider_timeout_seconds`, `database_url` (relative SQLite paths resolved against `backend/`),
+  `force_mock` (`USE_MOCK_DATA`, default true), `criteria_path`, `cors_origins`, `anthropic_model`.
+- `settings.provider_mode(key)`: `"live"` only when mock mode is off and that key is set.
+- `settings.parser_mode`, `settings.mode_summary`: what `/health` reports.
+- `load_yaml(path)`: re-reads a YAML file only when its mtime/size changes (hot reload).
+- `business_types()`, `cost_config()`, `jurisdiction_for(city, state)` (`"<city>-<state>"` key,
+  merged over `default`; `rules["key"]` tells which matched).
 
-- Use `functools.lru_cache` or a simple dict to cache results of expensive calls (e.g., repeated analysis of same property).
-- Provide a `--mock` flag or config to force using local sample data. Mock mode uses files in `backend/fixtures/`.
+### `app/db.py`
+- `AnalysisRun` table `analysis_runs` (see [DATA_MODELS.md](DATA_MODELS.md)).
+- `init_db()` (called in the app lifespan), `save_run(response)`, `list_runs(limit)`, `get_run(id)`.
+
+### `app/providers/`
+- `costar_provider`: `all_properties()`, `search_properties(city, state, min_size, max_size, max_rent)`,
+  `get_property(id)`, `map_costar_listing(row)` (tolerant field mapping for live payloads).
+- `matterport_provider`: `get_interior(prop)` → `{floor_plan_url, matterport_embed_url, observations}`;
+  `get_interior_images(property_id, matterport_url)`.
+- `vexcel_provider`: `get_aerial(prop)` → `{aerial_url, observations}`; `get_aerial_image(prop)`.
+- `_fixtures.load_fixture(name)`: cached JSON loader for `backend/fixtures/`.
+
+Mock vs live behavior: [INTEGRATIONS.md](INTEGRATIONS.md).
+
+### `app/services/`
+| Module | Key functions |
+|---|---|
+| `requirements_parser.py` | `parse_requirements(profile) -> (Requirements, "regex"\|"claude")`, `regex_extract`, `claude_extract`, `build_requirements`, `get_business` (raises `UnknownBusinessType`), `occupant_load`, `restrooms_for` |
+| `criteria_manager.py` | `load_criteria(path=None)` (validates, rejects duplicates, raises `CriteriaConfigError`), `applicable_criteria(business_type, city, state)`, `get_criterion`, `criteria_by_id` |
+| `evaluators.py` | `@evaluator(name, fallback=None)` registry, `get_evaluator`, `registered_evaluators`; `EvalContext`, `EvalOutcome`, `CostNeed`; the 11 evaluators listed in [COMPLIANCE_AGENT.md](COMPLIANCE_AGENT.md) |
+| `compliance_engine.py` | `run_compliance(...) -> ComplianceReport`, `evaluate_criterion`, `build_inputs`; simple helpers `check_parking`, `check_ada` |
+| `cost_engine.py` | `estimate(needs, prop, business) -> CostEstimate`, `price_item`, `merge_needs`; helpers `estimate_cost`, `estimate_kitchen_cost` |
+| `scoring.py` | `weighted_score(results)`, `STATUS_SCORE` |
+| `agent_orchestrator.py` | `analyze_properties(profile, properties)`, `analyze_property`, `gather_observations`, `landlord_questions`, `draft_landlord_request`, `rank_results` |
+
+Pipeline walkthrough: [AGENT_ORCHESTRATION.md](AGENT_ORCHESTRATION.md).
+
+## Error handling
+
+- Pydantic validation → 422 (e.g. empty `property_ids`, missing `city`, `state` shorter than 2 chars).
+- Unknown business type → 400; unknown property or analysis id → 404.
+- Malformed `criteria.yaml` → 500 `{"detail": "Criteria registry error: criteria.yaml entry #3 (id 'x') is invalid: ..."}`.
+- An evaluator that raises, or an `evaluator` name that is not registered, produces an UNKNOWN
+  result with a note. It never fails the request.
+- Live provider errors are logged and fall back to fixtures.
+
+## Logging
+
+On startup the app logs the provider/parser modes and the DB URL (keys are never logged). Provider
+and Claude fallbacks log a warning.

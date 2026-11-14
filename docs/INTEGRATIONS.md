@@ -1,53 +1,91 @@
 # Integrations
 
-We integrate with the following external data services. For hackathon, we'll use mock data or simple HTTP calls if possible.
+Three data providers live in `backend/app/providers/`. **Mock mode is the default**
+(`USE_MOCK_DATA=true`). A provider goes live only when `USE_MOCK_DATA=false` **and** its key is set
+(`settings.provider_mode(key)`). Any live failure (network, auth, timeout, unexpected shape) is logged
+and **falls back to the fixtures**, so the demo cannot break on an integration. `GET /health` and
+`AnalyzeResponse.mode` report each provider's mode.
 
-## CoStar API (Property Listings)
+Placeholder keys from `.env.example` (anything starting with `your_`) count as unset.
 
-- **Purpose**: Fetch property metadata (address, size, rent, location).
-- **Integration**:
-  - If CoStar provides a trial API or dataset, use it. Otherwise, include a JSON fixture (`fixtures/properties.json`) with sample listings.
-  - The backend's `costar_provider.py` should abstract the API. For now:
-    - Implement a function `search_properties(business_profile)` that reads from `fixtures/properties.json` and filters by city/state and size.
-    - If an actual CoStar endpoint exists, use `requests` to call it with `COSTAR_API_KEY` from `.env`.
-- **Data Fields**: ID, address, city, state, zip, size, rent, geocoordinates (if available), Matterport tour URL.
+## CoStar: listings (`costar_provider.py`)
 
-## Matterport API (3D Interior Tours)
+| | Mock | Live |
+|---|---|---|
+| Data | `backend/fixtures/properties.json` (4 Austin, TX listings) | `GET {COSTAR_API_BASE_URL}/listings?propertyType=retail&listingType=lease` with `Authorization: Bearer {COSTAR_API_KEY}` |
+| Mapping | Direct (`Property(**row)`) | `map_costar_listing` tolerates CoStar-style names (`listingId`, `address.streetAddress`, `availableSpaceSf`, `monthlyRent`, `zoningCode`, `tiAllowancePerSf`, `primaryPhotoUrl`, `virtualTourUrl`, ...) |
+| Env | none | `COSTAR_API_KEY`, `COSTAR_API_BASE_URL` (placeholder `https://api.costar.example/v1`; replace with the path from your CoStar developer docs), `PROVIDER_TIMEOUT_SECONDS` |
 
-- **Purpose**: Get a 3D model or snapshot of the property's interior.
-- **Integration**:
-  - Use Matterport SDK or API if you have a key (`MATTERPORT_API_KEY`). For MVP, we can embed a public demo mattertag or use a static image link.
-  - Create `matterport_provider.get_interior(property_id)` that returns an object with:
-    - `floor_plan_image_url` (static PNG or JPG of floor plan).
-    - `matterport_embed_url` (for iFrame embed) or `None`.
-    - Any metadata if available (e.g. list of rooms).
-  - If no real API, store a couple of example images in `backend/static/` and map property IDs to them.
+`search_properties(city, state, min_size, max_size, max_rent)` filters in Python: `city` matches the
+city name or the ZIP, and unavailable listings are skipped. `get_property(id)` backs `/analyze`.
 
-## Vexcel Imaging (Aerial Imagery)
+Fixture listings:
 
-- **Purpose**: High-resolution overhead images of properties.
-- **Integration**:
-  - If Vexcel has an API (`VEXCEL_API_KEY`), use it to fetch an image by coordinates.
-  - Alternatively, use a public satellite image API (e.g. Mapbox or Google Static Maps as fallback).
-  - `vexcel_provider.get_aerial(property)` should return:
-    - `image_url` or binary data of aerial.
-    - Optionally, annotation data (GPS polygons).
-  - For MVP, include sample aerial images in `backend/static/aerials/`.
-  
-## Geocoding API (Optional)
+| id | Address | Sq ft | Rent | Zoning | Previous use | TI/sq ft |
+|---|---|---|---|---|---|---|
+| property-123 | 123 Elm Street | 2,000 | $4,000 | CS-MU | Retail boutique | $10 |
+| property-456 | 456 Oak Avenue | 1,800 | $4,800 | GR | Second-generation restaurant | $0 |
+| property-789 | 789 Congress Avenue, Suite 110 | 2,200 | $3,600 | LO | Professional office | $15 |
+| property-321 | 2100 E Cesar Chavez Street | 1,600 | $4,200 | LR-V | Coffee shop | $5 |
 
-- To convert an address to lat/long for aerial fetch.
-- Could use Google Geocoding or a free API (e.g. OpenStreetMap Nominatim).
-- Define `providers/geocode.py` with function `geocode(address)` that returns lat/lng.
-- Use `GEOCODING_API_KEY` if needed.
+## Matterport: interior (`matterport_provider.py`)
 
-## Offline/Mock Mode
+| | Mock | Live |
+|---|---|---|
+| Floor plan | `observations.json` → `floor_plan_url` (SVG in `backend/static/floorplans/`) | GraphQL `POST {MATTERPORT_API_BASE_URL}` `model(id){assets{floorplans{url}}}` with basic auth (`MATTERPORT_API_KEY`). Model id is parsed from `matterport_url` (`...?m=<id>`) |
+| Interior facts | `observations.json` → `interior` block | **Still from fixtures** (automated door/fixture detection is out of scope) |
+| 3D tour | `matterport_embed_url` = listing `matterport_url` (null in fixtures, so the UI shows a "no tour" note) | same |
+| Env | none | `MATTERPORT_API_KEY`, `MATTERPORT_API_BASE_URL` (default `https://api.matterport.com/api/models/graph`) |
 
-- If any API fails or `.env` keys are missing, fall back to local data:
-  - Use flag `USE_MOCK_DATA` or check if keys are empty.
-  - The frontend should still work with mock results (`results.json`).
+Functions: `get_interior(prop)`, `get_interior_images(property_id, matterport_url)`.
 
-## API Keys and Configuration
+## Vexcel: aerial (`vexcel_provider.py`)
 
-- All keys are read from environment variables (see SECURITY_AND_ENV.md).
-- The code should handle missing keys gracefully by switching to mock.
+| | Mock | Live |
+|---|---|---|
+| Aerial image | `observations.json` → `aerial_url` (SVG in `backend/static/aerials/`) | `GET {VEXCEL_API_BASE_URL}/images/ortho?lat&lon&zoom=20&format=json` with a Bearer key; uses the returned `url`. Needs listing lat/lng |
+| Aerial facts | `observations.json` → `aerial` block (`visible_parking_count`, `hvac_tons`, with boxes) | **Still from fixtures** |
+| Env | none | `VEXCEL_API_KEY`, `VEXCEL_API_BASE_URL` (placeholder `https://api.vexcel.example/v1`) |
+
+Functions: `get_aerial(prop)`, `get_aerial_image(prop)`.
+
+## Fixture format (`backend/fixtures/observations.json`)
+
+```json
+"property-123": {
+  "floor_plan_url": "/static/floorplans/property-123.svg",
+  "aerial_url": "/static/aerials/property-123.svg",
+  "interior": { "door_width_inches": { "value": 34, "confidence": 0.85, "note": "...", "box": [0.08, 0.72, 0.06, 0.1] } },
+  "aerial":   { "visible_parking_count": { "value": 15, "confidence": 0.8, "note": "...", "box": [0.05, 0.6, 0.55, 0.3] } }
+}
+```
+
+A fact that is absent is unknown, which is how the missing-data policies get exercised (e.g.
+property-321 has no door width, property-789 no grease interceptor fact).
+
+## Anthropic Claude (optional, requirements parser)
+
+If `ANTHROPIC_API_KEY` is set, `requirements_parser.claude_extract` calls the Messages API
+(`ANTHROPIC_MODEL`, default `claude-haiku-5-5`) with a JSON-schema output format, an 8 s timeout and
+no retries. Validated fields are merged over the regex result. Any failure falls back to regex. This
+is independent of `USE_MOCK_DATA`. `/health` reports `parser: "claude"` when a key is configured, and
+`AnalyzeResponse.mode.parser` reports the parser actually used for that run.
+
+## Geocoding (not implemented)
+
+`GEOCODING_API_KEY` is read into settings but nothing uses it: the fixture listings already include
+latitude/longitude, which is all Vexcel needs. A future `geocode(address)` would fill lat/lng for live
+listings that lack them.
+
+## Switching to live
+
+```bash
+# backend/.env
+USE_MOCK_DATA=false
+COSTAR_API_KEY=...            # only the providers with keys go live
+COSTAR_API_BASE_URL=https://<real-host>/<path>
+```
+
+Restart uvicorn (env is read at startup), then check `curl localhost:8000/health`. Endpoint paths and
+field names for CoStar and Vexcel are placeholders until confirmed against sponsor docs. The mapping
+functions are the only code to adjust.

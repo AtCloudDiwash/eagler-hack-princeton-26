@@ -6,8 +6,8 @@
 
 **Key Problem:** Traditional real estate listings show rent and size, but do not reveal the hidden costs of converting a space. E.g. does the space have restaurant-grade ventilation? Enough plumbing? Suitable parking? Tenants currently spend weeks and money on architects and inspections to answer these questions.
 
-**Proposed Solution:** An AI-driven agent that:
-- Takes user requirements (e.g. "4-chair dental clinic in Austin, TX, with lab space and 18 parking spots").
+**Proposed Solution:** An agent pipeline (deterministic rules, with optional Claude for parsing free text) that:
+- Takes user requirements (e.g. "40 seats, kitchen needed, 2 bathrooms, 20 parking spaces" for a restaurant in Austin, TX; a 4-chair dental clinic also works).
 - Pulls candidate properties (from CoStar data).
 - Uses 3D tours (Matterport) and aerial images (Vexcel) to **observe** existing features (rooms, plumbing, HVAC, parking).
 - Applies rule-based logic to **infer** needed renovations (e.g. install grease hood, add parking spaces) and compliance checks (zoning, ADA, health codes).
@@ -21,3 +21,5 @@
 - Compliance risks and missing information are highlighted.
 - The system is robust, with fallbacks (e.g. offline mode if no live API).
 - Code quality is good enough for a hackathon; documentation and prompts ensure reproducibility.
+
+**Status:** MVP built. See the [README](../README.md) for features and [BUILD_PLAN.md](BUILD_PLAN.md) for phase status.

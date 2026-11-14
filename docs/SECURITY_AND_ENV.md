@@ -1,38 +1,63 @@
-# Security and Environment Configuration
+# Security and Environment
 
-### .env Files
+## Setup
 
-- Create a `.env` file in the `backend/` directory by copying `.env.example`.
-- Example content of `.env.example`:
-  ```
-  COSTAR_API_KEY=your_costar_key_here
-  MATTERPORT_API_KEY=your_matterport_key_here
-  VEXCEL_API_KEY=your_vexcel_key_here
-  GEOCODING_API_KEY=your_geocoding_key_here
-  ANTHROPIC_API_KEY=your_anthropic_key_here
-  ```
+```bash
+cd backend && cp ../.env.example .env        # backend reads backend/.env (python-dotenv)
+# optional, frontend only:
+echo "API_ORIGIN=http://localhost:8000" > frontend/.env.local
+```
 
-- The frontend Next.js app should not contain real secret keys. Only put non-sensitive configs in `NEXT_PUBLIC_` variables if needed. (E.g., `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` if used for a map tile.)
-- Add `.env` and any private key files to `.gitignore`. Only commit `.env.example` with placeholders.
+The `.env.example` placeholders (values starting with `your_`) are treated as "not set", so the
+copied file runs everything in mock mode. Env vars are read once at startup; restart uvicorn or
+`npm run dev` after changing them. YAML config changes (criteria, costs) need no restart.
 
-### API Keys
+## Variables
 
-- **CoStar**: If you have developer access, store the API key in `COSTAR_API_KEY`. Otherwise, leave blank to use mocks.
-- **Matterport**: `MATTERPORT_API_KEY` for embedding (if required). For static images, may not need it.
-- **Vexcel Imaging**: `VEXCEL_API_KEY` if using their API.
-- **Geocoding**: `GEOCODING_API_KEY` (e.g. Google or Mapbox) if performing live geocode.
-- **Anthropic (Claude)**: `ANTHROPIC_API_KEY` if using Claude for any NLP. (This project uses rules, so this may not be needed.)
+Verified against `backend/app/config.py` (`os.getenv`) and `frontend/next.config.ts`
+(`process.env`). No other env vars are read.
 
-### Security Practices
+| Name | Used by | Default | Required? | Purpose |
+|---|---|---|---|---|
+| `USE_MOCK_DATA` | backend `config.py` | `true` | no | `true`/`1`/`yes`/`on` = always use fixtures. `false` lets keyed providers go live |
+| `PROVIDER_TIMEOUT_SECONDS` | backend providers | `8` | no | Timeout per live HTTP call |
+| `COSTAR_API_KEY` | `costar_provider` | unset | only for live CoStar | Bearer token |
+| `COSTAR_API_BASE_URL` | `costar_provider` | `https://api.costar.example/v1` (placeholder) | for live CoStar | Base URL; `/listings` is appended |
+| `MATTERPORT_API_KEY` | `matterport_provider` | unset | only for live Matterport | Basic-auth credential |
+| `MATTERPORT_API_BASE_URL` | `matterport_provider` | `https://api.matterport.com/api/models/graph` | no | GraphQL endpoint |
+| `VEXCEL_API_KEY` | `vexcel_provider` | unset | only for live Vexcel | Bearer token |
+| `VEXCEL_API_BASE_URL` | `vexcel_provider` | `https://api.vexcel.example/v1` (placeholder) | for live Vexcel | Base URL; `/images/ortho` is appended |
+| `GEOCODING_API_KEY` | `config.py` only | unset | no | Reserved; read but not used yet |
+| `ANTHROPIC_API_KEY` | `requirements_parser` | unset | no | Enables the Claude parser (regex fallback always on) |
+| `ANTHROPIC_MODEL` | `requirements_parser` | `claude-haiku-5-5` | no | Claude model id |
+| `CRITERIA_PATH` | `criteria_manager` | `backend/criteria.yaml` | no | Alternate criteria registry |
+| `CORS_ORIGINS` | `main.py` | `http://localhost:3000` | no | Comma-separated allowed origins |
+| `DATABASE_URL` | `db.py` | `sqlite:///./turnkey.db` (relative to `backend/`) | no | Run-history database |
+| `API_ORIGIN` | frontend `next.config.ts` (server-side) | `http://localhost:8000` | no | Where the Next.js dev server proxies `/api/v1`, `/static`, `/health` |
 
-- Do not print secrets in logs.
-- Use HTTPS endpoints for all API calls.
-- CORS: Allow frontend `localhost:3000` to call backend `localhost:8000`.
-- Rate-limit calls in the backend if looping over many properties (to avoid accidental DDoS).
-- For demo, consider disabling any unsafe operations and use safe defaults.
+**No `NEXT_PUBLIC_` variables exist.** The browser only calls relative URLs, and `API_ORIGIN` is
+read at build/dev-server time by `next.config.ts`, so it is never exposed to client code. Never put
+a secret in a `NEXT_PUBLIC_` variable.
 
-### Running in Live vs Mock
+## Git hygiene
 
-- By default, the app should run in "mock mode" if keys are missing.
-- If `ENV=production` or keys are present, it should attempt real API calls.
-- Provide clear console logs about which mode is active.
+`.gitignore` excludes `backend/.env`, `backend/.env.local`, `frontend/.env.local`, `backend/venv/`,
+`frontend/node_modules/`, `frontend/.next/`, `backend/*.db` (including `turnkey.db`) and caches.
+Only `.env.example` (placeholders) is committed. The test suite pins `DATABASE_URL` to a temp file
+and blanks every API key (`tests/conftest.py`), so tests never touch the network or your real DB.
+
+## Practices in the code
+
+- Keys are never logged; startup logs show only modes (`mock`/`live`, `regex`/`claude`) and the DB URL.
+- Live calls use HTTPS base URLs, explicit timeouts, and no retries for Claude. Every failure falls back.
+- CORS allows only `CORS_ORIGINS`. In normal use the frontend goes through the same-origin Next.js
+  proxy, so CORS matters only for direct API calls.
+- Input is validated by Pydantic (422) and property / business type ids are checked (404 / 400).
+  SQL goes through SQLModel (parameterized).
+- The drafted landlord letter is plain text rendered by React (escaped), not HTML.
+
+## Out of scope for the hackathon
+
+Authentication and authorization (anyone who can reach the API can read stored analyses by id),
+rate limiting, and HTTPS termination. Add these before any public deployment (e.g. AWS behind
+an ALB/API Gateway).

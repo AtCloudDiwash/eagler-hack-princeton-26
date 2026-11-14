@@ -1,52 +1,81 @@
 # Compliance Agent
 
-The compliance agent evaluates whether a candidate space meets location-specific requirements. It should not certify legality but flag potential issues.
+The compliance / criteria agent (`backend/app/services/compliance_engine.py`) runs every applicable
+criterion from `backend/criteria.yaml` against one property. It returns PASS / RISK / UNKNOWN with
+a plain-English note, a source citation and the evidence behind it. It flags issues for follow-up
+and does **not** certify legality.
 
-### Categories of Compliance Checks
+## Statuses
 
-1. **Zoning and Permits**
-   - *Example:* Parking requirements per zoning. (Tx zoning code might specify X parking spaces per square foot for restaurants.)
-   - *Example:* Land use: Is the property zoned for commercial use or specifically for restaurants, medical clinics, etc.?
-   - Data Source: City/county zoning maps or CoStar listing data (use `property.zoning` field if available).
-   - Output Status: `PASS` if meets known criteria, `RISK` if not, `UNKNOWN` if data is missing.
+| Status | Meaning | UI color |
+|---|---|---|
+| `PASS` | Evidence shows the requirement is met | green (`--color-pass`) |
+| `RISK` | Evidence shows a shortfall, or a known failure (costed when fixable) | orange (`--color-risk`) |
+| `UNKNOWN` | Not enough data, no rule loaded, or the evaluator failed | gray (`--color-unknown`) |
 
-2. **ADA Accessibility**
-   - *Example:* Door widths, number of accessible restrooms, wheelchair ramp presence.
-   - Data Source: Matterport measurements (if possible, measure door frames and areas).
-   - Threshold: ADA typically requires 32–36 inch clear door width.
-   - Output: `PASS` if measured width >= 32in, `RISK` if <32in or no data.
+## How a criterion is evaluated (`evaluate_criterion`)
 
-3. **Health and Safety (for restaurants)**
-   - *Example:* Is a grease trap present? Is there a permit on file?
-   - Data Source: Likely unavailable in imagery; skip or set `UNKNOWN`.
-   - We may skip detailed health code; instead, focus on obvious needs (kitchen exhaust existence).
-   - Output: `UNKNOWN` with note "Requires inspection."
+1. **Evaluator lookup.** If the `evaluator` name is not registered → UNKNOWN ("No evaluator named ... is registered").
+2. **Required inputs.** If any `required_inputs` value is missing → UNKNOWN ("Not enough data: could not
+   confirm ..."), plus a landlord question. The evaluator is not called. Under `assume_cost` the
+   evaluator's `fallback` prices the fix anyway ("Fix cost included as a precaution").
+3. **Evaluator call.** If the function raises → UNKNOWN ("Evaluator ... failed"), and the run continues.
+4. **`evidence_required`.** A PASS with no evidence from CoStar, Matterport or Vexcel is downgraded
+   to UNKNOWN. Requirement or jurisdiction evidence does not count.
+5. **Scoring.** Weight 0 → shown, not counted. PASS = 1, RISK = 0. UNKNOWN is counted as 0 under
+   `assume_risk` / `assume_cost` and excluded under `unknown` / `ignore`.
+6. **Hard block.** `blocking = hard_block and status == RISK and outcome.definitive_failure and not a data gap`.
+   Missing data never disqualifies.
 
-4. **Building Codes**
-   - *Example:* Maximum occupancy vs floor area (not required for early stage).
-   - *Example:* Existing HVAC capacity vs expected load.
-   - Data Source: Rooftop unit size from aerial (if labeled), or skip.
-   - Output: Usually `UNKNOWN` or simple check if feasible.
+## Evaluators (`backend/app/services/evaluators.py`)
 
-5. **Plumbing/Electrical Capacity**
-   - *Example:* Number of visible sinks, restrooms (from interior plan).
-   - Data Source: Matterport snapshot labeling.
-   - Output: `PASS`/`RISK` if noticeably insufficient.
+| Evaluator | Criterion (weight) | Logic | Fix cost items |
+|---|---|---|---|
+| `zoning_checker` | `zoning_use` (10, **hard block**) | Base district (suffixes like `-MU`, `-V` stripped) looked up in the jurisdiction's use table: permitted → PASS; conditional → RISK (CUP needed); prohibited → RISK + **definitive failure**; not listed or no table → UNKNOWN | none |
+| `parking_checker` | `parking_sufficiency` (10) | `visible / required >= min_ratio` (1.0) → PASS, else RISK. Required is the user's number or the business guideline; the Austin note says there is no city minimum | none |
+| `ada_checker` | `ada_accessibility` (15) | Door `< min_width` (32 in.) or a stepped entrance → RISK | `door_widening`, `entrance_ramp` |
+| `kitchen_checker` | `kitchen_equipment` (20, restaurant) | No kitchen needed → PASS; no equipment → RISK; equipment without a hood → RISK; hood unconfirmed → PASS + question | `kitchen_install` / `hood_exhaust`; fallback `kitchen_install` |
+| `grease_checker` | `grease_interceptor` (10, restaurant) | Present → PASS, else RISK | `grease_interceptor`; fallback same |
+| `operatory_checker` | `operatory_plumbing` (20, dental_clinic) | Plumbed rooms `>=` chairs → PASS, else RISK for the shortfall | `operatory_plumbing` × shortfall; fallback × capacity |
+| `bathroom_checker` | `bathroom_count` (10) | Visible `>=` required → PASS, else RISK; cites the jurisdiction plumbing code | `restroom_add` × shortfall |
+| `hvac_checker` | `hvac_capacity` (10) | Need = **max**(parsed need, `size_sqft / hvac_sqft_per_ton`); have `>=` need → PASS, else RISK | `hvac_rtu` × ceil(shortfall / 5 tons); fallback sized from need |
+| `electrical_checker` | `electrical_service` (5) | Service amps `>=` business amps → PASS, else RISK | `electrical_service_upgrade`; fallback same |
+| `fire_safety_checker` | `fire_safety` (0, hard block) | IBC §903.2 trigger from `sprinkler_required_if` (restaurant: > 5,000 sq ft or >= 100 occupants). Not triggered → PASS; triggered and sprinklered → PASS; triggered and not sprinklered → RISK **priced as a retrofit, never definitive**; unconfirmed → UNKNOWN | `fire_sprinkler` × sq ft |
+| `check_window_visibility` | `window_visibility` (5, restaurant) | `window_area >= min_area` (10 sq ft) → PASS, else RISK; no data → ignored (not scored) | none |
 
-### Jurisdiction-Specific Rules
+Because `fire_safety` is never a definitive failure, **zoning is currently the only criterion that can
+disqualify a space** in practice.
 
-- Use the property city/state to narrow checks. For Hackathon MVP, implement one city’s known rules (e.g. Austin, TX:
-  - Parking: 1 space per 75 sqft (or refer to zoning code).
-  - ADA: state follows federal ADA.
-  - Health: Restaurants need grease trap and ventilation (Flag if none visible).
+## Jurisdiction rules (`backend/config/jurisdictions.yaml`)
 
-- Provide citations in `COMPLIANCE_RULE_SOURCES.md` for each rule used.
+`config.jurisdiction_for(city, state)` looks up `"<city>-<state>"` (lowercase, spaces → `-`) and
+merges it over `default`.
 
-### Implementation Notes
+| Key | Used by | Austin, TX | Default |
+|---|---|---|---|
+| `zoning`, `zoning_source` | `zoning_checker` | Use table for `restaurant` and `medical_office` (LDC §25-2-491, simplified) | empty → zoning UNKNOWN |
+| `parking_note` | `parking_checker` | Parking minimums eliminated Nov 2, 2023 | "No local parking rule loaded" |
+| `plumbing_code` | `bathroom_checker` | 2024 UPC as amended by Austin, Table 422.1 | IPC Table 2902.1 / UPC Table 422.1 |
+| `name` | notes | "Austin, TX" | "Generic (model codes)" |
 
-- The compliance agent runs on each property analysis. It should be a pure function: `def check_compliance(property, business_profile) -> Dict[str, (status, notes)]`.
-- Mark a rule as `RISK` if the property clearly violates (e.g. fewer parking than threshold).
-- Mark as `UNKNOWN` if we cannot determine (e.g. cannot see electrical panel).
-- Never assert compliance with absolute certainty, always allow human follow-up.
-- The output `status` values are `PASS`, `RISK`, or `UNKNOWN`.
-- In the final report UI, RISK items should be highlighted in red/orange, PASS in green, UNKNOWN in gray.
+`building_code`, `health_code` and `parking_minimums` are recorded in the YAML for reference but are
+not read by any evaluator yet. A city without an entry adds the assumption "No local rules loaded
+for {city}, {state}; model codes used."
+
+Austin zoning table: restaurant permitted in GR, CS, CS-1, CH, CBD, DMU; conditional in LR;
+prohibited in LO, GO, NO, SF-1..3, MF-1..3. Medical office is permitted in LO, GO, GR, CS, CS-1, CH,
+CBD, DMU; conditional in LR, NO.
+
+## Outputs per property
+
+- `criteria_results[]` and `compliance{id: {status, notes, source}}`
+- Cost needs, which feed the [cost engine](COST_ENGINE.md)
+- Landlord questions, de-duplicated
+- `disqualifiers[]` (blocking criterion ids)
+- Assumptions (e.g. "Grease interceptor ...: not confirmed, so the fix is budgeted (assume_cost).")
+
+Demo results (restaurant, Austin): property-456 passes all 10 criteria; property-789 is RISK on
+zoning (LO prohibits restaurant) and disqualified; property-321 is RISK on zoning (LR-V →
+conditional) but not disqualified.
+
+Citations: [COMPLIANCE_RULE_SOURCES.md](COMPLIANCE_RULE_SOURCES.md).

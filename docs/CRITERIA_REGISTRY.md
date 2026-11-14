@@ -1,81 +1,144 @@
 # Criteria Registry
 
-We use a YAML (or JSON) file (`criteria.yaml`) to define scoring criteria. This makes the system extensible: adding or adjusting criteria is done by editing this config, not code.
+`backend/criteria.yaml` (override with `CRITERIA_PATH`) decides what gets checked, how much it
+matters, and what happens when data is missing. It is validated by the `Criterion` Pydantic model and
+loaded by `backend/app/services/criteria_manager.py`. The file is **re-read automatically when it
+changes on disk**, so edits apply on the next request without a restart.
 
-## Structure of `criteria.yaml`
+## Fields
 
-Each entry in the YAML list is a criterion with fields:
+| Field | Type / default | Semantics |
+|---|---|---|
+| `id` | str, unique | Key in `compliance{}`, `criteria_results[]` and `disqualifiers[]`. Duplicates are rejected |
+| `description` | str | Shown in the UI |
+| `domain` | str | Free-form group (`regulatory`, `safety`, `space`, `health`, `marketing`, ...); the report groups results by domain in registry order |
+| `weight` | float >= 0, default 0 | Relative importance. `0` = evaluated and shown, not scored. Weights need not sum to 100 |
+| `hard_block` | bool, default false | Disqualify the property when the evaluator reports a **definitive** failure. Missing data never blocks |
+| `evaluator` | str | Name registered with `@evaluator("name")` in `services/evaluators.py`. Unknown name → UNKNOWN result, no crash |
+| `required_inputs` | list[str] | Input names that must be present (observed facts or requirement values, see below); if any is missing → UNKNOWN and the evaluator is skipped |
+| `missing_data_policy` | `assume_risk` (default) \| `assume_cost` \| `unknown` \| `ignore` | What an UNKNOWN means for the score (table below) |
+| `evidence_required` | bool, default false | A PASS needs at least one CoStar, Matterport or Vexcel evidence item, else it is downgraded to UNKNOWN |
+| `source` | str | Citation shown in the UI (an evaluator may override it with a jurisdiction citation) |
+| `thresholds` | map, default {} | Evaluator-specific knobs (`min_ratio`, `min_width`, `tons_per_unit`, `min_area`) |
+| `business_types` | list, default `["ALL"]` | Business type ids this applies to |
+| `applicable_jurisdictions` | list, default `["ALL"]` | `"ALL"`, a state code (`"TX"`) or a city (`"Austin"`), case-insensitive |
 
-- `id` (string): unique key.
-- `description` (string): human-readable description.
-- `domain` (string): e.g. "space", "regulatory", "cost".
-- `weight` (float): how important this criterion is relative to others.
-- `hard_block` (bool): if true, failing this criterion means the space is disqualified.
-- `evaluator` (string): name of the function or rule that evaluates this criterion.
-- `required_inputs` (list of str): pieces of data needed from analysis, e.g. `["visible_parking", "required_parking"]`.
-- `missing_data_policy` (string): policy if data is missing (`"assume_risk"`, `"ignore"`, etc.).
-- `evidence_required` (bool): whether this criterion needs observable evidence to score positively.
-- `source` (string): reference to code or rule source (for display/citation).
-- `thresholds`: criterion-specific thresholds.
-- `applicable_jurisdictions` (list of str): regions where this rule applies (use "*ALL*" for general).
+### Missing-data policies
 
-### Example Criteria Entries
+| Policy | Status | Counted in score? | Extra |
+|---|---|---|---|
+| `assume_risk` | UNKNOWN | yes, as 0 | |
+| `assume_cost` | UNKNOWN | yes, as 0 | The evaluator's `fallback` adds the fix cost; an assumption is recorded |
+| `unknown` / `ignore` | UNKNOWN | no | Shown only |
 
-```yaml
-- id: "parking_sufficiency"
-  description: "Enough parking spaces for the business type"
-  domain: "regulatory"
-  weight: 10
-  hard_block: false
-  evaluator: "check_parking_spaces"
-  required_inputs:
-    - "visible_parking_count"
-    - "business_parking_requirement"
-  missing_data_policy: "assume_risk"
-  evidence_required: true
-  source: "City of Austin Zoning Code, Sec. 25-6-478"
-  thresholds:
-    min_ratio: 1  # 1 parking spot per 20 seats
-  applicable_jurisdictions: ["ALL"]
+The same policy applies when an evaluator itself returns UNKNOWN (e.g. zoning district not in the table).
 
-- id: "ada_door_width"
-  description: "Doorway meets ADA width requirements"
-  domain: "safety"
-  weight: 5
-  hard_block: false
-  evaluator: "check_ada_door_width"
-  required_inputs: ["door_width_in_inches"]
-  missing_data_policy: "assume_risk"
-  evidence_required: true
-  source: "ADA Title III, 2010 Standards"
-  thresholds:
-    min_width: 32
-  applicable_jurisdictions: ["ALL"]
+### Available input names
 
-- id: "kitchen_presence"
-  description: "Existing commercial kitchen equipment"
-  domain: "space"
-  weight: 15
-  hard_block: false
-  evaluator: "check_kitchen_equipment"
-  required_inputs: ["kitchen_equipment_visible"]
-  missing_data_policy: "assume_cost"
-  evidence_required: false
-  source: "Restaurant Fit-Out Requirements"
-  thresholds: {}
-  applicable_jurisdictions: ["ALL"]
+Observed facts: `zoning_code`, `previous_use`, `size_sqft`, `door_width_inches`,
+`step_free_entrance`, `kitchen_equipment_visible`, `hood_present`, `grease_interceptor_present`,
+`bathrooms_visible`, `plumbed_operatories`, `electrical_service_amps`, `sprinklered`, `window_area`,
+`visible_parking_count`, `hvac_tons`, plus any new key you add to `fixtures/observations.json`.
+Derived values: `business_required_parking`, `business_required_bathrooms`, `business_capacity`,
+`required_hvac_tons`, `required_electrical_amps`, `occupant_load`, `needs_kitchen`, `size_sqft`,
+`monthly_rent` (see `compliance_engine.build_inputs`).
+
+## Scoring (`services/scoring.py`)
+
+```
+score = 100 × Σ(weight × criterion_score) / Σ(weight)     over counted criteria only
+criterion_score: PASS = 1, RISK = 0, counted UNKNOWN = 0
 ```
 
-## How the Registry is Used
+The denominator is the counted weight, so adding a criterion re-normalizes automatically.
+Example: property-123 in the demo passes zoning (10), ADA (15) and window (5) out of 95 counted
+weight → 31.6. The score orders results only through the weak-fit gate (`ranking.min_score` in
+`costs.yaml`) and tie-breaks; see [COST_ENGINE.md](COST_ENGINE.md#ranking).
 
-- On startup, the backend loads `criteria.yaml`.
-- Each criterion's `evaluator` corresponds to a function in `criteria_manager.py` that returns a score or boolean.
-- The `weight` influences how much each criterion contributes to the final score.
-- The system iterates through criteria, and if `hard_block` and condition is failed, the property gets disqualified or drastically reduced.
-- The frontend can display each criterion (ID and description) in a comparison table.
+## Current registry
 
-## Scaling Criteria
+| id | domain | weight | hard_block | evaluator | policy | evidence_required | applies to |
+|---|---|---|---|---|---|---|---|
+| `zoning_use` | regulatory | 10 | yes | `zoning_checker` | unknown | yes | ALL |
+| `parking_sufficiency` | regulatory | 10 | no | `parking_checker` | assume_risk | yes | ALL |
+| `ada_accessibility` | safety | 15 | no | `ada_checker` | assume_risk | yes | ALL |
+| `kitchen_equipment` | space | 20 | no | `kitchen_checker` | assume_cost | no | restaurant |
+| `grease_interceptor` | health | 10 | no | `grease_checker` | assume_cost | no | restaurant |
+| `operatory_plumbing` | space | 20 | no | `operatory_checker` | assume_cost | no | dental_clinic |
+| `bathroom_count` | safety | 10 | no | `bathroom_checker` | assume_risk | yes | ALL |
+| `hvac_capacity` | space | 10 | no | `hvac_checker` | assume_risk | yes | ALL |
+| `electrical_service` | space | 5 | no | `electrical_checker` | assume_risk | yes | ALL |
+| `fire_safety` | safety | 0 | yes | `fire_safety_checker` | unknown | no | ALL |
+| `window_visibility` | marketing | 5 | no | `check_window_visibility` | ignore | no | restaurant |
 
-- To **add a new criterion**, simply append to `criteria.yaml`. Provide an evaluator name and implement the corresponding function.
-- Example: To add "window_line_of_sight" criterion, create an entry with an `evaluator` and update `criteria_manager.py`.
-- The UI should automatically render any criteria listed here.
+All entries use `applicable_jurisdictions: ["ALL"]`. A restaurant gets 10 criteria, a dental clinic 8.
+
+## How to add a criterion (config only)
+
+Reuse an existing evaluator with new thresholds or a new scope. Example:
+
+```yaml
+- id: "parking_generous"
+  description: "Parking covers 1.5x the spaces the business needs"
+  domain: "regulatory"
+  weight: 5
+  hard_block: false
+  evaluator: "parking_checker"
+  required_inputs: ["visible_parking_count", "business_required_parking"]
+  missing_data_policy: "ignore"
+  evidence_required: true
+  source: "Business preference"
+  thresholds: { min_ratio: 1.5 }
+  business_types: ["restaurant"]
+  applicable_jurisdictions: ["TX"]
+```
+
+Save the file and run a new analysis. The criterion appears in `GET /api/v1/criteria`, in the
+"Criteria used" table on `/properties`, and in every report. Stored analyses are snapshots and do
+not change. A malformed entry returns a 500 whose `detail` names the file, the entry number and the
+bad field.
+
+`window_visibility` was added this way (prompts/scale-criteria.md), and
+`tests/test_criteria_manager.py::test_adding_a_criterion_via_config_changes_results` proves it changes
+scores with no code change.
+
+## How to add an evaluator (one function)
+
+Needed only when the logic is new. In `backend/app/services/evaluators.py`:
+
+```python
+def _signage_fallback(ctx: EvalContext) -> list[CostNeed]:          # optional, used by assume_cost
+    return [CostNeed("signage_install", 1, "Signage not confirmed; budgeted")]
+
+@evaluator("signage_checker", fallback=_signage_fallback)
+def signage_checker(ctx: EvalContext) -> EvalOutcome:
+    has_sign = bool(ctx.value("pylon_sign_present"))                 # a required_input
+    if has_sign:
+        return EvalOutcome("PASS", "Pylon sign position available.", ctx.evidence("pylon_sign_present"))
+    return EvalOutcome(
+        "RISK", "No pylon sign position.", ctx.evidence("pylon_sign_present"),
+        cost_items=[CostNeed("signage_install", 1, "No sign position")],
+        questions=["Can the tenant add a panel to the pylon sign?"],
+        definitive_failure=False,   # True only for known failures that should hard-block
+    )
+```
+
+Then:
+
+1. Reference `evaluator: "signage_checker"` from a `criteria.yaml` entry.
+2. If it emits cost items, add `signage_install` to `config/costs.yaml` `items`.
+3. If it needs a new observed fact, add it to `fixtures/observations.json` (and to the live
+   provider mapping later). Optionally add a friendly label to `INPUT_LABELS` in `compliance_engine.py`.
+
+`EvalContext` gives you `requirements`, `property`, `observations`, `criterion`, `thresholds`,
+`jurisdiction`, `business`, `value(name)`, `evidence(*keys)` and `derived(key, value, note, source)`.
+`tests/test_evaluators.py::test_every_criteria_yaml_evaluator_is_registered` fails if the YAML
+names an evaluator that does not exist.
+
+## Adding a business type
+
+Add a block to `config/business_types.yaml` (label, capacity unit, occupancy group, zoning use,
+occupant load factors, parking guideline, restroom rule, HVAC sq ft/ton, amps, build-out months,
+optional sprinkler trigger). It appears in the form via `GET /api/v1/business-types`. Add
+`zoning.<zoning_use>` lists to `jurisdictions.yaml` so zoning can be checked, and scope
+type-specific criteria with `business_types: [<id>]`.

@@ -1,54 +1,35 @@
-# Build Plan (36 Hours)
+# Build Plan (36 hours): status
 
-We have 36 hours (including setup and demo). Here’s a tentative timeline:
+Phases follow `prompts/`. Each was executed from the repo root and builds on the previous one.
 
-- **Hour 0-1**: Project setup
-  - Run `00-bootstrap` prompt to scaffold the repo, install frameworks.
-  - Verify local environment.
+| Phase | Prompt | Status | Delivered |
+|---|---|---|---|
+| 00 | `00-bootstrap.md` | Done | Monorepo, docs skeleton, `.gitignore`, `.env.example`, backend models/providers/config |
+| 01 | `01-backend-skeleton.md` | Done | FastAPI app, `/health`, routers for business types, criteria, properties, analyze, analyses; CORS; static media |
+| 02 | `02-agent-workflow.md` | Done | Five-step orchestrator, requirements parser (regex + optional Claude), evaluator registry, compliance engine, cost engine, scoring, landlord questions + letter, SQLite run history |
+| 03 | `03-frontend-skeleton.md` | Done | Next.js 16 App Router: profile form, property selection, analysis report, dark navy/cyan theme, Vitest tests |
+| 04 | `04-integrations.md` | Done | Live CoStar / Matterport / Vexcel adapters behind `USE_MOCK_DATA` + keys with fixture fallback; aerial and floor-plan overlays |
+| scale | `scale-criteria.md` | Done | `window_visibility` added via `criteria.yaml` + one evaluator; test proves config-only scaling |
+| 05 | `05-demo-polish.md` | In progress | See below |
 
-- **Hour 1-4**: Backend skeleton
-  - Implement basic FastAPI app with `/health`.
-  - Create models and endpoints (prompt `01-backend-skeleton`).
-  - Write minimal providers that return mock properties.
-  - Test GET `/properties` returns sample list.
+## Phase 05 checklist
 
-- **Hour 4-8**: Agent orchestration, cost & compliance logic
-  - Implement `agent_orchestrator` and cost/compliance modules.
-  - Load criteria from `criteria.yaml`.
-  - Test analysis on hardcoded example.
-  - Add Pytest unit tests for cost and compliance (create initial tests).
+- [x] UI polish: loading overlay for analysis, info-icon source tooltips, N/A placeholders, responsive layout
+- [x] Every backend field shown in the UI (costs, line items, compliance, observations, assumptions, letter)
+- [x] Mock demo scenario + saved API response fixture (`frontend/test/fixtures/analysis.json`)
+- [x] All tests green (backend 88, frontend 28, Playwright 4); lint clean
+- [x] Criteria scaling test (`test_adding_a_criterion_via_config_changes_results`)
+- [x] Min-score ranking gate (`ranking.min_score`, "weak fit" badge)
+- [x] Playwright E2E for the demo flow (desktop + 375px mobile + failure state)
+- [x] Documentation finalized against the code (this pass): README, `.env.example`, all of `docs/`
+- [ ] Final dry run of [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) on the presentation machine
+- [ ] Clean up and commit ("Final polish before demo")
 
-- **Hour 8-12**: Frontend skeleton
-  - Use `create-next-app` or similar.
-  - Build `BusinessProfileForm` and `PropertyList` pages.
-  - Connect to `/properties` endpoint.
-  - Style with Tailwind (dark theme).
-  - Prompt `03-frontend-skeleton`.
+## Remaining / stretch (only if time allows)
 
-- **Hour 12-18**: Feature completion
-  - Implement property selection and calling `/analyze`.
-  - Build `AnalysisCard` UI to display results (score, cost, compliance).
-  - Use mock data to ensure UI is working.
-  - Continue writing tests (frontend & backend).
-
-- **Hour 18-24**: Integrations and Refinement
-  - Add actual HTTP calls in providers (if keys available) or refine mock data.
-  - Implement image overlays (use sample images).
-  - Conduct sponsor-specific polish (e.g. AWS note in docs).
-  - Prompt `04-integrations`.
-
-- **Hour 24-30**: Compliance Agent & Criteria scaling
-  - Implement compliance logic with at least 2 rules (parking, ADA).
-  - Ensure criteria YAML drives scoring. Test adding a new criterion (prompt `scale-criteria`).
-  - Polish output formatting (currency, missing data handling).
-
-- **Hour 30-34**: Demo preparation
-  - Fill documentation files (like ones above) if needed.
-  - Final UI polish: make sure colors, alignment, logos are presentable.
-  - Run through the demo runbook script and fix any issues.
-  - Add any Sponsor acknowledgments, confirm PRD alignment.
-
-- **Hour 34-36**: Buffer
-  - Handle last-minute issues, commit final code.
-  - Prepare the DevPost submission (use docs content).
-  - Ensure everything runs from a fresh clone.
+- Real CoStar / Vexcel endpoint paths once sponsor docs or keys arrive (mapping functions are ready).
+- Peri validation: record a small business owner interview and add the quote to the pitch
+  ([SPONSOR_STRATEGY.md](SPONSOR_STRATEGY.md)).
+- A second jurisdiction in `jurisdictions.yaml`.
+- Optional AWS deployment (backend container + static frontend).
+- Small code issues found during the docs pass (see [DECISIONS_AND_RISKS.md](DECISIONS_AND_RISKS.md#known-issues)).
