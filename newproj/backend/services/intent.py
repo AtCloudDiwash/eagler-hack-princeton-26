@@ -1,7 +1,7 @@
 """Understand the user's query: business type, size and location.
 
-Rules always run (fast, deterministic); Ollama refines them with constrained JSON output. If Ollama
-fails or returns an unknown business type, the rules result is used.
+Rules always run (fast, deterministic); the LLM (Codex CLI) refines them with schema-constrained JSON. If
+the LLM fails or returns an unknown business type, the rules result is used.
 """
 from __future__ import annotations
 
@@ -69,8 +69,8 @@ async def parse(query: str) -> Intent:
         f"Query: {query}"
     )
     try:
-        llm = chat_model(temperature=0, think=False, num_predict=300).with_structured_output(_LLMIntent, method="json_schema")
-        out: _LLMIntent = await asyncio.wait_for(llm.ainvoke(prompt), timeout=25)
+        llm = chat_model().with_structured_output(_LLMIntent, method="json_schema")
+        out: _LLMIntent = await asyncio.wait_for(llm.ainvoke(prompt), timeout=60)
     except Exception as err:  # noqa: BLE001 - any LLM failure falls back to rules
         log.warning("LLM intent parse failed, using rules: %s", err)
         return rules
@@ -82,9 +82,19 @@ async def parse(query: str) -> Intent:
         location_text=out.location or rules.location_text,
         seats=out.seats or rules.seats,
         sqft=out.sqft or rules.sqft,
-        requirements=sorted({*rules.requirements, *[r.strip() for r in out.requirements if r.strip()][:6]}),
-        parser="ollama",
+        requirements=_dedupe_requirements([*rules.requirements, *[r.strip() for r in out.requirements if r.strip()][:6]]),
+        parser="llm",
     )
+
+
+def _dedupe_requirements(items: list[str]) -> list[str]:
+    """Merge rule + LLM requirements, dropping ones contained in a longer phrase ("foot traffic" vs "good foot traffic")."""
+    uniq = sorted({i.lower() for i in items}, key=len, reverse=True)
+    kept: list[str] = []
+    for item in uniq:
+        if not any(item in k for k in kept):
+            kept.append(item)
+    return sorted(kept)
 
 
 def target_sqft(intent: Intent) -> tuple[int, str]:

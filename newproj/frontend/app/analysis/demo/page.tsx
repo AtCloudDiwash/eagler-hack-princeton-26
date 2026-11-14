@@ -8,7 +8,7 @@ import AnalysisView from "@/components/analysis/AnalysisView";
 
 /**
  * Dev-only preview of the dashboard rendered from lib/sample-analysis.json, so the UI can be
- * designed and screenshotted without the backend or Ollama. Disabled in production builds.
+ * designed and screenshotted without the backend or the LLM. Disabled in production builds.
  */
 const EVENTS: AnalysisEvent[] = [
   { t: 0, agent: "engine", type: "plan", message: "Restaurant query → running Vexcel, Neighborhood, Compliance in parallel; Cost after; Matterport skipped (no tour)" },

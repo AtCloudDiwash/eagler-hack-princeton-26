@@ -1,4 +1,4 @@
-"""Shared agent harness: LangChain Deep Agents on Ollama, evidence tracking, bounded tool use,
+"""Shared agent harness: LangChain Deep Agents on the local Codex CLI, evidence tracking, bounded tool use,
 structured output with a constrained-JSON fallback, and live progress events.
 
 Every tool result is registered as evidence with an id (E1, E2...). Agents must cite those ids; the
@@ -30,9 +30,9 @@ from services.llm import chat_model
 log = logging.getLogger("turnkey.agents")
 
 # Deep Agents ships file-system, shell, todo and sub-agent tools. Our agents investigate through their
-# own domain tools only; extra tools confuse small local models and waste steps.
+# own domain tools only; extra tools waste steps and add prompt tokens to every call.
 register_harness_profile(
-    "ollama",
+    "codex",  # ChatCodexCLI reports ls_provider="codex"
     HarnessProfile(
         excluded_tools=frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute", "task", "write_todos"}),
         general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
@@ -199,12 +199,12 @@ async def _extract_output(transcript: str, metrics: list[dict], evidence: list[E
         "for the user's business, each with why_it_matters and evidence ids) and list what the data cannot answer.\n\n"
         f"EVIDENCE:\n{ev}\n\nINVESTIGATION NOTES:\n{transcript[-6000:]}"
     )
-    llm = chat_model(temperature=0, think=False).with_structured_output(AgentOutput, method="json_schema")
+    llm = chat_model().with_structured_output(AgentOutput, method="json_schema")
     return await asyncio.wait_for(llm.ainvoke(prompt), timeout=120)
 
 
 def _parse_text_report(messages: list) -> AgentOutput | None:
-    """Small local models often write the final report as JSON text; accept it if it validates."""
+    """Models sometimes write the final report as JSON text instead of the report tool; accept it if it validates."""
     for m in reversed(messages):
         if isinstance(m, AIMessage) and isinstance(m.content, str) and "{" in m.content:
             text = m.content.strip()

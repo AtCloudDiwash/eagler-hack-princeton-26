@@ -30,6 +30,7 @@ from services import costs as cost_engine
 from services import external, neighborhood, rules, scoring
 from services.geo import haversine_m
 from services.intent import target_sqft
+from services.codex_chat import default_model
 from services.llm import chat_model
 from services.vexcel import key_facts, imagery_meta
 
@@ -275,8 +276,8 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
         + json.dumps(digest, default=str)
     )
     try:
-        llm = chat_model(temperature=0.3, think=False).with_structured_output(_Narrative, method="json_schema")
-        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=90)
+        llm = chat_model().with_structured_output(_Narrative, method="json_schema")
+        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=150)
         return out.headline, out.explanation
     except Exception as err:  # noqa: BLE001
         log.warning("narrative failed: %s", err)
@@ -431,7 +432,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             *nb.get("sources", [])[1:],
             {"name": "US Census ACS", "status": ctx.census.get("status", "unavailable"), "note": ctx.census.get("note", "")},
             {"name": "Verified jurisdiction rules", "status": "used" if ctx.jurisdiction_key != "_default" else "unavailable", "note": ctx.jurisdiction["name"]},
-            {"name": "Ollama (local LLM)", "status": "used", "note": "All agent reasoning"},
+            {"name": f"Codex CLI ({chat_model().model or default_model() or 'default model'})", "status": "used", "note": "All agent reasoning, via the local Codex login"},
             {"name": "Matterport interior scan", "status": "used" if mp_ok else "unavailable", "note": mp_reason or "Interior model"},
             {"name": "CoStar listings / asking rent", "status": "unavailable", "note": "Not connected; rent uses documented planning bands"},
         ]

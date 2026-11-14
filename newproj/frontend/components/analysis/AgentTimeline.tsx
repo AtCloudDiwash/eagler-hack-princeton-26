@@ -75,7 +75,7 @@ export default function AgentTimeline({ analysis }: { analysis: Analysis }) {
                 {analysis.status === "queued" ? "Queued — starting agents…" : finished ? "Investigation finished" : "Agents are investigating this property"}
               </h2>
               <p className="text-xs text-slate-400">
-                Local LLM (Ollama) runs usually take 1–4 minutes. Each agent decides which evidence to examine for “{analysis.intent.business_label}”.
+                Agents reason through your local Codex CLI; a full investigation usually takes 1–3 minutes. Each agent decides which evidence to examine for “{analysis.intent.business_label}”.
               </p>
             </div>
           </div>

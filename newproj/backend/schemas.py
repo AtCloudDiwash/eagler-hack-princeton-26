@@ -19,7 +19,7 @@ class Intent(BaseModel):
     seats: int | None = None
     sqft: int | None = None
     requirements: list[str] = []
-    parser: Literal["ollama", "rules"] = "rules"
+    parser: Literal["llm", "rules"] = "rules"
 
 
 class Candidate(BaseModel):

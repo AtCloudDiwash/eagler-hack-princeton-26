@@ -13,7 +13,7 @@ import multi_agent_engine
 from config import business_types, settings
 from schemas import AnalysisRequest, SearchRequest, SearchResponse
 from services import discovery, external, neighborhood, vexcel
-from services.llm import ollama_status
+from services.llm import llm_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 app = FastAPI(title="Turnkey Matchmaker", version="0.2.0")
@@ -29,7 +29,7 @@ def startup() -> None:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"ollama": await ollama_status(), "vexcel": vexcel.mode(), "census": bool(settings.census_api_key), "matterport": bool(settings.matterport_api_key)}
+    return {"llm": await llm_status(), "vexcel": vexcel.mode(), "census": bool(settings.census_api_key), "matterport": bool(settings.matterport_api_key)}
 
 
 @app.get("/api/business-types")

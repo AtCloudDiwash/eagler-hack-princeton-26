@@ -1,6 +1,6 @@
 # Turnkey Matchmaker
 
-> **Turnkey Matchmaker v2** (map-first discovery + LangChain Deep Agents on Ollama, Docker Compose) lives in
+> **Turnkey Matchmaker v2** (map-first discovery + LangChain Deep Agents on the local Codex CLI, Docker Compose) lives in
 > [`newproj/`](newproj/README.md). Setup: [`newproj/INSTALLATION.md`](newproj/INSTALLATION.md). The rest of this
 > README describes the original v1 prototype in `backend/` and `frontend/`.
 

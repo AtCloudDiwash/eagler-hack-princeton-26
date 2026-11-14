@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Health } from "@/lib/api-types";
 
-/** Small status dots: backend reachability, Ollama, Vexcel mode. */
+/** Small status dots: backend reachability, LLM (local Codex CLI), Vexcel mode. */
 export default function HealthBadge() {
   const [health, setHealth] = useState<Health | null>(null);
   const [down, setDown] = useState(false);
@@ -43,8 +43,8 @@ export default function HealthBadge() {
     );
   return (
     <span className="flex items-center gap-2.5 text-[10px] text-slate-400">
-      <span className="flex items-center gap-1" title={health?.ollama.error ?? health?.ollama.model}>
-        {dot(health ? health.ollama.ok : null)} Ollama{health?.ollama.model ? ` · ${health.ollama.model}` : ""}
+      <span className="flex items-center gap-1" title={health?.llm.error ?? `Codex CLI${health?.llm.model ? ` · ${health.llm.model}` : ""}`}>
+        {dot(health ? health.llm.ok : null)} Codex{health?.llm.model ? ` · ${health.llm.model}` : ""}
       </span>
       <span className="flex items-center gap-1">
         {dot(health ? true : null, health?.vexcel === "demo")} Vexcel {health?.vexcel ?? ""}

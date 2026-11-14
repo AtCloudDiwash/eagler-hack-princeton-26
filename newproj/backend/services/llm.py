@@ -1,29 +1,20 @@
-"""Ollama access (all LLM inference runs locally through Ollama)."""
+"""LLM access. All inference runs through the local Codex CLI (services/codex_chat.py) using the
+user's own Codex / ChatGPT login; no API key is stored in this app."""
 from __future__ import annotations
 
-import httpx
-from langchain_ollama import ChatOllama
-
 from config import settings
+from services.codex_chat import ChatCodexCLI, codex_status
 
 
-def chat_model(temperature: float = 0.0, think: bool | None = None, num_predict: int | None = None) -> ChatOllama:
-    return ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=temperature,
-        reasoning=settings.ollama_think if think is None else think,
-        num_ctx=16384,
-        num_predict=num_predict,
+def chat_model(reasoning_effort: str | None = None) -> ChatCodexCLI:
+    return ChatCodexCLI(
+        model=settings.codex_model,
+        reasoning_effort=reasoning_effort or settings.codex_reasoning_effort,
+        binary=settings.codex_bin,
+        timeout_s=settings.codex_timeout_s,
+        max_concurrency=settings.codex_max_concurrency,
     )
 
 
-async def ollama_status() -> dict:
-    try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            res = await client.get(f"{settings.ollama_base_url}/api/tags")
-        names = [m["name"] for m in res.json().get("models", [])]
-        ok = settings.ollama_model in names
-        return {"ok": ok, "model": settings.ollama_model, "error": None if ok else f"Model {settings.ollama_model} not pulled (ollama pull {settings.ollama_model})"}
-    except (httpx.HTTPError, ValueError) as err:
-        return {"ok": False, "model": settings.ollama_model, "error": f"Ollama not reachable at {settings.ollama_base_url}: {err}"}
+async def llm_status() -> dict:
+    return await codex_status(settings.codex_bin, settings.codex_model)

@@ -23,9 +23,12 @@ def _key(name: str) -> str | None:
 class Settings:
     vexcel_api_key = _key("VEXCEL_API_KEY")
     vexcel_base_url = (os.getenv("VEXCEL_API_BASE_URL") or "https://api.vexcelgroup.com/v2").rstrip("/")
-    ollama_base_url = os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
-    ollama_model = os.getenv("OLLAMA_MODEL") or "qwen3:8b"
-    ollama_think = (os.getenv("OLLAMA_THINK") or "false").lower() in {"1", "true", "yes"}
+    # LLM: the local Codex CLI with the user's own login (~/.codex). Empty model = the one in ~/.codex/config.toml.
+    codex_bin = (os.getenv("CODEX_BIN") or "").strip() or None
+    codex_model = (os.getenv("CODEX_MODEL") or "").strip() or None
+    codex_reasoning_effort = (os.getenv("CODEX_REASONING_EFFORT") or "low").strip()
+    codex_timeout_s = float(os.getenv("CODEX_TIMEOUT_S") or 180)
+    codex_max_concurrency = int(os.getenv("CODEX_MAX_CONCURRENCY") or 4)
     census_api_key = _key("CENSUS_API_KEY")
     matterport_api_key = _key("MATTERPORT_API_KEY")
     matterport_api_secret = _key("MATTERPORT_API_SECRET")

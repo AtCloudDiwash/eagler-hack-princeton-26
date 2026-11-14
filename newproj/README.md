@@ -6,17 +6,18 @@ suits *your* purpose, with every finding tied to evidence.
 
 ```
 User query ─▶ Vexcel discovery ─▶ map ─▶ select building ─▶ Vexcel JSON + neighborhood
-          ─▶ multi-agent investigation (Ollama) ─▶ Python scoring ─▶ dynamic dashboard ─▶ compare
+          ─▶ multi-agent investigation (local Codex CLI) ─▶ Python scoring ─▶ dynamic dashboard ─▶ compare
 ```
 
 ## Run it
 
 Full instructions, including **Docker Compose** (`docker compose up --build`), are in [INSTALLATION.md](INSTALLATION.md).
 
-Prerequisites: Python 3.12, Node 20+, [Ollama](https://ollama.com) with a tool-calling model.
+Prerequisites: Python 3.12, Node 20+, and the **Codex CLI logged in on this machine** (`codex login`; the
+ChatGPT desktop app's bundled CLI is auto-detected). All LLM decisions run through your own Codex login.
 
 ```bash
-ollama pull qwen3:8b
+codex login status                # must say "Logged in"
 
 # backend (FastAPI, port 8000)
 cd backend
@@ -36,13 +37,14 @@ Tests: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --
 **Credentials:** `backend/.env` only (see `backend/.env.example`). The frontend never sees an API key;
 map tiles are proxied through `GET /api/tiles/{z}/{x}/{y}`.
 
-**Speed tip:** Ollama serves one request at a time by default, so the three phase-1 agents take turns
-(a full analysis takes ~3–5 min on an M-series Mac). Setting `OLLAMA_NUM_PARALLEL=3` for the Ollama
-server lets them run truly in parallel.
+**LLM:** `backend/services/codex_chat.py` is a LangChain chat model that runs `codex exec` (ephemeral,
+read-only sandbox, empty temp folder, JSON-schema output). Deep Agents' tools are described in the prompt
+and Codex answers with schema-validated tool calls, which LangGraph executes as with any provider.
+Agents run truly in parallel (a full analysis takes ~1–3 min). Codex usage counts against your plan.
 
 ## The flow
 
-1. **Query → intent.** `services/intent.py`: rules plus Ollama (constrained JSON) extract business type,
+1. **Query → intent.** `services/intent.py`: rules plus Codex (schema-constrained JSON) extract business type,
    seats/sq ft, location and requirements.
 2. **Discovery (no agents).** `services/discovery.py`: Vexcel has no listings or text search (checked
    against its OpenAPI spec), so discovery geocodes the place, pulls Vexcel parcels around it
@@ -59,7 +61,7 @@ server lets them run truly in parallel.
 5. **Dashboard.** Verdict, score, confidence, business-specific metrics, agent reports, evidence and
    costs, plus a comparison view across analyses.
 
-## Agents (`backend/agents/`, LangChain Deep Agents on Ollama)
+## Agents (`backend/agents/`, LangChain Deep Agents on the Codex CLI)
 
 | Agent | Investigates | Tools (each result becomes evidence `E#`) |
 |---|---|---|
@@ -73,7 +75,7 @@ server lets them run truly in parallel.
 - removes Deep Agents' file, shell and sub-agent tools so each agent only sees its domain tools;
 - registers every tool result as evidence;
 - refuses repeated calls and enforces a per-agent tool budget, with a model-call cap and timeout;
-- requests structured output, accepts a JSON-text report, and falls back to Ollama constrained-JSON extraction;
+- requests structured output, accepts a JSON-text report, and falls back to a schema-constrained Codex extraction;
 - streams progress events to the UI.
 
 What makes the agents reason rather than summarize:
@@ -93,7 +95,7 @@ What makes the agents reason rather than summarize:
 5. **Conflicts.** Cross-agent contradictions are recorded with a resolution.
 6. **Follow-ups.** For unknown or unevidenced high-weight metrics, the engine simulates whether resolving them would flip the verdict. If so, it sends the owning agent a targeted follow-up (max 2, budget 3 tools).
 7. **Scoring (Python only).** Status → points, weighted by business. Confidence is the share of weight with verified evidence. Verdict thresholds live in `services/scoring.py`.
-8. **Narrative.** An Ollama summary grounded on the scored result; if that fails, a deterministic template is used.
+8. **Narrative.** A Codex-written summary grounded on the scored result; if that fails, a deterministic template is used.
 
 An agent that fails or times out never sinks the analysis: its metrics become `unknown` and confidence drops.
 

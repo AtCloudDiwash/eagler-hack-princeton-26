@@ -27,7 +27,7 @@ export default function IntentBar({ result }: { result: SearchResponse }) {
             {mode.label}
           </Pill>
           <Pill className="bg-ink-700/60 text-slate-400 ring-line" title="How the query was parsed">
-            {intent.parser === "ollama" ? "LLM parsed" : "Rule parsed"}
+            {intent.parser === "llm" ? "LLM parsed" : "Rule parsed"}
           </Pill>
         </div>
       </div>

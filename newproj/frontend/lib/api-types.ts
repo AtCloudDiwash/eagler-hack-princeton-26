@@ -16,7 +16,7 @@
 export type GeoJSONGeometry = { type: "Polygon" | "MultiPolygon" | "Point"; coordinates: unknown };
 
 export type Health = {
-  ollama: { ok: boolean; model: string; error?: string | null };
+  llm: { ok: boolean; provider: string; model: string | null; error?: string | null }; // local Codex CLI
   vexcel: "live" | "demo";
   census: boolean;
   matterport: boolean;
@@ -33,7 +33,7 @@ export type Intent = {
   seats: number | null;
   sqft: number | null;
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
-  parser: "ollama" | "rules";
+  parser: "llm" | "rules";
 };
 
 export type Candidate = {
