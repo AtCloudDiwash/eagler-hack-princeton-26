@@ -74,6 +74,8 @@ export interface AnalyzeRequest {
   property_ids: string[];
 }
 
+export type ParkingSource = "user" | "guideline" | "jurisdiction" | (string & {});
+
 export interface Requirements {
   business_type: string;
   business_label: string;
@@ -83,7 +85,8 @@ export interface Requirements {
   capacity_unit: string;
   occupant_load: number;
   parking_required: number;
-  parking_source: "user" | "guideline";
+  /** "jurisdiction" = parking minimum from the city's code; open-ended so new sources still render. */
+  parking_source: ParkingSource;
   bathrooms_required: number;
   min_sqft: number | null;
   max_sqft: number | null;
@@ -106,6 +109,8 @@ export interface Evidence {
   note: string | null;
   confidence: number | null;
   box: OverlayBox | null;
+  /** True when the fact came from a live provider call (e.g. Vexcel property/extract). Absent on older runs. */
+  live?: boolean;
 }
 
 export interface CriterionResult {
@@ -139,11 +144,21 @@ export interface ComplianceEntry {
   source: string;
 }
 
+export type AerialSource = "vexcel-live" | "placeholder";
+
+// The Vexcel fields are optional so stored runs from before live imagery still render.
 export interface ResultMedia {
+  /** Top-down ortho; live Vexcel imagery is cached by the backend under /static/vexcel-cache/. */
   aerial_url: string | null;
+  /** Angled Vexcel photo of the building; null when unavailable / mock. */
+  oblique_url?: string | null;
   floor_plan_url: string | null;
   matterport_embed_url: string | null;
   image_url: string | null;
+  /** Drives the "Live · Vexcel" badge; absent (older runs) is treated as placeholder. */
+  aerial_source?: AerialSource;
+  /** Must be shown under live imagery, e.g. "© Vexcel Imaging US, Inc.". */
+  aerial_attribution?: string | null;
 }
 
 export interface AnalysisResult {

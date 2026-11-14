@@ -1,21 +1,16 @@
 import { CubeTransparentIcon } from "@heroicons/react/24/outline";
 import { overlayEvidence } from "@/lib/overlay";
 import type { AnalysisResult } from "@/lib/types";
+import { AerialPanel } from "./AerialPanel";
 import { ImageOverlay } from "./ImageOverlay";
 
-/** Aerial (Vexcel) + floor plan (Matterport) with evidence overlays, and the 3D tour when available. */
+/** Aerial (Vexcel, top-down + angled) + floor plan (Matterport) with evidence overlays, and the 3D tour when available. */
 export function MediaPanel({ result }: { result: AnalysisResult }) {
   const { media } = result;
   return (
     <div className="grid gap-5">
       <div className="grid gap-5 sm:grid-cols-2">
-        <ImageOverlay
-          title="Aerial · Vexcel"
-          src={media?.aerial_url ?? null}
-          alt={`Aerial view of ${result.address}`}
-          evidence={overlayEvidence(result, "vexcel")}
-          placeholder="No aerial image"
-        />
+        <AerialPanel result={result} />
         <ImageOverlay
           title="Floor plan · Matterport"
           src={media?.floor_plan_url ?? null}

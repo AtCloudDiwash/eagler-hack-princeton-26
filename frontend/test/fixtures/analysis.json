@@ -934,9 +934,474 @@
       ]
     },
     {
+      "property_id": "property-hou-101",
+      "address": "1201 Westheimer Road",
+      "rank": 3,
+      "score": 64,
+      "disqualified": false,
+      "disqualifiers": [],
+      "weak_fit": false,
+      "monthly_rent": 4000,
+      "total_cost_estimate": {
+        "min": 205000,
+        "max": 317000
+      },
+      "first_year_cost": {
+        "min": 268000,
+        "max": 389000
+      },
+      "fit_out_estimate": {
+        "min": 210000,
+        "max": 320000
+      },
+      "ti_allowance": 20000,
+      "buildout_months": {
+        "min": 4,
+        "max": 6
+      },
+      "breakdown": {
+        "hood_system": {
+          "min": 30000,
+          "max": 50000
+        },
+        "grease_interceptor": {
+          "min": 15000,
+          "max": 35000
+        },
+        "plumbing_rough_in": {
+          "min": 25000,
+          "max": 40000
+        },
+        "kitchen_equipment": {
+          "min": 45000,
+          "max": 70000
+        },
+        "electrical_upgrade": {
+          "min": 15000,
+          "max": 30000
+        },
+        "permits_fees": {
+          "min": 4000,
+          "max": 9000
+        },
+        "design_fees": {
+          "min": 13000,
+          "max": 20800
+        },
+        "contingency": {
+          "min": 20800,
+          "max": 31200
+        }
+      },
+      "line_items": [
+        {
+          "item": "hood_system",
+          "label": "New Type I kitchen hood",
+          "qty": 1,
+          "min": 30000,
+          "max": 50000,
+          "reason": "Former retail: no kitchen infrastructure."
+        },
+        {
+          "item": "grease_interceptor",
+          "label": "Grease interceptor install",
+          "qty": 1,
+          "min": 15000,
+          "max": 35000,
+          "reason": "Required by Houston Water for food service."
+        },
+        {
+          "item": "plumbing_rough_in",
+          "label": "Kitchen plumbing rough-in",
+          "qty": 1,
+          "min": 25000,
+          "max": 40000,
+          "reason": "Floor drains, hand sinks and 3-compartment sink."
+        },
+        {
+          "item": "kitchen_equipment",
+          "label": "Commercial kitchen equipment",
+          "qty": 1,
+          "min": 45000,
+          "max": 70000,
+          "reason": "Full cook line."
+        },
+        {
+          "item": "electrical_upgrade",
+          "label": "Electrical service upgrade",
+          "qty": 1,
+          "min": 15000,
+          "max": 30000,
+          "reason": "200 A retail panel vs 400 A required."
+        }
+      ],
+      "compliance": {
+        "zoning_use": {
+          "status": "PASS",
+          "notes": "CS-MU permits restaurant (general).",
+          "source": "City of Houston Code Ch. 42 (no use zoning; deed restrictions apply)"
+        },
+        "parking_sufficiency": {
+          "status": "PASS",
+          "notes": "24 spaces in shared lot.",
+          "source": "Houston Code of Ordinances Ch. 26 (off-street parking)"
+        },
+        "ada_accessibility": {
+          "status": "RISK",
+          "notes": "Entrance door measures 30 in (< 32 in).",
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)"
+        },
+        "kitchen_equipment": {
+          "status": "RISK",
+          "notes": "No hood or kitchen; full build required.",
+          "source": "2021 International Mechanical Code §507; Houston Health Department"
+        },
+        "grease_interceptor": {
+          "status": "RISK",
+          "notes": "No interceptor; install required.",
+          "source": "Houston Public Works grease trap program, City Code Ch. 47"
+        },
+        "bathroom_count": {
+          "status": "RISK",
+          "notes": "1 restroom; 2 required for occupant load 49.",
+          "source": "2021 International Plumbing Code Table 2902.1"
+        },
+        "hvac_capacity": {
+          "status": "RISK",
+          "notes": "1 RTU (est. 5 tons) vs 9 tons required.",
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)"
+        },
+        "electrical_service": {
+          "status": "RISK",
+          "notes": "200 A panel vs 400 A required.",
+          "source": "NEC Article 220 load calculation"
+        },
+        "fire_safety": {
+          "status": "UNKNOWN",
+          "notes": "Sprinkler status not documented.",
+          "source": "2021 International Fire Code §904.13; Houston Fire Department"
+        }
+      },
+      "criteria_results": [
+        {
+          "id": "zoning_use",
+          "description": "Zoning permits the intended use",
+          "domain": "regulatory",
+          "weight": 3,
+          "hard_block": true,
+          "source": "City of Houston Code Ch. 42 (no use zoning; deed restrictions apply)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "CS-MU permits restaurant (general).",
+          "evidence": [
+            {
+              "key": "zoning",
+              "value": "CS-MU",
+              "source": "costar",
+              "note": null,
+              "confidence": 0.95,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "parking_sufficiency",
+          "description": "Enough off-street parking for the use",
+          "domain": "site",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Houston Code of Ordinances Ch. 26 (off-street parking)",
+          "status": "PASS",
+          "score": 1,
+          "counted": true,
+          "blocking": false,
+          "notes": "31 spaces estimated from live aerial imagery.",
+          "evidence": [
+            {
+              "key": "estimated_parking_spaces",
+              "value": 31,
+              "source": "vexcel",
+              "note": "AI-detected from paved area",
+              "confidence": 0.82,
+              "box": [
+                0.05,
+                0.62,
+                0.55,
+                0.33
+              ],
+              "live": true
+            }
+          ]
+        },
+        {
+          "id": "ada_accessibility",
+          "description": "Accessible entrance and route (ADA)",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2010 ADA Standards §404.2.3 (32 in clear door width)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "Entrance door measures 30 in (< 32 in).",
+          "evidence": [
+            {
+              "key": "door_width_inches",
+              "value": 30,
+              "source": "matterport",
+              "note": "Measured from tour",
+              "confidence": 0.8,
+              "box": [
+                0.42,
+                0.9,
+                0.1,
+                0.07
+              ]
+            }
+          ]
+        },
+        {
+          "id": "kitchen_equipment",
+          "description": "Commercial kitchen hood and ventilation",
+          "domain": "space",
+          "weight": 3,
+          "hard_block": false,
+          "source": "2021 International Mechanical Code §507; Houston Health Department",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No hood or kitchen; full build required.",
+          "evidence": []
+        },
+        {
+          "id": "grease_interceptor",
+          "description": "Grease interceptor for food service",
+          "domain": "regulatory",
+          "weight": 2,
+          "hard_block": false,
+          "source": "Houston Public Works grease trap program, City Code Ch. 47",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "No interceptor; install required.",
+          "evidence": []
+        },
+        {
+          "id": "bathroom_count",
+          "description": "Required restroom fixtures for occupant load",
+          "domain": "space",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Plumbing Code Table 2902.1",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "1 restroom; 2 required for occupant load 49.",
+          "evidence": [
+            {
+              "key": "restrooms",
+              "value": 1,
+              "source": "matterport",
+              "note": null,
+              "confidence": 0.9,
+              "box": [
+                0.08,
+                0.12,
+                0.15,
+                0.2
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hvac_capacity",
+          "description": "HVAC capacity for the occupant load and kitchen",
+          "domain": "building",
+          "weight": 2,
+          "hard_block": false,
+          "source": "ASHRAE 62.1 ventilation rates; rule of thumb 1 ton / 300 sq ft (restaurant)",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "1 RTU (est. 5 tons) vs 9 tons required.",
+          "evidence": [
+            {
+              "key": "hvac_tons",
+              "value": 15,
+              "source": "vexcel",
+              "note": "3 rooftop units × 5 tons",
+              "confidence": 0.75,
+              "box": null,
+              "live": true
+            }
+          ]
+        },
+        {
+          "id": "electrical_service",
+          "description": "Electrical service sized for equipment",
+          "domain": "building",
+          "weight": 1,
+          "hard_block": false,
+          "source": "NEC Article 220 load calculation",
+          "status": "RISK",
+          "score": 0.3,
+          "counted": true,
+          "blocking": false,
+          "notes": "200 A panel vs 400 A required.",
+          "evidence": [
+            {
+              "key": "electrical_amps",
+              "value": 200,
+              "source": "costar",
+              "note": "Listing spec sheet",
+              "confidence": 0.6,
+              "box": null
+            }
+          ]
+        },
+        {
+          "id": "fire_safety",
+          "description": "Fire suppression and egress",
+          "domain": "safety",
+          "weight": 2,
+          "hard_block": false,
+          "source": "2021 International Fire Code §904.13; Houston Fire Department",
+          "status": "UNKNOWN",
+          "score": null,
+          "counted": false,
+          "blocking": false,
+          "notes": "Sprinkler status not documented.",
+          "evidence": []
+        }
+      ],
+      "questions_for_landlord": [
+        "Will you increase the TI allowance above $10/sq ft for a kitchen conversion?",
+        "Can the entrance door be widened before move-in?"
+      ],
+      "landlord_request": "Dear Property Manager,\n\nI am planning to open a 40-seat restaurant and am interested in leasing 123 Elm Street. Before signing, I would like to discuss the following:\n\n1. Will you increase the TI allowance above $10/sq ft for a kitchen conversion?\n2. Can the entrance door be widened before move-in?\n\nCould you share the most recent inspection reports and confirm these items in the LOI? I look forward to your reply.\n\nSincerely,\n[Your name]",
+      "observations": {
+        "zoning": {
+          "key": "zoning",
+          "value": "CS-MU",
+          "source": "costar",
+          "note": null,
+          "confidence": 0.95,
+          "box": null,
+          "live": false
+        },
+        "door_width_inches": {
+          "key": "door_width_inches",
+          "value": 30,
+          "source": "matterport",
+          "note": "Measured from tour",
+          "confidence": 0.8,
+          "box": [
+            0.42,
+            0.9,
+            0.1,
+            0.07
+          ],
+          "live": false
+        },
+        "restrooms": {
+          "key": "restrooms",
+          "value": 1,
+          "source": "matterport",
+          "note": null,
+          "confidence": 0.9,
+          "box": [
+            0.08,
+            0.12,
+            0.15,
+            0.2
+          ],
+          "live": false
+        },
+        "electrical_amps": {
+          "key": "electrical_amps",
+          "value": 200,
+          "source": "costar",
+          "note": "Listing spec sheet",
+          "confidence": 0.6,
+          "box": null,
+          "live": false
+        },
+        "estimated_parking_spaces": {
+          "key": "estimated_parking_spaces",
+          "value": 31,
+          "source": "vexcel",
+          "note": "AI-detected from paved area",
+          "confidence": 0.82,
+          "box": [
+            0.05,
+            0.62,
+            0.55,
+            0.33
+          ],
+          "live": true
+        },
+        "rooftop_hvac_units": {
+          "key": "rooftop_hvac_units",
+          "value": 3,
+          "source": "vexcel",
+          "note": null,
+          "confidence": 0.9,
+          "box": [
+            0.58,
+            0.18,
+            0.2,
+            0.14
+          ],
+          "live": true
+        },
+        "building_footprint": {
+          "key": "building_footprint",
+          "value": 5400,
+          "source": "vexcel",
+          "note": "AI-detected building outline (sq ft)",
+          "confidence": 0.88,
+          "box": [
+            0.3,
+            0.1,
+            0.6,
+            0.5
+          ],
+          "live": true
+        },
+        "roof_condition": {
+          "key": "roof_condition",
+          "value": 4,
+          "source": "vexcel",
+          "note": "1–5, 5 = best",
+          "confidence": 0.7,
+          "box": null,
+          "live": true
+        }
+      },
+      "media": {
+        "aerial_url": "/static/vexcel-cache/property-hou-101-ortho.jpg",
+        "oblique_url": "/static/vexcel-cache/property-hou-101-oblique.jpg",
+        "floor_plan_url": "/static/floorplans/property-123.svg",
+        "matterport_embed_url": null,
+        "image_url": "/static/properties/property-123.svg",
+        "aerial_source": "vexcel-live",
+        "aerial_attribution": "© Vexcel Imaging US, Inc."
+      },
+      "assumptions": [
+        "Full kitchen conversion priced at mid-market Houston rates."
+      ]
+    },
+    {
       "property_id": "property-321",
       "address": "2100 E Cesar Chavez Street",
-      "rank": 3,
+      "rank": 4,
       "score": 18,
       "disqualified": false,
       "disqualifiers": [],
@@ -1331,7 +1796,7 @@
     {
       "property_id": "property-789",
       "address": "789 Congress Avenue, Suite 110",
-      "rank": 4,
+      "rank": 5,
       "score": 52,
       "disqualified": true,
       "disqualifiers": [

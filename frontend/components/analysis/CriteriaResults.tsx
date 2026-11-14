@@ -3,6 +3,7 @@ import { formatPercent, formatValue, humanize, orNA } from "@/lib/format";
 import type { AnalysisResult, ComplianceEntry, CriterionResult, Evidence, Status } from "@/lib/types";
 import { Badge, StatusBadge } from "../ui/Badge";
 import { InfoTip } from "../ui/InfoTip";
+import { LiveDot } from "../ui/LiveDot";
 
 const STATUS_ORDER: Status[] = ["PASS", "RISK", "UNKNOWN"];
 
@@ -27,6 +28,7 @@ function EvidenceChip({ evidence }: { evidence: Evidence }) {
         {humanize(evidence.key)}: <span className="text-ink">{formatValue(evidence.value)}</span>
       </span>
       <span className="shrink-0 uppercase">· {evidence.source}{confidence}</span>
+      <LiveDot live={evidence.live} />
     </span>
   );
 }

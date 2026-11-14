@@ -52,3 +52,10 @@ export function overlayEvidence(result: AnalysisResult, source: OverlaySource): 
   }
   return boxed;
 }
+
+/** Evidence keys whose box outlines the whole building on the aerial (drawn dashed, beneath other boxes). */
+const FOOTPRINT_KEYS = new Set(["building_footprint"]);
+
+export function isFootprint(evidence: Pick<Evidence, "key">): boolean {
+  return FOOTPRINT_KEYS.has(evidence.key);
+}

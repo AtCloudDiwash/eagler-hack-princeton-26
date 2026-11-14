@@ -4,6 +4,7 @@ import { formatCompactCurrency, formatMonths, formatPercent, formatRange, format
 import type { AnalysisResult } from "@/lib/types";
 import { Badge } from "../ui/Badge";
 import { Card, SectionTitle } from "../ui/Card";
+import { LiveDot } from "../ui/LiveDot";
 import { CostBreakdown } from "./CostBreakdown";
 import { CriteriaResults } from "./CriteriaResults";
 import { LandlordLetter } from "./LandlordLetter";
@@ -111,7 +112,10 @@ export function AnalysisCard({ result, minScore }: { result: AnalysisResult; min
                   {observations.map(([key, evidence]) => (
                     <li key={key} className="grid gap-0.5 py-2 first:pt-0">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-medium">{humanize(key)}</span>
+                        <span className="flex items-baseline gap-2 font-medium">
+                          {humanize(key)}
+                          <LiveDot live={evidence?.live} />
+                        </span>
                         <span className="tabular-nums">{formatValue(evidence?.value)}</span>
                       </div>
                       <p className="text-xs text-ink-muted">

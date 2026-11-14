@@ -32,7 +32,7 @@ export function BusinessProfileForm() {
 
   const [typeId, setTypeId] = useState("restaurant");
   const [details, setDetails] = useState("");
-  const [city, setCity] = useState("Austin");
+  const [city, setCity] = useState("Houston");
   const [state, setState] = useState("TX");
 
   // If the configured list doesn't contain the current choice, fall back to the first entry.

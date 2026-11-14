@@ -97,3 +97,15 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return NA;
   return date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
+
+const PARKING_SOURCE_LABELS: Record<string, string> = {
+  user: "you said",
+  guideline: "guideline",
+  jurisdiction: "city code",
+};
+
+/** Requirements.parking_source -> short label; unknown future sources fall back to humanized text. */
+export function parkingSourceLabel(source: string | null | undefined): string {
+  if (!source) return "guideline";
+  return PARKING_SOURCE_LABELS[source] ?? humanize(source).toLowerCase();
+}

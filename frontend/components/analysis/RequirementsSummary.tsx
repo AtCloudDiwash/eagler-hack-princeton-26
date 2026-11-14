@@ -1,4 +1,4 @@
-import { formatCurrency, formatDateTime, formatNumber, formatSqft } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatNumber, formatSqft, parkingSourceLabel } from "@/lib/format";
 import type { AnalyzeResponse } from "@/lib/types";
 import { Badge } from "../ui/Badge";
 
@@ -51,7 +51,7 @@ export function RequirementsSummary({ analysis }: { analysis: AnalyzeResponse })
         <Chip label="Capacity" value={formatNumber(req.capacity, req.capacity_unit)} />
         <Chip label="Occupant load" value={formatNumber(req.occupant_load, "people")} />
         <Chip
-          label={`Parking (${req.parking_source === "user" ? "you said" : "guideline"})`}
+          label={`Parking (${parkingSourceLabel(req.parking_source)})`}
           value={formatNumber(req.parking_required, "spaces")}
         />
         <Chip label="Bathrooms" value={formatNumber(req.bathrooms_required)} />
