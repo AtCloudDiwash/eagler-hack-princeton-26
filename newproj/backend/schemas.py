@@ -12,6 +12,12 @@ MetricStatus = Literal["strong", "adequate", "weak", "blocker", "unknown"]
 
 # ------------------------------------------------------------------ API: discovery
 
+class Budget(BaseModel):
+    amount: float
+    period: Literal["monthly", "upfront", "annual"]
+    text: str = ""
+
+
 class Intent(BaseModel):
     business_type: str = "restaurant"
     business_label: str = "Restaurant"
@@ -19,7 +25,8 @@ class Intent(BaseModel):
     seats: int | None = None
     sqft: int | None = None
     requirements: list[str] = []
-    parser: Literal["ollama", "rules"] = "rules"
+    budget: Budget | None = None
+    parser: Literal["llm", "rules"] = "rules"
 
 
 class Candidate(BaseModel):

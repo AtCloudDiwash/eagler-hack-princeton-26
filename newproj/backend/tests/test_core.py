@@ -205,3 +205,18 @@ def test_no_vexcel_data_uses_osm_footprint_for_size_only():
     by_id = {a.metric_id: a for a in rep.metric_assessments}
     assert rep.status == "skipped" and by_id["size_fit"].status == "strong" and by_id["size_fit"].evidence_ids
     assert all(a.status == "unknown" for k, a in by_id.items() if k != "size_fit")
+
+
+def test_budget_parsing_and_check():
+    from services.intent import parse_budget
+
+    b = parse_budget("40-seat restaurant in Houston with a budget of $8k/month")
+    assert (b.amount, b.period) == (8000, "monthly")
+    assert parse_budget("40 seat restaurant 2000 sq ft in Houston") is None  # seats/sqft are not money
+    est = costs.estimate("restaurant", 1400, "houston-tx", [])
+    user = costs.budget_check(est, {"amount": 1_000_000, "period": "upfront"}, "restaurant")
+    assert user["source"] == "user" and user["status"] == "within" and costs.budget_status(user) == "strong"
+    tight = costs.budget_check(est, {"amount": 1000, "period": "monthly"}, "restaurant")
+    assert tight["status"] == "over" and costs.budget_status(tight) == "weak"
+    typical = costs.budget_check(est, None, "restaurant")
+    assert typical["source"] == "typical" and "didn't specify a budget" in typical["note"]

@@ -16,7 +16,15 @@
 export type GeoJSONGeometry = { type: "Polygon" | "MultiPolygon" | "Point"; coordinates: unknown };
 
 export type Health = {
-  ollama: { ok: boolean; model: string; error?: string | null };
+  /** Provider analyses will use first, plus the whole fallback chain (Codex → Claude Code → Ollama). */
+  llm: {
+    ok: boolean;
+    provider: string;
+    label?: string | null;
+    model: string | null;
+    error?: string | null;
+    providers?: { provider: string; label: string; model: string | null; ok: boolean; error?: string | null; cooling_down?: boolean }[];
+  };
   vexcel: "live" | "demo";
   census: boolean;
   matterport: boolean;
@@ -26,6 +34,8 @@ export type BusinessTypeInfo = { id: string; label: string; icon: string; defaul
 
 // ---------------------------------------------------------------- discovery
 
+export type Budget = { amount: number; period: "monthly" | "upfront" | "annual"; text: string };
+
 export type Intent = {
   business_type: string; // key in backend/config/business_types.yaml, e.g. "restaurant"
   business_label: string; // "Restaurant"
@@ -33,7 +43,8 @@ export type Intent = {
   seats: number | null;
   sqft: number | null;
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
-  parser: "ollama" | "rules";
+  budget: Budget | null; // stated in the query ("$8k/month", "budget of $300k"), else null
+  parser: "llm" | "rules";
 };
 
 export type Candidate = {
@@ -178,6 +189,16 @@ export type Costs = {
   monthly_occupancy: { low: number; high: number } | null; // rent + NNN + amortized fit-out
   upfront: { low: number; high: number };
   assumptions: string[];
+  /** Estimate vs the user's budget, or vs a typical budget for this use + size when none was given. */
+  budget?: {
+    source: "user" | "typical";
+    period: "monthly" | "upfront" | "annual";
+    amount: number;
+    compare_low: number;
+    compare_high: number;
+    status: "within" | "partly" | "over";
+    note: string;
+  };
 };
 
 export type ComplianceItem = {

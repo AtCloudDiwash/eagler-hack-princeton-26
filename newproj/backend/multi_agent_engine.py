@@ -24,13 +24,13 @@ from pydantic import BaseModel, Field
 import db
 from agents import compliance_agent, cost_agent, matterport_agent, neighborhood_agent, vexcel_agent
 from agents.base import AGENT_LABELS, EvidenceStore, RunContext
-from config import business, metrics_registry
+from config import business, metrics_registry, settings
 from schemas import AgentMetricAssessment, AgentReport, AnalysisRequest, MetricResult
 from services import costs as cost_engine
 from services import external, neighborhood, rules, scoring
 from services.geo import haversine_m
 from services.intent import target_sqft
-from services.llm import chat_model
+from services.llm import AllProvidersFailedError, chat_model, model_label, on_fallback, track_usage
 from services.vexcel import key_facts, imagery_meta
 
 log = logging.getLogger("turnkey.engine")
@@ -177,7 +177,11 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
     est = _evidence_data(ctx, "estimate_costs")
     if est:
         eid, data = est[-1]
-        override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
+        if ctx.intent.get("budget"):
+            check = cost_engine.budget_check(data, ctx.intent["budget"], ctx.intent["business_type"])
+            override("occupancy_cost", cost_engine.budget_status(check), f"the estimate is '{check['status']}' your stated budget", [eid])
+        else:
+            override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
         if "conversion_risk" in ctx.business["metrics"]:
             override("conversion_risk", cost_engine.conversion_risk_status(data), "the cost engine's uncertainty share says otherwise", [eid])
 
@@ -275,8 +279,8 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
         + json.dumps(digest, default=str)
     )
     try:
-        llm = chat_model(temperature=0.3, think=False).with_structured_output(_Narrative, method="json_schema")
-        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=90)
+        llm = chat_model().with_structured_output(_Narrative, method="json_schema")
+        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=150)
         return out.headline, out.explanation
     except Exception as err:  # noqa: BLE001
         log.warning("narrative failed: %s", err)
@@ -319,6 +323,8 @@ def compliance_items(ctx: RunContext) -> list[dict]:
 async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
     log_ = EventLog(analysis_id)
     db.update_analysis(analysis_id, status="running")
+    llm_counts = track_usage()
+    on_fallback(lambda msg: log_.emit("engine", "validation", msg))
     try:
         stored = db.get_property(req.property_id)
         if not stored:
@@ -343,6 +349,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
         phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
+        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError)), None)
+        if limit_hit:
+            raise limit_hit
         for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
             if isinstance(rep, BaseException):
                 log_.emit(name, "error", f"Crashed: {rep}")
@@ -363,6 +372,8 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
         try:
             reports["cost"] = await cost_agent.run(ctx)
+        except AllProvidersFailedError:
+            raise
         except Exception as err:  # noqa: BLE001
             reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
 
@@ -410,6 +421,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
 
         cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
+        cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
         headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public)
 
@@ -431,7 +443,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             *nb.get("sources", [])[1:],
             {"name": "US Census ACS", "status": ctx.census.get("status", "unavailable"), "note": ctx.census.get("note", "")},
             {"name": "Verified jurisdiction rules", "status": "used" if ctx.jurisdiction_key != "_default" else "unavailable", "note": ctx.jurisdiction["name"]},
-            {"name": "Ollama (local LLM)", "status": "used", "note": "All agent reasoning"},
+            *[{"name": f"LLM: {model_label(p)}", "status": "used" if llm_counts.get(p) else "unavailable",
+               "note": f"{llm_counts.get(p, 0)} calls" + (" (fallback)" if llm_counts.get(p) and p != settings.llm_providers[0] else "")}
+              for p in settings.llm_providers],
             {"name": "Matterport interior scan", "status": "used" if mp_ok else "unavailable", "note": mp_reason or "Interior model"},
             {"name": "CoStar listings / asking rent", "status": "unavailable", "note": "Not connected; rent uses documented planning bands"},
         ]

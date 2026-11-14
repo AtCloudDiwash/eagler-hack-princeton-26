@@ -55,8 +55,8 @@ export default function AnalysisPage({ params }: { params: Promise<{ id: string 
             </Link>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Spinner /> Loading analysis…
+          <div className="flex flex-col items-center gap-3 text-sm text-slate-400">
+            <Spinner className="h-6 w-6" /> Loading analysis…
           </div>
         )}
       </div>

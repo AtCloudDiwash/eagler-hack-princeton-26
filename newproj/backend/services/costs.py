@@ -96,6 +96,38 @@ def estimate(business_type: str, sqft: float, jurisdiction_key: str, adders: lis
     }
 
 
+def budget_check(costs: dict, budget: dict | None, business_type: str) -> dict:
+    """Compare the estimate with the user's budget, or (if none was given) with a typical budget for this use
+    and size. Pure Python: same inputs, same answer."""
+    sqft = costs["sqft_used"] or 1
+    if budget:
+        period, amount = budget["period"], float(budget["amount"])
+        if period == "monthly":
+            low, high = costs["monthly_occupancy"]["low"], costs["monthly_occupancy"]["high"]
+        elif period == "annual":
+            low, high = costs["monthly_occupancy"]["low"] * 12, costs["monthly_occupancy"]["high"] * 12
+        else:
+            low, high = costs["upfront"]["low"], costs["upfront"]["high"]
+        source, label = "user", {"monthly": "monthly", "annual": "annual", "upfront": "upfront"}[period]
+        note = f"Your {label} budget of ${amount:,.0f} vs an estimated ${low:,.0f}–${high:,.0f}."
+    else:
+        use = business(business_type)["zoning_use"]
+        typical = costs_config()["typical_upfront_per_sqft"][use]
+        period, amount = "upfront", round(sqft * typical["good"], -3)
+        low, high = costs["upfront"]["low"], costs["upfront"]["high"]
+        source = "typical"
+        note = (
+            f"You didn't specify a budget, so this compares against a typical upfront budget for a "
+            f"{business(business_type)['label'].lower()} of about {sqft:,.0f} sq ft (≈${amount:,.0f}, based on your choices)."
+        )
+    status = "within" if high <= amount else "partly" if low <= amount else "over"
+    return {"source": source, "period": period, "amount": amount, "compare_low": low, "compare_high": high, "status": status, "note": note}
+
+
+def budget_status(check: dict) -> str:
+    return {"within": "strong", "partly": "adequate", "over": "weak"}[check["status"]]
+
+
 def cost_status(costs: dict) -> str:
     """Python rule for the occupancy_cost metric: compare upfront $/sq ft with typical budgets."""
     b = costs["_benchmark"]

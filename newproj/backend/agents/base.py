@@ -1,4 +1,4 @@
-"""Shared agent harness: LangChain Deep Agents on Ollama, evidence tracking, bounded tool use,
+"""Shared agent harness: LangChain Deep Agents on the LLM fallback chain (Codex → Claude Code → Ollama), evidence tracking, bounded tool use,
 structured output with a constrained-JSON fallback, and live progress events.
 
 Every tool result is registered as evidence with an id (E1, E2...). Agents must cite those ids; the
@@ -25,19 +25,19 @@ from langchain_core.tools import StructuredTool
 
 from config import business, metrics_registry, settings
 from schemas import AgentFinding, AgentMetricAssessment, AgentOutput, AgentReport, Evidence, Finding
-from services.llm import chat_model
+from services.llm import AllProvidersFailedError, chat_model
 
 log = logging.getLogger("turnkey.agents")
 
 # Deep Agents ships file-system, shell, todo and sub-agent tools. Our agents investigate through their
-# own domain tools only; extra tools confuse small local models and waste steps.
-register_harness_profile(
-    "ollama",
-    HarnessProfile(
-        excluded_tools=frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute", "task", "write_todos"}),
-        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-    ),
+# own domain tools only; extra tools waste steps and add prompt tokens to every call.
+_LEAN = dict(
+    excluded_tools=frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "execute", "task", "write_todos"}),
+    general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
 )
+# "turnkey" = FallbackChat (Codex → Claude Code → Ollama); the others cover direct provider use.
+for _provider in ("turnkey", "codex", "claude", "ollama"):
+    register_harness_profile(_provider, HarnessProfile(**_LEAN))
 
 AGENT_LABELS = {
     "vexcel": "Vexcel Agent",
@@ -139,7 +139,7 @@ def tracked_tool(ctx: RunContext, agent: str, budget: ToolBudget, source: str) -
                 return json.dumps({"error": str(err)})
             eid = ctx.evidence.add(agent, fn.__name__, result.get("source", source), result["summary"], result.get("data"), result.get("url"))
             budget.seen[key] = eid
-            ctx.emit(agent, "tool_result", f"{eid}: {result['summary']}", {"evidence_id": eid})
+            ctx.emit(agent, "tool_result", f"{eid}: {result['summary']}", {"evidence_id": eid, "tool": fn.__name__, "args": safe_args})
             payload = {"evidence_id": eid, "summary": result["summary"], **({"data": result["data"]} if result.get("data") is not None else {})}
             if result.get("guidance"):
                 payload["interpretation_notes"] = result["guidance"]
@@ -199,12 +199,12 @@ async def _extract_output(transcript: str, metrics: list[dict], evidence: list[E
         "for the user's business, each with why_it_matters and evidence ids) and list what the data cannot answer.\n\n"
         f"EVIDENCE:\n{ev}\n\nINVESTIGATION NOTES:\n{transcript[-6000:]}"
     )
-    llm = chat_model(temperature=0, think=False).with_structured_output(AgentOutput, method="json_schema")
+    llm = chat_model().with_structured_output(AgentOutput, method="json_schema")
     return await asyncio.wait_for(llm.ainvoke(prompt), timeout=120)
 
 
 def _parse_text_report(messages: list) -> AgentOutput | None:
-    """Small local models often write the final report as JSON text; accept it if it validates."""
+    """Models sometimes write the final report as JSON text instead of the report tool; accept it if it validates."""
     for m in reversed(messages):
         if isinstance(m, AIMessage) and isinstance(m.content, str) and "{" in m.content:
             text = m.content.strip()
@@ -266,6 +266,8 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
         state = await asyncio.wait_for(drive(), timeout=settings.agent_timeout_s)
         messages = state.get("messages", [])
         output = state.get("structured_response")
+    except AllProvidersFailedError:
+        raise  # every provider is out: no point continuing
     except asyncio.TimeoutError:
         error = f"Timed out after {settings.agent_timeout_s:.0f}s"
     except Exception as err:  # noqa: BLE001 - one agent failing must not sink the analysis
@@ -284,6 +286,8 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
             try:
                 output = await _extract_output(_transcript(messages), metrics, evidence)
                 status = "partial" if error else "completed"
+            except AllProvidersFailedError:
+                raise
             except Exception as err:  # noqa: BLE001
                 error = error or f"Report extraction failed: {err}"
         if output is None:

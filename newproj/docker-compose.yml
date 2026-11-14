@@ -1,12 +1,16 @@
 # Turnkey Matchmaker: backend (FastAPI + agents) + frontend (Next.js).
 #
-#   cp backend/.env.example backend/.env    # add VEXCEL_API_KEY (optional: demo/OSM mode without it)
-#   docker compose up --build               # http://localhost:3000
+#   codex login                              # once, on this machine (or use the ChatGPT/Codex app)
+#   cp backend/.env.example backend/.env     # add VEXCEL_API_KEY (optional: OSM-only mode without it)
+#   docker compose up --build                # http://localhost:3000
 #
-# LLM: by default the backend uses Ollama running on your HOST (fast, uses the GPU on Macs).
-# To run Ollama in Docker instead (CPU-only on Macs, slow):
-#   OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile ollama up --build
-# See INSTALLATION.md for details.
+# LLM fallback chain (LLM_PROVIDERS in backend/.env): Codex CLI → Claude Code CLI → Ollama.
+#  - Codex uses YOUR login, mounted from ~/.codex (override with CODEX_HOME_DIR=/path; read-write because
+#    Codex refreshes its token there).
+#  - Claude Code needs CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) or ANTHROPIC_API_KEY in backend/.env,
+#    because the macOS Keychain login isn't visible inside a container. Without it, it is skipped.
+#  - Ollama runs on the host and is reached through host.docker.internal.
+# See INSTALLATION.md.
 
 name: turnkey-matchmaker
 
@@ -17,16 +21,19 @@ services:
       - path: ./backend/.env
         required: false
     environment:
-      # Inside a container "localhost" is the container itself, so point at the host's Ollama.
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       DATABASE_PATH: /data/turnkey.db
       CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-3000},http://127.0.0.1:${FRONTEND_PORT:-3000}
+      CODEX_HOME: /codex-home
+      CODEX_BIN: codex   # the Linux CLIs inside the image (host CODEX_BIN/CLAUDE_BIN paths would not exist here)
+      CLAUDE_BIN: claude
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # makes host.docker.internal work on Linux too
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - turnkey-data:/data
+      - ${CODEX_HOME_DIR:-~/.codex}:/codex-home
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
     restart: unless-stopped
 
   frontend:
@@ -42,26 +49,5 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Optional containerized Ollama (enable with --profile ollama).
-  ollama:
-    image: ollama/ollama:0.12.6
-    profiles: ["ollama"]
-    volumes:
-      - ollama-models:/root/.ollama
-    restart: unless-stopped
-
-  # One-shot: pulls the model into the containerized Ollama, then exits.
-  ollama-pull:
-    image: ollama/ollama:0.12.6
-    profiles: ["ollama"]
-    depends_on: [ollama]
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "sleep 3 && ollama pull ${OLLAMA_MODEL:-qwen3:8b}"]
-    volumes:
-      - ollama-models:/root/.ollama
-    restart: "no"
-
 volumes:
   turnkey-data:
-  ollama-models:
