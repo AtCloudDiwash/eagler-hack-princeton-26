@@ -1,0 +1,34 @@
+# Jurisdiction rules used by the compliance checks. Keyed "<city>-<state>" in lower case;
+# anything not listed falls back to `default`. Every value here is a simplification for
+# decision support — the UI must tell users to verify with the city / a licensed professional.
+
+default:
+  name: "Generic (model codes)"
+  parking_minimums: false
+  parking_note: "No local parking rule loaded; compared against the spaces your business needs."
+  plumbing_code: "Model plumbing code fixture table (IPC Table 2902.1 / UPC Table 422.1)"
+  building_code: "International Building Code"
+  health_code: "State food establishment rules"
+  zoning_source: null
+  zoning: {}
+
+austin-tx:
+  name: "Austin, TX"
+  parking_minimums: false
+  parking_note: >-
+    Austin eliminated minimum parking requirements citywide on Nov 2, 2023
+    (some special districts kept older rules; ADA accessible-space rules still apply).
+  plumbing_code: "2024 Uniform Plumbing Code as amended by Austin (City Code Ch. 25-12), Table 422.1"
+  building_code: "International Building Code as adopted by Austin"
+  health_code: "Texas Food Establishment Rules, 25 TAC Chapter 228"
+  zoning_source: "Austin Land Development Code §25-2-491 permitted-use table (simplified — verify per parcel)"
+  # Base districts only; suffixes like -MU, -CO, -V are stripped before lookup.
+  zoning:
+    restaurant:
+      permitted: ["GR", "CS", "CS-1", "CH", "CBD", "DMU"]
+      conditional: ["LR"]
+      prohibited: ["LO", "GO", "NO", "SF-1", "SF-2", "SF-3", "MF-1", "MF-2", "MF-3"]
+    medical_office:
+      permitted: ["LO", "GO", "GR", "CS", "CS-1", "CH", "CBD", "DMU"]
+      conditional: ["LR", "NO"]
+      prohibited: ["SF-1", "SF-2", "SF-3"]

@@ -1,0 +1,73 @@
+{
+  "_comment": "Mock output of the vision agent. 'interior' facts stand in for Matterport measurements, 'aerial' facts for Vexcel imagery. A fact that is absent is treated as unknown. 'box' is a normalized [x, y, w, h] overlay on the image.",
+  "property-123": {
+    "floor_plan_url": "/static/floorplans/property-123.png",
+    "aerial_url": "/static/aerials/property-123.jpg",
+    "interior": {
+      "door_width_inches": { "value": 34, "confidence": 0.85, "note": "Front entry door, measured in 3D tour", "box": [0.08, 0.72, 0.06, 0.1] },
+      "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Entry is flush with the sidewalk" },
+      "kitchen_equipment_visible": { "value": false, "confidence": 0.95, "note": "Open retail floor, no cooking line" },
+      "hood_present": { "value": false, "confidence": 0.9, "note": "No exhaust hood on the ceiling" },
+      "grease_interceptor_present": { "value": false, "confidence": 0.6, "note": "No interceptor cleanout seen near the back of house" },
+      "bathrooms_visible": { "value": 1, "confidence": 0.95, "note": "One single-user restroom at the rear", "box": [0.82, 0.12, 0.1, 0.14] },
+      "electrical_service_amps": { "value": 200, "confidence": 0.7, "note": "Panel label reads 200A" },
+      "sprinklered": { "value": false, "confidence": 0.8, "note": "No sprinkler heads visible" },
+      "window_area": { "value": 60, "confidence": 0.8, "note": "Full-height storefront glass" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 15, "confidence": 0.8, "note": "15 striped spaces in the shared front lot", "box": [0.05, 0.6, 0.55, 0.3] },
+      "hvac_tons": { "value": 5, "confidence": 0.6, "note": "One rooftop unit, size estimated from footprint", "box": [0.62, 0.22, 0.08, 0.08] }
+    }
+  },
+  "property-456": {
+    "floor_plan_url": "/static/floorplans/property-456.png",
+    "aerial_url": "/static/aerials/property-456.jpg",
+    "interior": {
+      "door_width_inches": { "value": 36, "confidence": 0.9, "note": "Front entry door, measured in 3D tour", "box": [0.1, 0.7, 0.06, 0.1] },
+      "step_free_entrance": { "value": true, "confidence": 0.9, "note": "Ramp at the entry" },
+      "kitchen_equipment_visible": { "value": true, "confidence": 0.95, "note": "Full cooking line with walk-in cooler", "box": [0.55, 0.1, 0.4, 0.35] },
+      "hood_present": { "value": true, "confidence": 0.9, "note": "12 ft exhaust hood over the line" },
+      "grease_interceptor_present": { "value": true, "confidence": 0.8, "note": "Interceptor cleanout visible behind the building" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.95, "note": "Two restrooms off the dining room" },
+      "electrical_service_amps": { "value": 400, "confidence": 0.75, "note": "Panel label reads 400A" },
+      "window_area": { "value": 35, "confidence": 0.8, "note": "Two storefront windows" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 22, "confidence": 0.85, "note": "22 spaces in the side lot", "box": [0.6, 0.55, 0.35, 0.35] },
+      "hvac_tons": { "value": 10, "confidence": 0.65, "note": "Two rooftop units", "box": [0.3, 0.2, 0.15, 0.08] }
+    }
+  },
+  "property-789": {
+    "floor_plan_url": "/static/floorplans/property-789.png",
+    "aerial_url": "/static/aerials/property-789.jpg",
+    "interior": {
+      "door_width_inches": { "value": 30, "confidence": 0.8, "note": "Suite door narrower than ADA clear width", "box": [0.45, 0.85, 0.05, 0.08] },
+      "step_free_entrance": { "value": false, "confidence": 0.85, "note": "Two steps up from the street" },
+      "kitchen_equipment_visible": { "value": false, "confidence": 0.95, "note": "Office layout, break room only" },
+      "hood_present": { "value": false, "confidence": 0.95, "note": "No exhaust hood" },
+      "bathrooms_visible": { "value": 2, "confidence": 0.9, "note": "Two restrooms in the suite" },
+      "plumbed_operatories": { "value": 0, "confidence": 0.9, "note": "No sinks in private offices" },
+      "electrical_service_amps": { "value": 200, "confidence": 0.7, "note": "Panel label reads 200A" },
+      "sprinklered": { "value": true, "confidence": 0.9, "note": "Sprinkler heads throughout" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 30, "confidence": 0.8, "note": "Shared garage entrance plus surface lot", "box": [0.1, 0.1, 0.4, 0.4] },
+      "hvac_tons": { "value": 6, "confidence": 0.6, "note": "Share of the building's rooftop equipment" }
+    }
+  },
+  "property-321": {
+    "floor_plan_url": "/static/floorplans/property-321.png",
+    "aerial_url": "/static/aerials/property-321.jpg",
+    "interior": {
+      "step_free_entrance": { "value": true, "confidence": 0.7, "note": "Entry appears level" },
+      "kitchen_equipment_visible": { "value": true, "confidence": 0.85, "note": "Coffee-bar prep line, no cooking equipment" },
+      "hood_present": { "value": false, "confidence": 0.85, "note": "No exhaust hood over prep area" },
+      "bathrooms_visible": { "value": 1, "confidence": 0.9, "note": "One restroom" },
+      "electrical_service_amps": { "value": 200, "confidence": 0.6, "note": "Panel label partly visible" }
+    },
+    "aerial": {
+      "visible_parking_count": { "value": 8, "confidence": 0.75, "note": "8 spaces behind the building", "box": [0.55, 0.6, 0.3, 0.25] },
+      "hvac_tons": { "value": 4, "confidence": 0.55, "note": "One small rooftop unit" }
+    }
+  }
+}

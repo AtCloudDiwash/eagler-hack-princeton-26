@@ -1,0 +1,70 @@
+# Cost bands for the deterministic cost engine. Ranges, not quotes.
+# unit: each | per_sqft. adds_months extends the build-out period (rent paid before opening).
+
+disclaimer: >-
+  Preliminary estimates from fixed cost bands, not contractor quotes. Actual costs vary
+  with site conditions, finishes and local labor rates.
+
+items:
+  kitchen_install:
+    label: "Commercial kitchen (hood, line, fixtures)"
+    unit: each
+    min: 40000
+    max: 60000
+    adds_months: { min: 1, max: 2 }
+  hood_exhaust:
+    label: "Kitchen exhaust hood + fire suppression"
+    unit: each
+    min: 15000
+    max: 30000
+    adds_months: { min: 0, max: 1 }
+  grease_interceptor:
+    label: "Grease interceptor"
+    unit: each
+    min: 8000
+    max: 20000
+  restroom_add:
+    label: "Additional restroom (toilet + lavatory)"
+    unit: each
+    min: 10000
+    max: 15000
+  door_widening:
+    label: "Widen entrance door to ADA clear width"
+    unit: each
+    min: 1000
+    max: 3000
+  entrance_ramp:
+    label: "ADA entrance ramp"
+    unit: each
+    min: 5000
+    max: 10000
+  hvac_rtu:
+    label: "Rooftop HVAC unit (5-ton)"
+    unit: each
+    min: 15000
+    max: 25000
+  electrical_service_upgrade:
+    label: "Electrical service / panel upgrade"
+    unit: each
+    min: 10000
+    max: 25000
+  operatory_plumbing:
+    label: "Plumb treatment room (water, vacuum, air)"
+    unit: each
+    min: 5000
+    max: 8000
+  fire_sprinkler:
+    label: "Fire sprinkler system"
+    unit: per_sqft
+    min: 3
+    max: 7
+    adds_months: { min: 1, max: 1 }
+
+soft_costs:
+  permits_fees: { label: "Permits and fees", min: 5000, max: 10000 }
+  general_conditions_pct: { label: "Demolition / general conditions", min: 0.10, max: 0.20 }
+  contingency_pct: { label: "Contingency", min: 0.10, max: 0.20 }
+
+ranking:
+  # Properties are ranked by first-year cost = cost to open + this many months of rent after opening.
+  horizon_months: 12

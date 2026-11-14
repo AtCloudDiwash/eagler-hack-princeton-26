@@ -1,0 +1,42 @@
+# Business type profiles. Add a new type by adding a block here (and, if it needs a
+# type-specific check, a criterion in criteria.yaml with `business_types: [<your_type>]`).
+#
+# capacity_unit            what the user counts ("40 seats", "4 chairs")
+# sqft_per_capacity_unit   rough space need used for the size filter
+# staff                    occupant load = capacity * occupants_per_capacity_unit + staff
+# parking_per_capacity_unit  used only when the user doesn't state a parking number (business guideline, not code)
+# restrooms                fixture rule; separate facilities above `single_user_max_occupants`
+# sprinkler_required_if    IBC §903.2 trigger for this occupancy (omit = not triggered by size alone)
+
+restaurant:
+  label: "Restaurant"
+  occupancy_group: "A-2"
+  zoning_use: "restaurant"
+  capacity_unit: "seats"
+  default_capacity: 40
+  sqft_per_capacity_unit: 35
+  occupants_per_capacity_unit: 1
+  staff: { base: 2, per_capacity_unit: 0.1 }
+  needs_kitchen: true
+  parking_per_capacity_unit: 0.33
+  restrooms: { single_user_max_occupants: 15, occupants_per_fixture_per_sex: 75 }
+  hvac_sqft_per_ton: 200
+  electrical_amps: 400
+  buildout_months: { min: 2, max: 3 }
+  sprinkler_required_if: { sqft_over: 5000, occupants_at_least: 100 }   # IBC 903.2.1.2 (A-2)
+
+dental_clinic:
+  label: "Dental clinic"
+  occupancy_group: "B"
+  zoning_use: "medical_office"
+  capacity_unit: "chairs"
+  default_capacity: 4
+  sqft_per_capacity_unit: 400
+  occupants_per_capacity_unit: 2       # patient + companion per chair
+  staff: { base: 2, per_capacity_unit: 1.5 }
+  needs_kitchen: false
+  parking_per_capacity_unit: 3
+  restrooms: { single_user_max_occupants: 25, occupants_per_fixture_per_sex: 25 }
+  hvac_sqft_per_ton: 300
+  electrical_amps: 200
+  buildout_months: { min: 2, max: 4 }

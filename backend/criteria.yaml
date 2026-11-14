@@ -1,0 +1,159 @@
+# Criteria registry — the single place that decides what gets scored and how much it matters.
+#
+# Add or re-weight criteria here; no core code changes are needed unless you introduce a new
+# `evaluator` name (then register one function in app/services/evaluators.py).
+# The file is re-read automatically when it changes, so weight edits apply on the next request.
+#
+# Field reference (full spec: docs/CRITERIA_REGISTRY.md)
+#   weight               relative importance; 0 = evaluated and shown but not scored
+#   hard_block           disqualify the property when the evaluator reports a definitive failure.
+#                        Missing data NEVER triggers a hard block.
+#   missing_data_policy  assume_risk  -> UNKNOWN, scored as 0
+#                        assume_cost  -> UNKNOWN, scored as 0, and the evaluator's fallback cost is added
+#                        unknown      -> UNKNOWN, excluded from the score (also accepted: "ignore")
+#   evidence_required    a PASS needs at least one observed fact (listing / Matterport / Vexcel)
+#   business_types       business types this applies to (["ALL"] = every type)
+#   applicable_jurisdictions  ["ALL"], a state code ("TX") or a city ("Austin")
+
+- id: "zoning_use"
+  description: "Zoning permits this business use"
+  domain: "regulatory"
+  weight: 10
+  hard_block: true
+  evaluator: "zoning_checker"
+  required_inputs: ["zoning_code"]
+  missing_data_policy: "unknown"
+  evidence_required: true
+  source: "Austin LDC §25-2-491 use table (simplified)"
+  thresholds: {}
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "parking_sufficiency"
+  description: "Visible parking covers the spaces the business needs"
+  domain: "regulatory"
+  weight: 10
+  hard_block: false
+  evaluator: "parking_checker"
+  required_inputs: ["visible_parking_count", "business_required_parking"]
+  missing_data_policy: "assume_risk"
+  evidence_required: true
+  source: "Business need; Austin has no minimum parking requirement (Nov 2023)"
+  thresholds:
+    min_ratio: 1.0          # visible / required spaces needed for PASS
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "ada_accessibility"
+  description: "Accessible entrance (door clear width, step-free entry)"
+  domain: "safety"
+  weight: 15
+  hard_block: false
+  evaluator: "ada_checker"
+  required_inputs: ["door_width_inches"]
+  missing_data_policy: "assume_risk"
+  evidence_required: true
+  source: "2010 ADA Standards §404.2.3 (32 in. min clear width)"
+  thresholds:
+    min_width: 32
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "kitchen_equipment"
+  description: "Existing commercial kitchen and exhaust hood"
+  domain: "space"
+  weight: 20
+  hard_block: false
+  evaluator: "kitchen_checker"
+  required_inputs: ["kitchen_equipment_visible"]
+  missing_data_policy: "assume_cost"
+  evidence_required: false
+  source: "Restaurant build-out standards"
+  thresholds: {}
+  business_types: ["restaurant"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "grease_interceptor"
+  description: "Grease interceptor in place for a food-service kitchen"
+  domain: "health"
+  weight: 10
+  hard_block: false
+  evaluator: "grease_checker"
+  required_inputs: ["grease_interceptor_present"]
+  missing_data_policy: "assume_cost"
+  evidence_required: false
+  source: "UPC §1014 Grease Interceptors; Austin Water pretreatment program"
+  thresholds: {}
+  business_types: ["restaurant"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "operatory_plumbing"
+  description: "Treatment rooms already plumbed (water, vacuum, air)"
+  domain: "space"
+  weight: 20
+  hard_block: false
+  evaluator: "operatory_checker"
+  required_inputs: ["plumbed_operatories", "business_capacity"]
+  missing_data_policy: "assume_cost"
+  evidence_required: false
+  source: "Dental clinic build-out standards"
+  thresholds: {}
+  business_types: ["dental_clinic"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "bathroom_count"
+  description: "Enough restrooms for the occupant load"
+  domain: "safety"
+  weight: 10
+  hard_block: false
+  evaluator: "bathroom_checker"
+  required_inputs: ["bathrooms_visible", "business_required_bathrooms"]
+  missing_data_policy: "assume_risk"
+  evidence_required: true
+  source: "Plumbing code fixture table (simplified)"
+  thresholds: {}
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "hvac_capacity"
+  description: "Rooftop HVAC capacity covers the expected load"
+  domain: "space"
+  weight: 10
+  hard_block: false
+  evaluator: "hvac_checker"
+  required_inputs: ["hvac_tons", "required_hvac_tons"]
+  missing_data_policy: "assume_risk"
+  evidence_required: true
+  source: "Rule of thumb: sq ft per ton by business type"
+  thresholds:
+    tons_per_unit: 5
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "electrical_service"
+  description: "Electrical service sized for the business"
+  domain: "space"
+  weight: 5
+  hard_block: false
+  evaluator: "electrical_checker"
+  required_inputs: ["electrical_service_amps", "required_electrical_amps"]
+  missing_data_policy: "assume_risk"
+  evidence_required: true
+  source: "Typical service size by business type"
+  thresholds: {}
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
+
+- id: "fire_safety"
+  description: "Sprinkler system where the occupancy requires one"
+  domain: "safety"
+  weight: 0
+  hard_block: true
+  evaluator: "fire_safety_checker"
+  required_inputs: ["occupant_load", "size_sqft"]
+  missing_data_policy: "unknown"
+  evidence_required: false
+  source: "IBC §903.2 automatic sprinkler thresholds"
+  thresholds: {}
+  business_types: ["ALL"]
+  applicable_jurisdictions: ["ALL"]
