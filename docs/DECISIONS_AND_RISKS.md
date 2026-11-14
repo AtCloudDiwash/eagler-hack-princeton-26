@@ -69,18 +69,17 @@
 
 ## Known issues
 
-Found while writing the docs; not fixed in this pass.
+Found while writing the docs.
 
-1. **Dental fallback unit mismatch.** `FALLBACK_BUSINESS_TYPES` in
-   `frontend/components/BusinessProfileForm.tsx` lists dental `capacity_unit: "operatories"`, while
-   `business_types.yaml` says `"chairs"`. This only shows when the API is down.
-2. **State field not required in the form.** The state input lacks `required`. Clearing it still
-   lists properties, but `POST /analyze` then fails with a 422 (`state` min length 2).
-3. **Zoning fallback citation is Austin-specific.** `criteria.yaml` `zoning_use.source` cites the
+1. **Zoning fallback citation is Austin-specific** (open). `criteria.yaml` `zoning_use.source` cites the
    Austin LDC while applying to ALL jurisdictions. Non-Austin cities return UNKNOWN with the
    jurisdiction's `zoning_source` (null), so the Austin citation shows as the fallback.
-4. **Unused config.** `GEOCODING_API_KEY` and the `jurisdictions.yaml` keys `building_code`,
+2. **Unused config** (open). `GEOCODING_API_KEY` and the `jurisdictions.yaml` keys `building_code`,
    `health_code` and `parking_minimums` are loaded but not read by any code.
-5. **`/health` vs `mode.parser`.** `/health` reports the *configured* parser (`claude` if a key is set),
-   while `AnalyzeResponse.mode.parser` reports the parser *actually used*, which can be `regex` after a
-   fallback. This is intended, but worth knowing when debugging.
+3. **`/health` vs `mode.parser`** (intended). `/health` reports the *configured* parser (`claude` if a key
+   is set), while `AnalyzeResponse.mode.parser` reports the parser *actually used*, which can be `regex`
+   after a fallback. Documented in API_CONTRACT.md.
+
+Fixed: the dental fallback unit in `BusinessProfileForm.tsx` now says "chairs" (matching
+`business_types.yaml`), and the State input is `required` with `minLength={2}`, so the form can no longer
+submit a profile that `POST /analyze` rejects.

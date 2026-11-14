@@ -25,6 +25,10 @@ Types below use TypeScript notation. `Status = "PASS" | "RISK" | "UNKNOWN"`.
 { status: "ok"; mode: { costar: "mock" | "live"; matterport: "mock" | "live"; vexcel: "mock" | "live"; parser: "regex" | "claude" } }
 ```
 
+`mode.parser` here is the parser that is *configured* ("claude" when `ANTHROPIC_API_KEY` is set).
+An analysis response's `mode.parser` is the parser that was *actually used* for that run, so it reads
+"regex" if the Claude call failed and fell back.
+
 ### GET /api/v1/business-types
 
 Business types from `backend/config/business_types.yaml`, for the profile form's select.
@@ -38,7 +42,8 @@ Array<{ id: string; label: string; capacity_unit: string; default_capacity: numb
 
 The criteria registry (`backend/criteria.yaml`). All query params are optional; when given, only
 criteria applicable to that business type / jurisdiction are returned. The UI renders whatever it
-gets — it never hard-codes criterion ids.
+gets — it never hard-codes criterion ids. Unknown `business_type` → 400; a malformed
+`criteria.yaml` → 500 with a message naming the bad entry.
 
 ```ts
 Array<{
@@ -68,8 +73,9 @@ Array<{
 
 ### POST /api/v1/analyze
 
-Runs the full agent pipeline (parse requirements → fetch property → vision observations → cost
-engine → compliance/criteria evaluation → ranking), **stores the run in SQLite**, and returns it.
+Runs the full agent pipeline (parse requirements → fetch property → vision observations →
+compliance/criteria evaluation (which emits the needed cost items) → cost engine → scoring →
+ranking), **stores the run in SQLite**, and returns it.
 
 Request:
 
@@ -153,7 +159,7 @@ Overlay rule for the UI: evidence with `source: "vexcel"` and a `box` is drawn o
 
 ### GET /api/v1/analyses?limit=20
 
-Recent stored runs, newest first.
+Recent stored runs, newest first. `limit` is 1–100 (default 20); outside that range → 422.
 
 ```ts
 Array<{
@@ -165,5 +171,7 @@ Array<{
 
 ### GET /api/v1/analyses/{analysis_id}
 
-Returns the stored `AnalyzeResponse` exactly as `POST /api/v1/analyze` returned it. Unknown id → 404.
+Returns the stored `AnalyzeResponse` as `POST /api/v1/analyze` returned it, re-validated against the
+current model: runs stored before a field existed get its default (e.g. `min_score: 0`,
+`weak_fit: false`); a run that no longer validates is returned as the raw stored JSON. Unknown id → 404.
 The frontend's shareable report URL is `/analysis/{analysis_id}`.

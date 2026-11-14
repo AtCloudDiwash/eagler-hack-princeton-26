@@ -11,7 +11,7 @@ import { Button } from "./ui/Button";
 /** Used when GET /api/v1/business-types fails so the form still works offline. */
 export const FALLBACK_BUSINESS_TYPES: BusinessType[] = [
   { id: "restaurant", label: "Restaurant", capacity_unit: "seats", default_capacity: 40, needs_kitchen: true },
-  { id: "dental_clinic", label: "Dental clinic", capacity_unit: "operatories", default_capacity: 4, needs_kitchen: false },
+  { id: "dental_clinic", label: "Dental clinic", capacity_unit: "chairs", default_capacity: 4, needs_kitchen: false },
 ];
 
 /** Example requirement sentence derived from the business type config (no per-type hard-coding). */
@@ -104,7 +104,9 @@ export function BusinessProfileForm() {
             id="state"
             value={state}
             onChange={(e) => setState(e.target.value.toUpperCase())}
+            minLength={2}
             maxLength={2}
+            required
             className={`${inputClass} uppercase`}
           />
         </div>
