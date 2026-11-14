@@ -136,7 +136,13 @@ AnalysisResult = {
   questions_for_landlord: string[];
   landlord_request: string;          // drafted letter (plain text, newlines) asking for TI / fixes
   observations: Record<string, Evidence>;        // keyed by fact name, e.g. "door_width_inches"
-  media: { aerial_url: string | null; floor_plan_url: string | null; matterport_embed_url: string | null; image_url: string | null };
+  media: {
+    aerial_url: string | null;          // top-down ortho; live Vexcel image is cached by the backend and served from /static/vexcel-cache/...
+    oblique_url: string | null;         // angled Vexcel photo of the building (null when unavailable / mock)
+    floor_plan_url: string | null; matterport_embed_url: string | null; image_url: string | null;
+    aerial_source: "vexcel-live" | "placeholder";   // drives the "Live · Vexcel" badge and attribution line
+    aerial_attribution: string | null;  // e.g. "© Vexcel Imaging US, Inc." — must be shown under live imagery
+  };
   assumptions: string[];
 }
 
@@ -151,11 +157,18 @@ Evidence = {
   key: string; value: unknown; source: "costar" | "matterport" | "vexcel" | "requirements" | "jurisdiction";
   note: string | null; confidence: number | null;
   box: [number, number, number, number] | null;  // normalized [x, y, w, h] overlay on the source image
+  live: boolean;                     // true when the fact came from a live provider call (e.g. Vexcel property/extract), false for fixtures/derived
 }
 ```
 
 Overlay rule for the UI: evidence with `source: "vexcel"` and a `box` is drawn on `media.aerial_url`;
 `source: "matterport"` with a `box` is drawn on `media.floor_plan_url`.
+
+Vexcel facts (live mode, from `/property/extract`): `rooftop_hvac_units`, `hvac_tons` (units × tons per
+unit), `paved_area_sqft`, `estimated_parking_spaces`, `vehicles_count`, `roof_condition` (1–5, 5 = best),
+`roof_material`, `roof_defects`, `building_footprint_sqft`, `building_type`. A `building_footprint`
+evidence item carries the footprint's `box` on the aerial image. The Vexcel API key never reaches the
+browser: the backend downloads imagery and serves it from `/static`.
 
 ### GET /api/v1/analyses?limit=20
 
