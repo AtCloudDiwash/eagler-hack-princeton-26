@@ -1,0 +1,172 @@
+# Business types. Each picks its metrics (with weights and a business-specific reason), its
+# neighborhood catchment, the place groups the Neighborhood Agent should care about and sizing.
+# Add a business type by adding an entry here; no code changes needed.
+#
+#   keywords             words that identify the business in a query (rules parser + LLM hint)
+#   zoning_use           key used in jurisdictions.yaml rules
+#   sizing               sqft_per_seat (whole space incl. kitchen/back of house), default size,
+#                        ideal_min/ideal_max sqft for the usable space
+#   suitable_building_types / acceptable_building_types   Vexcel building-type.class values
+#   default_radius_m, radius_reason   catchment used for neighborhood analysis
+#   place_roles          which place groups (place_groups.yaml) mean demand / competition / access
+#   metrics              metric id -> {weight, why}
+
+restaurant:
+  label: Restaurant
+  icon: utensils
+  keywords: [restaurant, cafe, café, diner, bistro, eatery, bar, pizzeria, bakery, coffee shop, taqueria, food]
+  zoning_use: restaurant
+  sizing: {sqft_per_seat: 35, default_seats: 40, ideal_min_sqft: 1200, ideal_max_sqft: 4500}
+  suitable_building_types: [commercial]
+  acceptable_building_types: [multiple_family, condo_apartment]
+  default_radius_m: 500
+  radius_reason: >-
+    Restaurants live on walk-in and short-trip customers, so competition and foot traffic within a
+    ~6-minute walk (about 500 m) matter most.
+  place_roles:
+    competitors: [food_drink]
+    demand: [offices, lodging, education, entertainment, retail]
+    access: [transit, parking]
+  metrics:
+    permitted_use: {weight: 14, why: "A restaurant needs food-service use allowed at the address before anything else matters."}
+    hvac_ventilation: {weight: 13, why: "Commercial kitchens need a hood exhaust path to the roof and extra HVAC capacity; retrofitting both is one of the biggest restaurant build-out costs."}
+    customer_demand: {weight: 12, why: "Covers per day drive restaurant revenue; offices, hotels and residents within walking distance supply them."}
+    size_fit: {weight: 11, why: "Seats, kitchen and restrooms need roughly 30-40 sq ft per seat."}
+    occupancy_cost: {weight: 12, why: "Restaurants typically keep occupancy cost under ~6-10% of sales; build-out is often the largest upfront cost."}
+    parking_requirement: {weight: 8, why: "Restaurant parking minimums are among the highest of any use; a shortfall can block permits outside exempt areas."}
+    health_permitting: {weight: 8, why: "Health plan review, a grease interceptor and food permits are mandatory before opening."}
+    building_condition: {weight: 7, why: "Roof leaks over a kitchen or dining room are costly and can fail health inspection."}
+    competition: {weight: 6, why: "A food cluster draws diners, but too many direct competitors split demand."}
+    accessibility_transit: {weight: 5, why: "Easy access widens the lunch and dinner catchment."}
+    accessibility_ada: {weight: 4, why: "Dining rooms and restrooms must be accessible to the public."}
+    onsite_parking: {weight: 4, why: "Drive-in diners need somewhere to park."}
+    kitchen_infrastructure: {weight: 6, why: "An existing hood and grease interceptor can save $50k+ in build-out."}
+    interior_layout: {weight: 3, why: "Dining-room and kitchen layout drive seat count and workflow."}
+    conversion_risk: {weight: 4, why: "Unknown kitchen and HVAC conditions are the usual source of restaurant budget overruns."}
+    area_character: {weight: 3, why: "Commercial, mixed-use streets support restaurant traffic."}
+    evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
+
+dental_clinic:
+  label: Dental clinic
+  icon: tooth
+  keywords: [dental, dentist, orthodontist, clinic, medical office, doctor, physician, medical, healthcare]
+  zoning_use: medical_office
+  sizing: {sqft_per_seat: 0, default_sqft: 2200, ideal_min_sqft: 1500, ideal_max_sqft: 4000}
+  suitable_building_types: [commercial]
+  acceptable_building_types: [multiple_family, condo_apartment]
+  default_radius_m: 1500
+  radius_reason: >-
+    Patients usually choose a dentist within a short drive of home or work, so a ~1.5 km catchment
+    shows residential density and competing practices.
+  place_roles:
+    competitors: [dental_medical]
+    demand: [residential_services, retail, offices, education]
+    access: [parking, transit]
+  metrics:
+    permitted_use: {weight: 14, why: "Medical/dental use must be allowed (clinic class) at the address."}
+    medical_infrastructure: {weight: 13, why: "Operatories need sinks at every chair, vacuum/compressed air and dedicated circuits; retrofits are expensive."}
+    accessibility_ada: {weight: 10, why: "Patients include elderly and mobility-impaired people; accessible entry, restrooms and parking are essential."}
+    customer_demand: {weight: 11, why: "A practice needs roughly 1,500-2,000 residents or workers per dentist nearby."}
+    size_fit: {weight: 10, why: "A 4-6 operatory practice typically needs 1,500-3,000 sq ft."}
+    occupancy_cost: {weight: 11, why: "Medical fit-outs cost more per sq ft than offices; rent plus build-out must fit practice economics."}
+    parking_requirement: {weight: 7, why: "Clinics have parking minimums in many cities."}
+    onsite_parking: {weight: 6, why: "Most patients drive and expect convenient parking."}
+    competition: {weight: 6, why: "Nearby practices compete for the same patients."}
+    building_condition: {weight: 5, why: "Leaks and roof problems threaten sterile areas and equipment."}
+    accessibility_transit: {weight: 3, why: "Transit helps staff and some patients."}
+    interior_layout: {weight: 4, why: "Corridors and room sizes determine operatory count."}
+    conversion_risk: {weight: 4, why: "Plumbing in slab is the classic dental budget surprise."}
+    area_character: {weight: 3, why: "Residential and retail mix supports patient visits."}
+    evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
+
+gym:
+  label: Gym / fitness studio
+  icon: dumbbell
+  keywords: [gym, fitness, crossfit, yoga, pilates, studio, boxing, martial arts]
+  zoning_use: gym
+  sizing: {sqft_per_seat: 0, default_sqft: 5000, ideal_min_sqft: 2500, ideal_max_sqft: 15000}
+  suitable_building_types: [commercial]
+  acceptable_building_types: []
+  default_radius_m: 1200
+  radius_reason: >-
+    Members pick a gym within a few minutes of home or work; ~1.2 km shows residents, offices and
+    competing gyms in that habit radius.
+  place_roles:
+    competitors: [fitness]
+    demand: [residential_services, offices, education, retail]
+    access: [parking, transit]
+  metrics:
+    size_fit: {weight: 14, why: "Equipment floors and classes need large, open floor area."}
+    structural_floor: {weight: 13, why: "Dropped weights and impact need a ground-floor slab, ideally with tall clear height."}
+    permitted_use: {weight: 12, why: "Recreation/assembly use must be allowed at the address."}
+    customer_demand: {weight: 12, why: "Membership depends on residents and workers within a short trip."}
+    occupancy_cost: {weight: 11, why: "Gyms lease large areas, so rent per sq ft dominates the economics."}
+    onsite_parking: {weight: 8, why: "Peak-hour members arrive by car in most US cities."}
+    competition: {weight: 7, why: "Nearby gyms compete on price and convenience."}
+    hvac_ventilation: {weight: 6, why: "High occupancy and exertion need strong cooling and ventilation."}
+    area_character: {weight: 5, why: "Noise and late hours fit commercial areas better than quiet residential blocks."}
+    building_condition: {weight: 5, why: "Large roofs are expensive to repair."}
+    accessibility_transit: {weight: 3, why: "Transit helps non-driving members."}
+    accessibility_ada: {weight: 3, why: "Public-facing facility must be accessible."}
+    parking_requirement: {weight: 4, why: "Assembly/recreation uses often carry parking minimums."}
+    conversion_risk: {weight: 3, why: "Showers and locker rooms add plumbing unknowns."}
+    evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
+
+office:
+  label: Office
+  icon: briefcase
+  keywords: [office, startup, agency, coworking, headquarters, firm, consultancy]
+  zoning_use: office
+  sizing: {sqft_per_seat: 0, default_sqft: 3000, ideal_min_sqft: 1000, ideal_max_sqft: 20000}
+  suitable_building_types: [commercial]
+  acceptable_building_types: [multiple_family, condo_apartment]
+  default_radius_m: 800
+  radius_reason: >-
+    Office teams care about amenities and transit within a 10-minute walk (~800 m).
+  place_roles:
+    competitors: []
+    demand: [food_drink, retail, lodging]
+    access: [transit, parking]
+  metrics:
+    permitted_use: {weight: 12, why: "Office use must be allowed at the address."}
+    size_fit: {weight: 13, why: "Roughly 150-250 sq ft per employee."}
+    accessibility_transit: {weight: 13, why: "Commute options shape hiring and retention."}
+    occupancy_cost: {weight: 14, why: "Rent is usually the second-largest cost after payroll."}
+    customer_demand: {weight: 8, why: "Here: nearby amenities (food, services) for staff and visitors."}
+    building_condition: {weight: 8, why: "Roof and building condition affect tenant comfort and landlord risk."}
+    accessibility_ada: {weight: 6, why: "Employees and visitors need accessible entry and restrooms."}
+    onsite_parking: {weight: 7, why: "Staff parking is a recurring cost if not on site."}
+    area_character: {weight: 6, why: "A professional commercial setting supports clients and brand."}
+    parking_requirement: {weight: 4, why: "Office parking minimums apply in many cities."}
+    hvac_ventilation: {weight: 5, why: "Comfort cooling for dense occupancy."}
+    interior_layout: {weight: 4, why: "Open vs. private offices drive build-out."}
+    evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
+
+retail:
+  label: Retail store
+  icon: shopping-bag
+  keywords: [retail, store, shop, boutique, showroom]
+  zoning_use: retail
+  sizing: {sqft_per_seat: 0, default_sqft: 2000, ideal_min_sqft: 800, ideal_max_sqft: 8000}
+  suitable_building_types: [commercial]
+  acceptable_building_types: [multiple_family, condo_apartment]
+  default_radius_m: 800
+  radius_reason: >-
+    Retail depends on foot traffic and co-tenancy within a short walk (~800 m) plus drive-by visibility.
+  place_roles:
+    competitors: [retail]
+    demand: [food_drink, offices, lodging, residential_services, entertainment]
+    access: [parking, transit]
+  metrics:
+    customer_demand: {weight: 15, why: "Foot traffic and nearby shoppers drive sales."}
+    permitted_use: {weight: 12, why: "Retail use must be allowed at the address."}
+    occupancy_cost: {weight: 13, why: "Rent per sq ft must fit expected sales per sq ft."}
+    size_fit: {weight: 10, why: "Sales floor plus storage needs."}
+    accessibility_transit: {weight: 10, why: "Customers must reach and park easily."}
+    competition: {weight: 8, why: "Co-tenancy helps; direct duplicates hurt."}
+    onsite_parking: {weight: 8, why: "Shoppers expect convenient parking."}
+    area_character: {weight: 8, why: "An active commercial street drives visibility."}
+    building_condition: {weight: 5, why: "Condition affects storefront appeal and repair risk."}
+    accessibility_ada: {weight: 5, why: "Public-facing stores must be accessible."}
+    parking_requirement: {weight: 4, why: "Retail parking minimums apply in many cities."}
+    evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}

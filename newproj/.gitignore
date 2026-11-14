@@ -1,0 +1,17 @@
+# secrets
+.env
+.env.local
+!.env.example
+# python
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/*.db
+backend/*.db-*
+# node
+frontend/node_modules/
+frontend/.next/
+.DS_Store
+# Licensed Vexcel API responses: never commit (record locally with backend/scripts/record_demo_fixture.py)
+backend/fixtures/vexcel_*.json

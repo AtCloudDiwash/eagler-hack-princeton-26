@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink-950: #0b1220;
+  --color-ink-900: #111a2e;
+  --color-ink-850: #152038;
+  --color-ink-800: #1a2742;
+  --color-ink-700: #24345a;
+  --color-line: #233150;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #0b1220;
+  color: #e2e8f0;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Thin dark scrollbars for dense panels. */
+* { scrollbar-width: thin; scrollbar-color: #2b3b5e transparent; }
+
+/* Leaflet chrome in the app's dark theme. */
+.leaflet-container { background: #0b1220; font-family: inherit; }
+.leaflet-control-attribution { background: rgba(11, 18, 32, 0.8) !important; color: #94a3b8 !important; font-size: 10px; }
+.leaflet-control-attribution a { color: #5eead4 !important; }
+.leaflet-tooltip { background: #111a2e; color: #e2e8f0; border: 1px solid #334155; box-shadow: 0 4px 16px rgba(0,0,0,.4); border-radius: 8px; font-size: 12px; }
+.leaflet-tooltip-top:before { border-top-color: #334155; }
+.leaflet-bar a { background: #111a2e !important; color: #cbd5e1 !important; border-color: #233150 !important; }
+.leaflet-bar a:hover { background: #1a2742 !important; }
+
+/* Dark street map from standard OSM tiles (CARTO watermarks without a key). */
+.osm-dark { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6); }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.skeleton { background: linear-gradient(90deg, #152038 0px, #1f2d4d 120px, #152038 240px); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }

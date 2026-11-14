@@ -1,0 +1,261 @@
+# Metric registry. Agents assess the metrics they own; Python turns their status into scores
+# (see services/scoring.py). Business types (business_types.yaml) choose which metrics apply,
+# their weights and a business-specific "why it matters". Adding a metric = add an entry here and
+# reference it from a business type. No agent or dashboard code changes are needed.
+#
+# Fields
+#   name, group          display name and dashboard section
+#   category             common (every business) | dynamic (chosen per business)
+#   owner                agent that assesses it: vexcel | neighborhood | compliance | cost | matterport | engine
+#   description          what the metric measures
+#   evidence_hint        what evidence the owner agent should look for (shown to the agent)
+#   status_guide         how to choose a status; keeps different runs consistent
+#   hard_block           true -> a "blocker" status forces a "not recommended" verdict
+
+size_fit:
+  name: Usable size fit
+  group: Building
+  category: common
+  owner: vexcel
+  description: Whether the building's floor area suits the business's space needs.
+  evidence_hint: Footprint area, estimated stories/floor area (check_size_fit tool), the user's seats or sqft.
+  status_guide:
+    strong: Estimated usable area within the business's ideal range.
+    adequate: Workable with some compromise (somewhat small or oversized; only part of a large building needed).
+    weak: Clearly too small, or so large that leasing only a suite is an unverified assumption.
+    blocker: Physically cannot fit the minimum requirement.
+
+building_condition:
+  name: Building & roof condition
+  group: Building
+  category: common
+  owner: vexcel
+  description: Physical condition signals visible from aerial imagery (roof condition score, defects).
+  evidence_hint: Roof condition (1 Bad .. 5 Great), roof defects (tarp, structural damage, discoloration, ponding), roof material.
+  status_guide:
+    strong: Roof condition 4-5 and no significant defects.
+    adequate: Condition 3 or minor defects.
+    weak: Condition 1-2 or notable defects (ponding, patches, tarp).
+    blocker: Structural damage visible.
+
+hvac_ventilation:
+  name: HVAC & kitchen ventilation readiness
+  group: Building
+  category: dynamic
+  owner: vexcel
+  description: Evidence of rooftop mechanical capacity for heating/cooling and, for restaurants, a hood exhaust path.
+  evidence_hint: Rooftop AC unit count, roof vents, flat vs pitched roof (curb mounting), number of stories above (exhaust routing).
+  status_guide:
+    strong: Multiple rooftop units detected on a flat roof with direct roof access for exhaust.
+    adequate: Some units detected, or a flat single-story roof where new units/exhaust are straightforward.
+    weak: No units detected and exhaust routing is uncertain (e.g., multi-story building above the space).
+    blocker: Only with direct evidence that exhaust/HVAC is impossible. "Not detected" is NEVER a blocker.
+
+kitchen_infrastructure:
+  name: Kitchen infrastructure
+  group: Interior
+  category: dynamic
+  owner: matterport
+  description: Existing hood, grease interceptor, gas line, walk-in, plumbing rough-ins.
+  evidence_hint: Interior 3D scan (Matterport). Without it this is unknown; do not guess.
+  status_guide:
+    strong: Existing commercial kitchen visible.
+    adequate: Plumbing/gas evidence but no kitchen.
+    weak: No kitchen infrastructure visible.
+    blocker: Not used.
+
+interior_layout:
+  name: Interior layout & measurements
+  group: Interior
+  category: common
+  owner: matterport
+  description: Usable floor plan, ceiling height, column spacing, restrooms.
+  evidence_hint: Matterport model dimensions and rooms. Unknown without a scan.
+  status_guide:
+    strong: Open plan matching the business's needs.
+    adequate: Workable with moderate changes.
+    weak: Layout conflicts with needs.
+    blocker: Not used.
+
+onsite_parking:
+  name: On-site parking & paved area
+  group: Building
+  category: dynamic
+  owner: vexcel
+  description: Parking capacity on the parcel, from paved (hardscape) area and vehicles seen in imagery.
+  evidence_hint: Parcel hardscape area (sq ft; ~300-350 sq ft per space incl. aisles), vehicles counted on the parcel.
+  status_guide:
+    strong: Paved area plausibly meets the required/needed spaces.
+    adequate: Some parking; likely needs shared or street parking.
+    weak: Little or no on-site parking where customers drive.
+    blocker: Not used (parking can be shared/leased; legal requirement is the compliance metric).
+
+customer_demand:
+  name: Nearby customer demand
+  group: Location
+  category: common
+  owner: neighborhood
+  description: People and activity near the property that generate customers for this business.
+  evidence_hint: Demand generators for this business (offices, residents, schools, hotels...), residential buildings, transit stops, demographics if available.
+  status_guide:
+    strong: Dense, relevant demand generators within the business's catchment radius.
+    adequate: Moderate demand.
+    weak: Few relevant generators.
+    blocker: Not used.
+
+competition:
+  name: Competition & clustering
+  group: Location
+  category: dynamic
+  owner: neighborhood
+  description: "Same-category businesses nearby: saturation risk vs. a proven destination cluster."
+  evidence_hint: Count and names of direct competitors in the catchment radius, and what that implies for this business.
+  status_guide:
+    strong: Healthy cluster or clear gap in supply relative to demand.
+    adequate: Some competition, manageable.
+    weak: Saturated with direct competitors relative to demand.
+    blocker: Not used.
+
+accessibility_transit:
+  name: Access & transit
+  group: Location
+  category: common
+  owner: neighborhood
+  description: How customers/patients/staff reach the site (transit stops, walkability, parking supply around).
+  evidence_hint: Bus stops and rail stations within ~400 m, public parking facilities nearby, surrounding paved area.
+  status_guide:
+    strong: Multiple transit options and nearby public parking.
+    adequate: Some access options.
+    weak: Poor access for this business's customers.
+    blocker: Not used.
+
+area_character:
+  name: Surrounding area fit
+  group: Location
+  category: dynamic
+  owner: neighborhood
+  description: Whether the surrounding building mix and condition fit the intended use.
+  evidence_hint: Building type mix (commercial vs residential), average neighbor roof condition, nearby land uses.
+  status_guide:
+    strong: Surroundings align with the use (e.g., commercial corridor for retail/restaurant; mixed residential for a clinic).
+    adequate: Neutral.
+    weak: Mismatch (e.g., quiet residential block for a nightlife venue) or visibly declining area.
+    blocker: Not used.
+
+permitted_use:
+  name: Permitted use (zoning / restrictions)
+  group: Compliance
+  category: common
+  owner: compliance
+  description: Whether the intended use is allowed at this location.
+  evidence_hint: check_permitted_use tool (verified jurisdiction rules). If the jurisdiction is not in the verified rule set, the status is unknown.
+  status_guide:
+    strong: Use is permitted by verified rules with no known restriction (still subject to deed/lease checks).
+    adequate: Permitted but a restriction check (deed, lease clause) or conditional approval is needed.
+    weak: Conditional use / variance likely needed.
+    blocker: Verified rules prohibit the use.
+  hard_block: true
+
+parking_requirement:
+  name: Required parking
+  group: Compliance
+  category: dynamic
+  owner: compliance
+  description: Legally required off-street parking for the use vs. what the site likely provides.
+  evidence_hint: compute_parking_requirement tool (city ratio x floor area, exempt areas) compared with on-site paved area.
+  status_guide:
+    strong: No minimum applies, or the site clearly meets it.
+    adequate: Requirement likely met with shared parking / variance options.
+    weak: Clear shortfall that needs a variance or parking agreement.
+    blocker: Not used (variances and shared parking exist).
+
+health_permitting:
+  name: Health & food-safety permitting
+  group: Compliance
+  category: dynamic
+  owner: compliance
+  description: Health department approvals and kitchen-specific code (grease interceptor, plan review).
+  evidence_hint: get_use_requirements tool for this use and city.
+  status_guide:
+    strong: Requirements are routine and the site has what is needed.
+    adequate: Standard permitting path with known requirements.
+    weak: Significant requirements likely unmet by the existing space.
+    blocker: Not used.
+
+accessibility_ada:
+  name: Accessibility (ADA)
+  group: Compliance
+  category: common
+  owner: compliance
+  description: Accessible entrance, route, restrooms and parking expectations for a public-facing business.
+  evidence_hint: get_use_requirements (ADA/TAS rules), building stories, entrance elevation if available.
+  status_guide:
+    strong: Ground-level, single-story signals and no known barriers.
+    adequate: Typical commercial space; standard ADA upgrades budgeted.
+    weak: Multi-level or barrier signals needing major work.
+    blocker: Not used.
+
+medical_infrastructure:
+  name: Plumbing & electrical for clinical use
+  group: Building
+  category: dynamic
+  owner: vexcel
+  description: Ability to support operatory sinks, compressed air/vacuum, X-ray shielding and dedicated circuits.
+  evidence_hint: Building type, age/condition signals, single vs multi-story (plumbing risers). Interior detail requires a scan.
+  status_guide:
+    strong: Existing medical/office building with good condition.
+    adequate: Commercial building; standard conversion.
+    weak: Building type or condition suggests costly plumbing/electrical work.
+    blocker: Not used.
+
+structural_floor:
+  name: Structure, floor & ceiling for heavy use
+  group: Building
+  category: dynamic
+  owner: vexcel
+  description: Ground-floor slab, roof height/clearance and structure suited to heavy equipment and impact.
+  evidence_hint: Stories estimate, roof height (calculated field), building type, footprint (column-free spans likelier in large single-story boxes).
+  status_guide:
+    strong: Large single-story commercial box with tall roof height.
+    adequate: Ground floor of a commercial building.
+    weak: Upper floors or residential structure (vibration/noise risk).
+    blocker: Not used.
+
+occupancy_cost:
+  name: Total occupancy cost
+  group: Cost
+  category: common
+  owner: cost
+  description: Rent plus conversion/fit-out and operating costs relative to typical budgets for this business.
+  evidence_hint: estimate_costs tool (deterministic cost engine) using evidence-backed adders.
+  status_guide:
+    strong: Upfront and monthly ranges within typical budgets for this business size.
+    adequate: Somewhat above typical, manageable.
+    weak: Well above typical budgets (major conversion items).
+    blocker: Not used.
+
+conversion_risk:
+  name: Conversion cost risk
+  group: Cost
+  category: dynamic
+  owner: cost
+  description: How uncertain the conversion budget is, given unknowns (no interior data, HVAC unknown...).
+  evidence_hint: Number and size of cost items that depend on unverified assumptions.
+  status_guide:
+    strong: Few unknown-driven cost items.
+    adequate: Some contingency needed.
+    weak: Large share of the budget rests on unverified assumptions.
+    blocker: Not used.
+
+evidence_quality:
+  name: Evidence quality
+  group: Confidence
+  category: common
+  owner: engine
+  description: How much of the decision rests on verified data rather than assumptions. Computed in Python.
+  evidence_hint: Computed from data source availability and verified citations.
+  status_guide:
+    strong: Most weighted metrics backed by verified evidence.
+    adequate: Some gaps.
+    weak: Major gaps.
+    blocker: Not used.

@@ -1,0 +1,2900 @@
+{
+ "business_type": "restaurant",
+ "business_label": "Restaurant",
+ "recommendation": {
+  "verdict": "conditional",
+  "label": "Recommended with conditions",
+  "score": 68,
+  "confidence": 74,
+  "headline": "Strong location and ample space for a 40-seat restaurant \u2014 but HVAC/ventilation and kitchen infrastructure must be verified before signing.",
+  "explanation": "This 5,212 sq ft commercial building sits in one of downtown Houston's densest food-and-beverage clusters, with heavy weekday office demand, rail access and no parking minimum (Downtown market-based parking area). Houston has no zoning, so the use is not restricted by a zoning district \u2014 but deed restrictions and any lease use clause still need checking.\n\nThe main uncertainty is mechanical: Vexcel detected no rooftop AC units. That does not mean the building lacks HVAC, but a restaurant needs substantial make-up air and a kitchen exhaust hood, so an on-site mechanical inspection is the deciding next step. The space is roughly twice what 40 seats need, which raises rent but leaves room for growth or a smaller sublease.",
+  "key_reasons": [
+   {
+    "text": "Dense restaurant cluster (29 within 500 m) signals proven food demand",
+    "impact": "positive",
+    "metric_id": "customer_demand",
+    "evidence_ids": [
+     "E7",
+     "E9"
+    ]
+   },
+   {
+    "text": "Inside the Downtown market-based parking area \u2014 no off-street parking minimum",
+    "impact": "positive",
+    "metric_id": "parking_requirement",
+    "evidence_ids": [
+     "E12"
+    ]
+   },
+   {
+    "text": "No zoning in Houston; restaurant use not restricted by a district",
+    "impact": "positive",
+    "metric_id": "permitted_use",
+    "evidence_ids": [
+     "E11"
+    ]
+   },
+   {
+    "text": "Roof in good condition (4.0/5) with no structural defects",
+    "impact": "positive",
+    "metric_id": "building_condition",
+    "evidence_ids": [
+     "E1",
+     "E3"
+    ]
+   },
+   {
+    "text": "No rooftop HVAC detected \u2014 ventilation and make-up air capacity unverified",
+    "impact": "negative",
+    "metric_id": "ventilation_readiness",
+    "evidence_ids": [
+     "E2"
+    ]
+   },
+   {
+    "text": "High competition: 29 food venues nearby compete for the same customers",
+    "impact": "negative",
+    "metric_id": "competition",
+    "evidence_ids": [
+     "E7"
+    ]
+   },
+   {
+    "text": "Space is ~2\u00d7 the need, raising annual rent to $146k\u2013$219k",
+    "impact": "negative",
+    "metric_id": "total_cost",
+    "evidence_ids": [
+     "E5",
+     "E16"
+    ]
+   }
+  ],
+  "dealbreakers": []
+ },
+ "metrics": [
+  {
+   "id": "ventilation_readiness",
+   "name": "Kitchen ventilation & HVAC readiness",
+   "category": "dynamic",
+   "group": "Building",
+   "owner_agent": "vexcel",
+   "weight": 9,
+   "status": "unknown",
+   "score": null,
+   "why_it_matters": "Commercial kitchens need a Type I exhaust hood and make-up air; retrofitting rooftop equipment is one of the largest restaurant fit-out costs.",
+   "rationale": "Vexcel detected 0 rooftop AC units. Equipment may be ground-mounted or interior, so HVAC capacity cannot be concluded from imagery.",
+   "evidence_ids": [
+    "E2"
+   ],
+   "facts": [
+    "roof-objects.ac-unit.count = 0",
+    "6 roof vents detected"
+   ],
+   "assumptions": [
+    "Flat membrane roof can structurally support a hood fan curb (unverified)"
+   ]
+  },
+  {
+   "id": "size_fit",
+   "name": "Space fit for 40 seats",
+   "category": "dynamic",
+   "group": "Building",
+   "owner_agent": "vexcel",
+   "weight": 8,
+   "status": "strong",
+   "score": 82,
+   "why_it_matters": "Too little space caps seating; too much raises rent and utilities.",
+   "rationale": "Needs ~1,800\u20132,900 sq ft; footprint is 5,212 sq ft. Fits comfortably, with room for a larger kitchen or private dining.",
+   "evidence_ids": [
+    "E5",
+    "E1"
+   ],
+   "facts": [
+    "Footprint 5,212 sq ft"
+   ],
+   "assumptions": [
+    "Single storey usable; interior layout unknown (no Matterport)"
+   ]
+  },
+  {
+   "id": "building_condition",
+   "name": "Roof & building condition",
+   "category": "common",
+   "group": "Building",
+   "owner_agent": "vexcel",
+   "weight": 6,
+   "status": "strong",
+   "score": 80,
+   "why_it_matters": "Roof leaks over a kitchen or dining room cause closures and health-code issues.",
+   "rationale": "Roof condition 4.0/5 (Good), minor water pooling on 4.2% of the roof, no structural damage.",
+   "evidence_ids": [
+    "E1",
+    "E3",
+    "E4"
+   ],
+   "facts": [
+    "Condition 4.0/5",
+    "Water pooling 4.2%"
+   ],
+   "assumptions": []
+  },
+  {
+   "id": "customer_demand",
+   "name": "Nearby customer demand",
+   "category": "dynamic",
+   "group": "Location",
+   "owner_agent": "neighborhood",
+   "weight": 8,
+   "status": "strong",
+   "score": 85,
+   "why_it_matters": "Restaurants depend on foot traffic and daytime population within a short walk.",
+   "rationale": "18 office buildings, 5 hotels and 6 apartment complexes within 500 m; strong weekday lunch base.",
+   "evidence_ids": [
+    "E9",
+    "E6"
+   ],
+   "facts": [
+    "18 offices, 5 hotels within 500 m"
+   ],
+   "assumptions": [
+    "Evening demand weaker than lunch (typical for CBD)"
+   ]
+  },
+  {
+   "id": "competition",
+   "name": "Competition intensity",
+   "category": "dynamic",
+   "group": "Location",
+   "owner_agent": "neighborhood",
+   "weight": 5,
+   "status": "weak",
+   "score": 40,
+   "why_it_matters": "Many similar venues split demand; differentiation becomes essential.",
+   "rationale": "29 restaurants/cafes within 500 m, nearest 42 m away.",
+   "evidence_ids": [
+    "E7"
+   ],
+   "facts": [
+    "29 food venues within 500 m"
+   ],
+   "assumptions": [
+    "Cuisine overlap unknown"
+   ]
+  },
+  {
+   "id": "accessibility_transit",
+   "name": "Access & transit",
+   "category": "common",
+   "group": "Location",
+   "owner_agent": "neighborhood",
+   "weight": 5,
+   "status": "strong",
+   "score": 88,
+   "why_it_matters": "Easy access widens the customer base beyond walking distance.",
+   "rationale": "24 transit stops incl. 3 METRORail stations and 22 parking facilities within 500 m.",
+   "evidence_ids": [
+    "E8"
+   ],
+   "facts": [
+    "3 rail stations within 500 m"
+   ],
+   "assumptions": []
+  },
+  {
+   "id": "permitted_use",
+   "name": "Permitted use",
+   "category": "common",
+   "group": "Compliance",
+   "owner_agent": "compliance",
+   "weight": 10,
+   "status": "adequate",
+   "score": 70,
+   "why_it_matters": "If restaurant use is prohibited, nothing else matters.",
+   "rationale": "Houston has no zoning; restaurant use is allowed by default unless a recorded deed restriction or lease clause prohibits it \u2014 not yet checked.",
+   "evidence_ids": [
+    "E11"
+   ],
+   "facts": [
+    "No zoning ordinance in Houston"
+   ],
+   "assumptions": [
+    "No restrictive deed covenant (unverified)"
+   ]
+  },
+  {
+   "id": "parking_requirement",
+   "name": "Parking requirement",
+   "category": "dynamic",
+   "group": "Compliance",
+   "owner_agent": "compliance",
+   "weight": 6,
+   "status": "strong",
+   "score": 90,
+   "why_it_matters": "Houston normally requires 10 spaces per 1,000 sq ft for restaurants.",
+   "rationale": "Inside the Downtown market-based parking area: no minimum. Would otherwise need ~52 spaces.",
+   "evidence_ids": [
+    "E12"
+   ],
+   "facts": [
+    "\u00a726-471 exempt area"
+   ],
+   "assumptions": [
+    "Area boundary approximated conservatively"
+   ]
+  },
+  {
+   "id": "health_permitting",
+   "name": "Health & food permitting",
+   "category": "dynamic",
+   "group": "Compliance",
+   "owner_agent": "compliance",
+   "weight": 6,
+   "status": "adequate",
+   "score": 65,
+   "why_it_matters": "Plan review and grease interceptor requirements drive timeline and cost.",
+   "rationale": "Standard Houston path: plan review, pre-operational inspection, Food Dealer permit, grease interceptor with quarterly pump-out.",
+   "evidence_ids": [
+    "E13",
+    "E14"
+   ],
+   "facts": [
+    "Grease interceptor required"
+   ],
+   "assumptions": [
+    "No existing interceptor (unknown)"
+   ]
+  },
+  {
+   "id": "accessibility_ada",
+   "name": "ADA accessibility",
+   "category": "common",
+   "group": "Compliance",
+   "owner_agent": "compliance",
+   "weight": 4,
+   "status": "unknown",
+   "score": null,
+   "why_it_matters": "Accessible entrance, route and restrooms are required for public accommodations.",
+   "rationale": "Entrance elevation not available; cannot confirm from aerial data.",
+   "evidence_ids": [
+    "E15"
+   ],
+   "facts": [],
+   "assumptions": []
+  },
+  {
+   "id": "total_cost",
+   "name": "Total occupancy cost",
+   "category": "common",
+   "group": "Cost",
+   "owner_agent": "cost",
+   "weight": 7,
+   "status": "weak",
+   "score": 45,
+   "why_it_matters": "Occupancy cost above ~10% of revenue squeezes restaurant margins.",
+   "rationale": "Monthly occupancy $19k\u2013$31k including NNN and amortized fit-out \u2014 high for a 40-seat concept.",
+   "evidence_ids": [
+    "E16",
+    "E17"
+   ],
+   "facts": [
+    "5,212 sq ft at $28\u201342/sq ft"
+   ],
+   "assumptions": [
+    "Rent band is a market assumption, not a listing"
+   ]
+  },
+  {
+   "id": "fitout_risk",
+   "name": "Fit-out risk",
+   "category": "common",
+   "group": "Cost",
+   "owner_agent": "cost",
+   "weight": 5,
+   "status": "weak",
+   "score": 42,
+   "why_it_matters": "Unknown kitchen infrastructure is the largest swing factor in opening budget.",
+   "rationale": "Full kitchen build-out assumed because second-generation restaurant status is unconfirmed.",
+   "evidence_ids": [
+    "E17",
+    "E2"
+   ],
+   "facts": [],
+   "assumptions": [
+    "No existing hood or grease interceptor"
+   ]
+  },
+  {
+   "id": "interior_layout",
+   "name": "Interior layout & ceiling height",
+   "category": "common",
+   "group": "Interior",
+   "owner_agent": "matterport",
+   "weight": 4,
+   "status": "unknown",
+   "score": null,
+   "why_it_matters": "Column spacing and ceiling height determine dining layout and hood routing.",
+   "rationale": "No Matterport tour available for this property.",
+   "evidence_ids": [],
+   "facts": [],
+   "assumptions": []
+  }
+ ],
+ "agents": [
+  {
+   "agent": "vexcel",
+   "label": "Vexcel Agent",
+   "status": "completed",
+   "summary": "The building is a 5,212 sq ft commercial structure with a flat membrane roof in good condition. For a restaurant, the critical open question is HVAC and kitchen exhaust: no rooftop units were detected, which the agent treats as unknown rather than absent.",
+   "findings": [
+    {
+     "id": "F1",
+     "title": "No rooftop HVAC detected",
+     "detail": "Vexcel's roof-object detection found 0 AC units. For a restaurant this matters because a Type I hood and make-up air unit are usually roof-mounted. Absence in imagery is not proof of no HVAC.",
+     "impact": "negative",
+     "severity": "high",
+     "kind": "fact",
+     "why_it_matters": "Adding rooftop mechanical can cost $40k\u2013$120k and needs structural review.",
+     "evidence_ids": [
+      "E2"
+     ],
+     "metric_ids": [
+      "ventilation_readiness"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F2",
+     "title": "Footprint ~2\u00d7 the space a 40-seat restaurant needs",
+     "detail": "Calculated need 1,800\u20132,900 sq ft vs 5,212 sq ft available.",
+     "impact": "neutral",
+     "severity": "medium",
+     "kind": "inference",
+     "why_it_matters": "Extra space increases rent; could host a larger kitchen or be subdivided.",
+     "evidence_ids": [
+      "E5"
+     ],
+     "metric_ids": [
+      "size_fit",
+      "total_cost"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F3",
+     "title": "Roof in good condition",
+     "detail": "Condition 4.0/5 with minor water pooling (4.2%).",
+     "impact": "positive",
+     "severity": "low",
+     "kind": "fact",
+     "why_it_matters": "Lower risk of leaks above food prep areas.",
+     "evidence_ids": [
+      "E1",
+      "E3"
+     ],
+     "metric_ids": [
+      "building_condition"
+     ],
+     "verified": true
+    }
+   ],
+   "missing_information": [
+    "Interior layout and ceiling height",
+    "Existing HVAC tonnage and location",
+    "Whether the space was previously a restaurant (second-generation)"
+   ],
+   "contradictions": [],
+   "followups": [
+    "Request mechanical drawings or an HVAC inspection",
+    "Ask the landlord whether a hood/grease interceptor already exists"
+   ],
+   "tool_calls": 5,
+   "duration_s": 38.2,
+   "error": null
+  },
+  {
+   "agent": "neighborhood",
+   "label": "Neighborhood Agent",
+   "status": "completed",
+   "summary": "Chose a 500 m walking radius (typical restaurant catchment downtown). The area is a mature commercial core with strong daytime office and hotel demand, excellent transit, and intense restaurant competition.",
+   "findings": [
+    {
+     "id": "F4",
+     "title": "Dense food & beverage cluster",
+     "detail": "29 restaurants/cafes and 7 bars within 500 m.",
+     "impact": "neutral",
+     "severity": "medium",
+     "kind": "fact",
+     "why_it_matters": "Proves demand but means a crowded market; concept differentiation is key.",
+     "evidence_ids": [
+      "E7"
+     ],
+     "metric_ids": [
+      "competition",
+      "customer_demand"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F5",
+     "title": "Strong weekday daytime population",
+     "detail": "18 office buildings and 5 hotels within 500 m.",
+     "impact": "positive",
+     "severity": "medium",
+     "kind": "inference",
+     "why_it_matters": "Supports lunch traffic; evenings may be quieter.",
+     "evidence_ids": [
+      "E9"
+     ],
+     "metric_ids": [
+      "customer_demand"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F6",
+     "title": "Demographics not available",
+     "detail": "Census ACS data could not be retrieved without an API key.",
+     "impact": "neutral",
+     "severity": "low",
+     "kind": "fact",
+     "why_it_matters": "Income and residential population would refine the demand estimate.",
+     "evidence_ids": [
+      "E10"
+     ],
+     "metric_ids": [],
+     "verified": true
+    }
+   ],
+   "missing_information": [
+    "Residential income and population (Census key not configured)",
+    "Foot-traffic counts"
+   ],
+   "contradictions": [],
+   "followups": [
+    "Add a free Census API key to enable tract demographics"
+   ],
+   "tool_calls": 6,
+   "duration_s": 44.7,
+   "error": null
+  },
+  {
+   "agent": "compliance",
+   "label": "Compliance Agent",
+   "status": "completed",
+   "summary": "Houston has no zoning, so restaurant use is not blocked by a district; deed restrictions remain the key legal check. The site is inside the Downtown market-based parking area (no minimum). Standard health permitting and a grease interceptor apply.",
+   "findings": [
+    {
+     "id": "F7",
+     "title": "No zoning \u2014 deed restrictions must be checked",
+     "detail": "Houston relies on deed restrictions that the City can enforce.",
+     "impact": "positive",
+     "severity": "medium",
+     "kind": "fact",
+     "why_it_matters": "A restrictive covenant could still prohibit food service.",
+     "evidence_ids": [
+      "E11"
+     ],
+     "metric_ids": [
+      "permitted_use"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F8",
+     "title": "No parking minimum downtown",
+     "detail": "Market-based parking area under \u00a726-471.",
+     "impact": "positive",
+     "severity": "low",
+     "kind": "fact",
+     "why_it_matters": "Avoids the 52 spaces otherwise required.",
+     "evidence_ids": [
+      "E12"
+     ],
+     "metric_ids": [
+      "parking_requirement"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F9",
+     "title": "ADA compliance cannot be determined",
+     "detail": "Entrance elevation unavailable.",
+     "impact": "neutral",
+     "severity": "medium",
+     "kind": "fact",
+     "why_it_matters": "ADA upgrades can add cost.",
+     "evidence_ids": [
+      "E15"
+     ],
+     "metric_ids": [
+      "accessibility_ada"
+     ],
+     "verified": true
+    }
+   ],
+   "missing_information": [
+    "Title search for deed restrictions",
+    "Lease use clause"
+   ],
+   "contradictions": [],
+   "followups": [
+    "Order a title report",
+    "Confirm parking area boundary with Houston Planning"
+   ],
+   "tool_calls": 5,
+   "duration_s": 31.0,
+   "error": null
+  },
+  {
+   "agent": "cost",
+   "label": "Cost Agent",
+   "status": "completed",
+   "summary": "Using a $28\u2013$42/sq ft NNN rent band (assumption \u2014 no listing rent available) and a full kitchen build-out because second-generation status is unknown, monthly occupancy is $19k\u2013$31k and upfront costs $560k\u2013$1.0M.",
+   "findings": [
+    {
+     "id": "F10",
+     "title": "Full kitchen build-out assumed",
+     "detail": "Without evidence of an existing hood and interceptor, the conservative band is used.",
+     "impact": "negative",
+     "severity": "high",
+     "kind": "assumption",
+     "why_it_matters": "A second-generation space could cut fit-out by 40\u201360%.",
+     "evidence_ids": [
+      "E17",
+      "E2"
+     ],
+     "metric_ids": [
+      "fitout_risk"
+     ],
+     "verified": true
+    },
+    {
+     "id": "F11",
+     "title": "Occupancy cost high for 40 seats",
+     "detail": "Paying for ~2\u00d7 the needed area.",
+     "impact": "negative",
+     "severity": "medium",
+     "kind": "inference",
+     "why_it_matters": "Negotiate a smaller demised space or a TI allowance.",
+     "evidence_ids": [
+      "E16",
+      "E5"
+     ],
+     "metric_ids": [
+      "total_cost"
+     ],
+     "verified": true
+    }
+   ],
+   "missing_information": [
+    "Actual asking rent",
+    "Tenant improvement allowance"
+   ],
+   "contradictions": [],
+   "followups": [
+    "Get the asking rent and TI allowance from the listing broker"
+   ],
+   "tool_calls": 4,
+   "duration_s": 22.5,
+   "error": null
+  },
+  {
+   "agent": "matterport",
+   "label": "Matterport Agent",
+   "status": "skipped",
+   "summary": "No Matterport tour is linked to this property, so interior layout, ceiling height and existing kitchen equipment are unknown.",
+   "findings": [],
+   "missing_information": [
+    "Interior layout",
+    "Ceiling height",
+    "Existing kitchen equipment"
+   ],
+   "contradictions": [],
+   "followups": [
+    "Request a 3D tour or site visit"
+   ],
+   "tool_calls": 0,
+   "duration_s": 0.0,
+   "error": null
+  }
+ ],
+ "evidence": [
+  {
+   "id": "E1",
+   "agent": "vexcel",
+   "tool": "get_building_profile",
+   "source": "Vexcel /property/extract",
+   "url": null,
+   "summary": "Primary structure: commercial (score 0.92), footprint 5,212 sq ft, flat membrane roof, condition 4.0/5 (Good).",
+   "data": {
+    "building-type.class": "commercial",
+    "building-type.score": 0.92,
+    "footprint.area": 5212,
+    "roof-characteristics.shape.value": "flat",
+    "roof-characteristics.material.class": "membrane",
+    "roof-characteristics.condition": 4.0
+   }
+  },
+  {
+   "id": "E2",
+   "agent": "vexcel",
+   "tool": "get_field_group",
+   "source": "Vexcel /property/extract \u00b7 roof-objects",
+   "url": null,
+   "summary": "0 rooftop AC units detected; 6 roof vents; no skylights. Detection covers visible rooftop equipment only.",
+   "data": {
+    "roof-objects.ac-unit.count": 0,
+    "roof-objects.roof-vent.count": 6,
+    "roof-objects.skylight.count": 0,
+    "interpretation": "0 detected \u2260 no HVAC; units may be ground-mounted, interior, or obscured."
+   }
+  },
+  {
+   "id": "E3",
+   "agent": "vexcel",
+   "tool": "get_field_group",
+   "source": "Vexcel /property/extract \u00b7 roof-defects",
+   "url": null,
+   "summary": "Discoloration on 4.2% of roof (water pooling, score 0.58). No tarp, patch, missing material or structural damage detected.",
+   "data": {
+    "roof-defects.discoloration.percent": 4.2,
+    "roof-defects.discoloration.types.water-pooling.detected": true,
+    "roof-defects.structural-damage.detected": false
+   }
+  },
+  {
+   "id": "E4",
+   "agent": "vexcel",
+   "tool": "get_imagery_metadata",
+   "source": "Vexcel imagery metadata",
+   "url": null,
+   "summary": "Collection us-tx-houston-2026, ortho date estimate 2025-12-31, 7.4 cm GSD.",
+   "data": {
+    "collection": "us-tx-houston-2026",
+    "date": "2025-12-31",
+    "gsd_m": 0.074
+   }
+  },
+  {
+   "id": "E5",
+   "agent": "vexcel",
+   "tool": "check_size_fit",
+   "source": "Deterministic calculation (config: restaurant sizing)",
+   "url": null,
+   "summary": "40 seats \u00d7 15\u201320 sq ft dining + 35\u201345% back-of-house \u21d2 1,800\u20132,900 sq ft needed; footprint 5,212 sq ft (single storey assumed) is 1.8\u20132.9\u00d7 the need.",
+   "data": {
+    "seats": 40,
+    "needed_low": 1800,
+    "needed_high": 2900,
+    "available": 5212,
+    "ratio_low": 1.8,
+    "ratio_high": 2.9
+   }
+  },
+  {
+   "id": "E6",
+   "agent": "neighborhood",
+   "tool": "get_surrounding_buildings",
+   "source": "Vexcel /property/extract (500 m)",
+   "url": null,
+   "summary": "21 parcels within 500 m: 14 commercial, 4 condo/apartment, 2 multi-family, 1 single-family. Avg roof condition 3.6.",
+   "data": {
+    "radius_m": 500,
+    "building_mix": {
+     "commercial": 14,
+     "condo_apartment": 4,
+     "multiple_family": 2,
+     "single_family": 1
+    },
+    "avg_roof_condition": 3.6
+   }
+  },
+  {
+   "id": "E7",
+   "agent": "neighborhood",
+   "tool": "find_nearby_places",
+   "source": "OpenStreetMap (Overpass)",
+   "url": "https://www.openstreetmap.org",
+   "summary": "29 restaurants/cafes and 7 bars within 500 m \u2014 dense food & beverage cluster (direct competition and proven demand).",
+   "data": {
+    "group": "Restaurants & cafes",
+    "count": 29,
+    "nearest_m": 42
+   }
+  },
+  {
+   "id": "E8",
+   "agent": "neighborhood",
+   "tool": "find_nearby_places",
+   "source": "OpenStreetMap (Overpass)",
+   "url": "https://www.openstreetmap.org",
+   "summary": "24 transit stops within 500 m incl. 3 METRORail stations; 22 parking facilities.",
+   "data": {
+    "transit": 24,
+    "rail_stations": 3,
+    "parking": 22
+   }
+  },
+  {
+   "id": "E9",
+   "agent": "neighborhood",
+   "tool": "find_nearby_places",
+   "source": "OpenStreetMap (Overpass)",
+   "url": null,
+   "summary": "18 office buildings and 5 hotels within 500 m \u2014 weekday lunch and visitor demand.",
+   "data": {
+    "offices": 18,
+    "hotels": 5
+   }
+  },
+  {
+   "id": "E10",
+   "agent": "neighborhood",
+   "tool": "get_demographics",
+   "source": "U.S. Census ACS 5-year",
+   "url": null,
+   "summary": "Demographics unavailable: no CENSUS_API_KEY configured.",
+   "data": {
+    "available": false
+   }
+  },
+  {
+   "id": "E11",
+   "agent": "compliance",
+   "tool": "check_permitted_use",
+   "source": "Houston Code of Ordinances Ch. 10, Art. XV",
+   "url": "https://www.houstontx.gov/legal/deed.html",
+   "summary": "Houston has no zoning ordinance; recorded deed restrictions are enforceable by the City (\u00a7\u00a710-551\u201310-555).",
+   "data": {
+    "zoning_mode": "none"
+   }
+  },
+  {
+   "id": "E12",
+   "agent": "compliance",
+   "tool": "compute_parking_requirement",
+   "source": "Houston Code \u00a726-492 / \u00a726-471",
+   "url": "https://www.houstontx.gov/planning/Off-Street-Parking-Ordinance.html",
+   "summary": "Restaurant ratio 10 spaces per 1,000 sq ft GFA \u21d2 52 spaces, but the site is inside the Downtown market-based parking area (\u00a726-471): no minimum applies.",
+   "data": {
+    "ratio_per_1000": 10,
+    "gfa_sqft": 5212,
+    "required_if_applicable": 52,
+    "in_exempt_area": true,
+    "area": "Downtown market-based parking area"
+   }
+  },
+  {
+   "id": "E13",
+   "agent": "compliance",
+   "tool": "get_health_and_building_requirements",
+   "source": "Houston Health Department",
+   "url": "https://www.houstonhealth.org/services/permits/food-permits/opening-food-establishment",
+   "summary": "Food establishment plan review, pre-operational inspection and annual Food Dealer permit required; Texas Food Establishment Rules (25 TAC Ch. 228) adopted by reference effective Sept 1, 2025.",
+   "data": {
+    "permits": [
+     "plan review",
+     "pre-operational inspection",
+     "Food Dealer permit"
+    ]
+   }
+  },
+  {
+   "id": "E14",
+   "agent": "compliance",
+   "tool": "get_health_and_building_requirements",
+   "source": "Houston Code Ch. 47, Art. XI",
+   "url": null,
+   "summary": "Grease interceptor required for food service; quarterly full pump-out (\u00a747-512(b)) and annual FOG generator permit.",
+   "data": {
+    "grease_interceptor": true
+   }
+  },
+  {
+   "id": "E15",
+   "agent": "compliance",
+   "tool": "check_accessibility_signals",
+   "source": "2010 ADA Standards / Texas Accessibility Standards",
+   "url": null,
+   "summary": "Entrance elevation not available from Vexcel; ADA route and restroom compliance cannot be confirmed from aerial data.",
+   "data": {
+    "entrance-elevation": null
+   }
+  },
+  {
+   "id": "E16",
+   "agent": "cost",
+   "tool": "get_rent_assumptions",
+   "source": "Config: rent bands (assumption)",
+   "url": null,
+   "summary": "Downtown Houston retail/restaurant rent band $28\u2013$42 /sq ft/yr NNN; NNN $9\u2013$13. CoStar listing rent not available \u2014 assumption.",
+   "data": {
+    "per_sqft_low": 28,
+    "per_sqft_high": 42,
+    "nnn_low": 9,
+    "nnn_high": 13
+   }
+  },
+  {
+   "id": "E17",
+   "agent": "cost",
+   "tool": "estimate_fitout",
+   "source": "Deterministic cost engine (config/costs.yaml)",
+   "url": null,
+   "summary": "Second-generation restaurant fit-out not confirmed \u21d2 full kitchen build-out band applied; hood/ventilation, grease interceptor, HVAC verification and ADA allowances added.",
+   "data": {
+    "base_per_sqft": [
+     85,
+     160
+    ],
+    "adders": [
+     "kitchen_hood",
+     "grease_interceptor",
+     "hvac_verify",
+     "ada_allowance"
+    ]
+   }
+  }
+ ],
+ "costs": {
+  "currency": "USD",
+  "sqft_used": 5212,
+  "sqft_basis": "Vexcel footprint (single storey assumed)",
+  "rent": {
+   "low_annual": 145936,
+   "high_annual": 218904,
+   "per_sqft_low": 28,
+   "per_sqft_high": 42,
+   "source": "Assumed downtown Houston band"
+  },
+  "fitout": {
+   "low": 512000,
+   "high": 968000,
+   "line_items": [
+    {
+     "id": "base_buildout",
+     "label": "Restaurant build-out (base)",
+     "low": 443000,
+     "high": 834000,
+     "reason": "$85\u2013$160/sq ft for a full kitchen + dining fit-out",
+     "evidence_ids": [
+      "E17"
+     ]
+    },
+    {
+     "id": "kitchen_hood",
+     "label": "Type I hood & make-up air",
+     "low": 35000,
+     "high": 75000,
+     "reason": "No rooftop equipment detected",
+     "evidence_ids": [
+      "E2"
+     ]
+    },
+    {
+     "id": "grease_interceptor",
+     "label": "Grease interceptor",
+     "low": 15000,
+     "high": 35000,
+     "reason": "Required by Houston Code Ch. 47",
+     "evidence_ids": [
+      "E14"
+     ]
+    },
+    {
+     "id": "hvac_verify",
+     "label": "HVAC assessment & upgrades",
+     "low": 12000,
+     "high": 14000,
+     "reason": "Capacity unverified",
+     "evidence_ids": [
+      "E2"
+     ]
+    },
+    {
+     "id": "ada_allowance",
+     "label": "ADA allowance",
+     "low": 7000,
+     "high": 10000,
+     "reason": "Entrance/restrooms unverified",
+     "evidence_ids": [
+      "E15"
+     ]
+    }
+   ]
+  },
+  "monthly_occupancy": {
+   "low": 19200,
+   "high": 31400
+  },
+  "upfront": {
+   "low": 560000,
+   "high": 1020000
+  },
+  "assumptions": [
+   "Rent band is a documented assumption; CoStar listing rent was not available.",
+   "Fit-out amortized over a 10-year lease at 0% for the monthly figure.",
+   "NNN (taxes, insurance, CAM) $9\u2013$13/sq ft/yr.",
+   "Deposits assumed at 2 months of rent.",
+   "No tenant improvement allowance assumed."
+  ]
+ },
+ "compliance": [
+  {
+   "id": "permitted_use",
+   "rule": "Permitted use (zoning)",
+   "status": "pass",
+   "detail": "Houston has no zoning ordinance; no zoning approval is needed for restaurant use.",
+   "citation": "Houston Code Ch. 10, Art. XV \u00a7\u00a710-551\u201310-555",
+   "url": "https://www.houstontx.gov/legal/deed.html",
+   "evidence_ids": [
+    "E11"
+   ]
+  },
+  {
+   "id": "deed_restrictions",
+   "rule": "Deed restrictions / lease use clause",
+   "status": "unknown",
+   "detail": "Recorded deed restrictions are enforceable by the City and could prohibit food service. Not checked \u2014 requires a title search.",
+   "citation": "Houston Code Ch. 10, Art. XV",
+   "url": "https://www.houstontx.gov/legal/deed.html",
+   "evidence_ids": [
+    "E11"
+   ]
+  },
+  {
+   "id": "parking",
+   "rule": "Off-street parking minimum",
+   "status": "pass",
+   "detail": "Inside the Downtown market-based parking area: no minimum (would otherwise be 52 spaces at 10/1,000 sq ft).",
+   "citation": "Houston Code \u00a726-471, \u00a726-492",
+   "url": "https://www.houstontx.gov/planning/Off-Street-Parking-Ordinance.html",
+   "evidence_ids": [
+    "E12"
+   ]
+  },
+  {
+   "id": "health_permit",
+   "rule": "Food establishment permitting",
+   "status": "risk",
+   "detail": "Plan review, pre-operational inspection and annual Food Dealer permit required before opening.",
+   "citation": "Houston Health Department; 25 TAC Ch. 228",
+   "url": "https://www.houstonhealth.org/services/permits/food-permits/opening-food-establishment",
+   "evidence_ids": [
+    "E13"
+   ]
+  },
+  {
+   "id": "grease",
+   "rule": "Grease interceptor",
+   "status": "risk",
+   "detail": "Required; quarterly pump-out and annual FOG permit. Existing interceptor unknown.",
+   "citation": "Houston Code Ch. 47, Art. XI \u00a747-512(b)",
+   "url": null,
+   "evidence_ids": [
+    "E14"
+   ]
+  },
+  {
+   "id": "ada",
+   "rule": "ADA accessibility",
+   "status": "unknown",
+   "detail": "Accessible entrance and restrooms cannot be confirmed from aerial data.",
+   "citation": "2010 ADA Standards; Texas Accessibility Standards",
+   "url": "https://www.ada.gov/law-and-regs/design-standards/2010-stds/",
+   "evidence_ids": [
+    "E15"
+   ]
+  }
+ ],
+ "neighborhood": {
+  "center": {
+   "lat": 29.75752,
+   "lon": -95.36546
+  },
+  "radius_m": 500,
+  "buildings": [
+   {
+    "id": "vx_n0",
+    "lat": 29.758475,
+    "lon": -95.36601,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3661595,
+        29.7582322
+       ],
+       [
+        -95.3656958,
+        29.7585076
+       ],
+       [
+        -95.3658609,
+        29.7587171
+       ],
+       [
+        -95.3663246,
+        29.7584417
+       ],
+       [
+        -95.3661595,
+        29.7582322
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 16515,
+    "roof_condition": 3.6
+   },
+   {
+    "id": "vx_n1",
+    "lat": 29.758075,
+    "lon": -95.366028,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3661544,
+        29.7578543
+       ],
+       [
+        -95.3657459,
+        29.758097
+       ],
+       [
+        -95.3659018,
+        29.7582948
+       ],
+       [
+        -95.3663104,
+        29.7580522
+       ],
+       [
+        -95.3661544,
+        29.7578543
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 13741,
+    "roof_condition": 3.4
+   },
+   {
+    "id": "vx_n2",
+    "lat": 29.757884,
+    "lon": -95.364567,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3645732,
+        29.7575416
+       ],
+       [
+        -95.3641966,
+        29.7577653
+       ],
+       [
+        -95.36456,
+        29.7582266
+       ],
+       [
+        -95.3649367,
+        29.7580029
+       ],
+       [
+        -95.3645732,
+        29.7575416
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 29532,
+    "roof_condition": 2.7
+   },
+   {
+    "id": "vx_n3",
+    "lat": 29.760219,
+    "lon": -95.364932,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3650723,
+        29.759858
+       ],
+       [
+        -95.3644946,
+        29.7602012
+       ],
+       [
+        -95.3647924,
+        29.7605791
+       ],
+       [
+        -95.3653701,
+        29.7602359
+       ],
+       [
+        -95.3650723,
+        29.759858
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 37114,
+    "roof_condition": 3.3
+   },
+   {
+    "id": "vx_n4",
+    "lat": 29.757416,
+    "lon": -95.36466,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3648207,
+        29.7571133
+       ],
+       [
+        -95.3642773,
+        29.757436
+       ],
+       [
+        -95.3644995,
+        29.757718
+       ],
+       [
+        -95.365043,
+        29.7573952
+       ],
+       [
+        -95.3648207,
+        29.7571133
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 26049,
+    "roof_condition": 2.7
+   },
+   {
+    "id": "vx_n5",
+    "lat": 29.758612,
+    "lon": -95.364082,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3642491,
+        29.7583329
+       ],
+       [
+        -95.363722,
+        29.758646
+       ],
+       [
+        -95.3639156,
+        29.7588917
+       ],
+       [
+        -95.3644427,
+        29.7585786
+       ],
+       [
+        -95.3642491,
+        29.7583329
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 22014,
+    "roof_condition": 3.7
+   },
+   {
+    "id": "vx_n6",
+    "lat": 29.756107,
+    "lon": -95.366825,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3669555,
+        29.7558784
+       ],
+       [
+        -95.3665315,
+        29.7561303
+       ],
+       [
+        -95.3666941,
+        29.7563366
+       ],
+       [
+        -95.3671181,
+        29.7560847
+       ],
+       [
+        -95.3669555,
+        29.7558784
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 14870,
+    "roof_condition": 2.5
+   },
+   {
+    "id": "vx_n7",
+    "lat": 29.760332,
+    "lon": -95.36454,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3646148,
+        29.7600742
+       ],
+       [
+        -95.364237,
+        29.7602986
+       ],
+       [
+        -95.3644656,
+        29.7605888
+       ],
+       [
+        -95.3648435,
+        29.7603644
+       ],
+       [
+        -95.3646148,
+        29.7600742
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 18638,
+    "roof_condition": 3.7
+   },
+   {
+    "id": "vx_n8",
+    "lat": 29.757981,
+    "lon": -95.367212,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3673064,
+        29.7576174
+       ],
+       [
+        -95.3667876,
+        29.7579255
+       ],
+       [
+        -95.3671175,
+        29.7583441
+       ],
+       [
+        -95.3676363,
+        29.758036
+       ],
+       [
+        -95.3673064,
+        29.7576174
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 36915,
+    "roof_condition": 2.9
+   },
+   {
+    "id": "vx_n9",
+    "lat": 29.756448,
+    "lon": -95.367906,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3680121,
+        29.75607
+       ],
+       [
+        -95.3674623,
+        29.7563966
+       ],
+       [
+        -95.3678001,
+        29.7568253
+       ],
+       [
+        -95.36835,
+        29.7564987
+       ],
+       [
+        -95.3680121,
+        29.75607
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 40073,
+    "roof_condition": 3.0
+   },
+   {
+    "id": "vx_n10",
+    "lat": 29.757402,
+    "lon": -95.364371,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3643857,
+        29.7570715
+       ],
+       [
+        -95.3640115,
+        29.7572938
+       ],
+       [
+        -95.3643567,
+        29.7577317
+       ],
+       [
+        -95.3647308,
+        29.7575095
+       ],
+       [
+        -95.3643857,
+        29.7570715
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 27860,
+    "roof_condition": 2.7
+   },
+   {
+    "id": "vx_n11",
+    "lat": 29.757567,
+    "lon": -95.366237,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3662988,
+        29.757207
+       ],
+       [
+        -95.3658285,
+        29.7574863
+       ],
+       [
+        -95.3661756,
+        29.7579267
+       ],
+       [
+        -95.3666459,
+        29.7576474
+       ],
+       [
+        -95.3662988,
+        29.757207
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 35214,
+    "roof_condition": 3.7
+   },
+   {
+    "id": "vx_n12",
+    "lat": 29.756365,
+    "lon": -95.364122,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3642109,
+        29.7560305
+       ],
+       [
+        -95.3637302,
+        29.756316
+       ],
+       [
+        -95.3640325,
+        29.7566997
+       ],
+       [
+        -95.3645132,
+        29.7564142
+       ],
+       [
+        -95.3642109,
+        29.7560305
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 31353,
+    "roof_condition": 3.7
+   },
+   {
+    "id": "vx_n13",
+    "lat": 29.758466,
+    "lon": -95.36932,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3694726,
+        29.758123
+       ],
+       [
+        -95.3688961,
+        29.7584655
+       ],
+       [
+        -95.3691668,
+        29.758809
+       ],
+       [
+        -95.3697434,
+        29.7584666
+       ],
+       [
+        -95.3694726,
+        29.758123
+       ]
+      ]
+     ]
+    },
+    "building_type": "commercial",
+    "area_sqft": 33671,
+    "roof_condition": 3.9
+   },
+   {
+    "id": "vx_n14",
+    "lat": 29.758635,
+    "lon": -95.362256,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3622835,
+        29.7582392
+       ],
+       [
+        -95.3618213,
+        29.7585137
+       ],
+       [
+        -95.3622285,
+        29.7590304
+       ],
+       [
+        -95.3626907,
+        29.7587559
+       ],
+       [
+        -95.3622835,
+        29.7582392
+       ]
+      ]
+     ]
+    },
+    "building_type": "condo_apartment",
+    "area_sqft": 40598,
+    "roof_condition": 4.2
+   },
+   {
+    "id": "vx_n15",
+    "lat": 29.759366,
+    "lon": -95.36593,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3660889,
+        29.7591299
+       ],
+       [
+        -95.3656184,
+        29.7594094
+       ],
+       [
+        -95.3657704,
+        29.7596022
+       ],
+       [
+        -95.3662409,
+        29.7593228
+       ],
+       [
+        -95.3660889,
+        29.7591299
+       ]
+      ]
+     ]
+    },
+    "building_type": "condo_apartment",
+    "area_sqft": 15427,
+    "roof_condition": 3.4
+   },
+   {
+    "id": "vx_n16",
+    "lat": 29.758346,
+    "lon": -95.364922,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3648656,
+        29.7580552
+       ],
+       [
+        -95.3646294,
+        29.7581954
+       ],
+       [
+        -95.3649775,
+        29.7586371
+       ],
+       [
+        -95.3652136,
+        29.7584968
+       ],
+       [
+        -95.3648656,
+        29.7580552
+       ]
+      ]
+     ]
+    },
+    "building_type": "condo_apartment",
+    "area_sqft": 17732,
+    "roof_condition": 2.7
+   },
+   {
+    "id": "vx_n17",
+    "lat": 29.759428,
+    "lon": -95.365427,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3656176,
+        29.7591595
+       ],
+       [
+        -95.3650692,
+        29.7594852
+       ],
+       [
+        -95.3652365,
+        29.7596974
+       ],
+       [
+        -95.3657849,
+        29.7593717
+       ],
+       [
+        -95.3656176,
+        29.7591595
+       ]
+      ]
+     ]
+    },
+    "building_type": "condo_apartment",
+    "area_sqft": 19786,
+    "roof_condition": 3.4
+   },
+   {
+    "id": "vx_n18",
+    "lat": 29.756409,
+    "lon": -95.369445,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.369523,
+        29.7560155
+       ],
+       [
+        -95.3689947,
+        29.7563293
+       ],
+       [
+        -95.3693679,
+        29.756803
+       ],
+       [
+        -95.3698963,
+        29.7564891
+       ],
+       [
+        -95.369523,
+        29.7560155
+       ]
+      ]
+     ]
+    },
+    "building_type": "multiple_family",
+    "area_sqft": 42540,
+    "roof_condition": 3.0
+   },
+   {
+    "id": "vx_n19",
+    "lat": 29.758431,
+    "lon": -95.367243,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3673203,
+        29.7580146
+       ],
+       [
+        -95.366767,
+        29.7583432
+       ],
+       [
+        -95.3671649,
+        29.7588481
+       ],
+       [
+        -95.3677182,
+        29.7585194
+       ],
+       [
+        -95.3673203,
+        29.7580146
+       ]
+      ]
+     ]
+    },
+    "building_type": "multiple_family",
+    "area_sqft": 47490,
+    "roof_condition": 2.7
+   },
+   {
+    "id": "vx_n20",
+    "lat": 29.758729,
+    "lon": -95.364764,
+    "footprint": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.3647786,
+        29.7584654
+       ],
+       [
+        -95.3644754,
+        29.7586454
+       ],
+       [
+        -95.364749,
+        29.7589926
+       ],
+       [
+        -95.3650522,
+        29.7588125
+       ],
+       [
+        -95.3647786,
+        29.7584654
+       ]
+      ]
+     ]
+    },
+    "building_type": "single_family",
+    "area_sqft": 17892,
+    "roof_condition": 3.7
+   }
+  ],
+  "building_mix": {
+   "commercial": 14,
+   "condo_apartment": 4,
+   "multiple_family": 2,
+   "single_family": 1
+  },
+  "places": [
+   {
+    "id": "osm0",
+    "name": "Otto's",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.758312,
+    "lon": -95.365645,
+    "distance_m": 90
+   },
+   {
+    "id": "osm1",
+    "name": null,
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.758175,
+    "lon": -95.365807,
+    "distance_m": 80
+   },
+   {
+    "id": "osm2",
+    "name": "Boomtown Coffee",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.754734,
+    "lon": -95.367642,
+    "distance_m": 375
+   },
+   {
+    "id": "osm3",
+    "name": "Chick-fil-A",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.757891,
+    "lon": -95.366041,
+    "distance_m": 70
+   },
+   {
+    "id": "osm4",
+    "name": "Luchi & Joeys",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.757963,
+    "lon": -95.364326,
+    "distance_m": 120
+   },
+   {
+    "id": "osm5",
+    "name": "Common Bond",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.757579,
+    "lon": -95.365263,
+    "distance_m": 20
+   },
+   {
+    "id": "osm6",
+    "name": "Pok\u00e9 Fresh",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.757204,
+    "lon": -95.36588,
+    "distance_m": 54
+   },
+   {
+    "id": "osm7",
+    "name": "Xochi",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.754305,
+    "lon": -95.368749,
+    "distance_m": 479
+   },
+   {
+    "id": "osm8",
+    "name": null,
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.759034,
+    "lon": -95.36349,
+    "distance_m": 254
+   },
+   {
+    "id": "osm9",
+    "name": "Pok\u00e9 Fresh",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.757576,
+    "lon": -95.36609,
+    "distance_m": 61
+   },
+   {
+    "id": "osm10",
+    "name": "Common Bond",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.761257,
+    "lon": -95.36586,
+    "distance_m": 418
+   },
+   {
+    "id": "osm11",
+    "name": "Pappas Bros.",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.756775,
+    "lon": -95.362762,
+    "distance_m": 274
+   },
+   {
+    "id": "osm12",
+    "name": "Boomtown Coffee",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.760338,
+    "lon": -95.366472,
+    "distance_m": 329
+   },
+   {
+    "id": "osm13",
+    "name": "Boomtown Coffee",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.758189,
+    "lon": -95.366154,
+    "distance_m": 100
+   },
+   {
+    "id": "osm14",
+    "name": null,
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.761146,
+    "lon": -95.364746,
+    "distance_m": 410
+   },
+   {
+    "id": "osm15",
+    "name": "Citadel BBQ",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.75404,
+    "lon": -95.363986,
+    "distance_m": 413
+   },
+   {
+    "id": "osm16",
+    "name": "Pappas Bros.",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.757331,
+    "lon": -95.367421,
+    "distance_m": 191
+   },
+   {
+    "id": "osm17",
+    "name": "Pok\u00e9 Fresh",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.757696,
+    "lon": -95.366611,
+    "distance_m": 113
+   },
+   {
+    "id": "osm18",
+    "name": "Pok\u00e9 Fresh",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.754443,
+    "lon": -95.364094,
+    "distance_m": 367
+   },
+   {
+    "id": "osm19",
+    "name": "Citadel BBQ",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.758658,
+    "lon": -95.365214,
+    "distance_m": 129
+   },
+   {
+    "id": "osm20",
+    "name": null,
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.754665,
+    "lon": -95.368788,
+    "distance_m": 452
+   },
+   {
+    "id": "osm21",
+    "name": "Otto's",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.756622,
+    "lon": -95.363848,
+    "distance_m": 185
+   },
+   {
+    "id": "osm22",
+    "name": "Xochi",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.755612,
+    "lon": -95.362008,
+    "distance_m": 396
+   },
+   {
+    "id": "osm23",
+    "name": "Hearsay",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.758698,
+    "lon": -95.368539,
+    "distance_m": 325
+   },
+   {
+    "id": "osm24",
+    "name": "Chick-fil-A",
+    "category": "fast_food",
+    "group": "Restaurants & cafes",
+    "lat": 29.759995,
+    "lon": -95.369457,
+    "distance_m": 474
+   },
+   {
+    "id": "osm25",
+    "name": "Jason's Deli",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.75799,
+    "lon": -95.362366,
+    "distance_m": 304
+   },
+   {
+    "id": "osm26",
+    "name": "Boomtown Coffee",
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.753613,
+    "lon": -95.363113,
+    "distance_m": 491
+   },
+   {
+    "id": "osm27",
+    "name": "Perbacco",
+    "category": "restaurant",
+    "group": "Restaurants & cafes",
+    "lat": 29.757296,
+    "lon": -95.366278,
+    "distance_m": 83
+   },
+   {
+    "id": "osm28",
+    "name": null,
+    "category": "cafe",
+    "group": "Restaurants & cafes",
+    "lat": 29.75674,
+    "lon": -95.365463,
+    "distance_m": 87
+   },
+   {
+    "id": "osm29",
+    "name": "Bad News Bar",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.756553,
+    "lon": -95.364882,
+    "distance_m": 121
+   },
+   {
+    "id": "osm30",
+    "name": "La Carafe",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.755941,
+    "lon": -95.365303,
+    "distance_m": 176
+   },
+   {
+    "id": "osm31",
+    "name": "Bad News Bar",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.756606,
+    "lon": -95.363802,
+    "distance_m": 190
+   },
+   {
+    "id": "osm32",
+    "name": "Bad News Bar",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.757036,
+    "lon": -95.368211,
+    "distance_m": 271
+   },
+   {
+    "id": "osm33",
+    "name": "La Carafe",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.755297,
+    "lon": -95.368613,
+    "distance_m": 392
+   },
+   {
+    "id": "osm34",
+    "name": "Little Woodrow's",
+    "category": "pub",
+    "group": "Bars & nightlife",
+    "lat": 29.757045,
+    "lon": -95.36605,
+    "distance_m": 78
+   },
+   {
+    "id": "osm35",
+    "name": "La Carafe",
+    "category": "bar",
+    "group": "Bars & nightlife",
+    "lat": 29.757236,
+    "lon": -95.365097,
+    "distance_m": 47
+   },
+   {
+    "id": "osm36",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.757394,
+    "lon": -95.368453,
+    "distance_m": 290
+   },
+   {
+    "id": "osm37",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.758505,
+    "lon": -95.368505,
+    "distance_m": 314
+   },
+   {
+    "id": "osm38",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.755526,
+    "lon": -95.366324,
+    "distance_m": 237
+   },
+   {
+    "id": "osm39",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.757459,
+    "lon": -95.366895,
+    "distance_m": 139
+   },
+   {
+    "id": "osm40",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.755641,
+    "lon": -95.361354,
+    "distance_m": 449
+   },
+   {
+    "id": "osm41",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.756869,
+    "lon": -95.364984,
+    "distance_m": 86
+   },
+   {
+    "id": "osm42",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.758485,
+    "lon": -95.366845,
+    "distance_m": 172
+   },
+   {
+    "id": "osm43",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.757997,
+    "lon": -95.366597,
+    "distance_m": 122
+   },
+   {
+    "id": "osm44",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.753564,
+    "lon": -95.364473,
+    "distance_m": 451
+   },
+   {
+    "id": "osm45",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.756424,
+    "lon": -95.3623,
+    "distance_m": 329
+   },
+   {
+    "id": "osm46",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.760639,
+    "lon": -95.3626,
+    "distance_m": 444
+   },
+   {
+    "id": "osm47",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.761729,
+    "lon": -95.364522,
+    "distance_m": 477
+   },
+   {
+    "id": "osm48",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.756937,
+    "lon": -95.364699,
+    "distance_m": 98
+   },
+   {
+    "id": "osm49",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.759253,
+    "lon": -95.364219,
+    "distance_m": 227
+   },
+   {
+    "id": "osm50",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.758387,
+    "lon": -95.366086,
+    "distance_m": 114
+   },
+   {
+    "id": "osm51",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.758482,
+    "lon": -95.363766,
+    "distance_m": 196
+   },
+   {
+    "id": "osm52",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.756827,
+    "lon": -95.367718,
+    "distance_m": 231
+   },
+   {
+    "id": "osm53",
+    "name": null,
+    "category": "office",
+    "group": "Offices & workplaces",
+    "lat": 29.759122,
+    "lon": -95.367535,
+    "distance_m": 268
+   },
+   {
+    "id": "osm54",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.757485,
+    "lon": -95.365985,
+    "distance_m": 51
+   },
+   {
+    "id": "osm55",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.757408,
+    "lon": -95.364744,
+    "distance_m": 70
+   },
+   {
+    "id": "osm56",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.761567,
+    "lon": -95.366106,
+    "distance_m": 455
+   },
+   {
+    "id": "osm57",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.758252,
+    "lon": -95.365569,
+    "distance_m": 82
+   },
+   {
+    "id": "osm58",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.755012,
+    "lon": -95.363372,
+    "distance_m": 344
+   },
+   {
+    "id": "osm59",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.758909,
+    "lon": -95.367845,
+    "distance_m": 278
+   },
+   {
+    "id": "osm60",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.756982,
+    "lon": -95.36566,
+    "distance_m": 63
+   },
+   {
+    "id": "osm61",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.756596,
+    "lon": -95.365117,
+    "distance_m": 108
+   },
+   {
+    "id": "osm62",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.75777,
+    "lon": -95.365494,
+    "distance_m": 28
+   },
+   {
+    "id": "osm63",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.757007,
+    "lon": -95.365261,
+    "distance_m": 60
+   },
+   {
+    "id": "osm64",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.759105,
+    "lon": -95.361356,
+    "distance_m": 434
+   },
+   {
+    "id": "osm65",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.757844,
+    "lon": -95.360328,
+    "distance_m": 497
+   },
+   {
+    "id": "osm66",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.756927,
+    "lon": -95.364083,
+    "distance_m": 149
+   },
+   {
+    "id": "osm67",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.758389,
+    "lon": -95.361866,
+    "distance_m": 361
+   },
+   {
+    "id": "osm68",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.757268,
+    "lon": -95.36398,
+    "distance_m": 146
+   },
+   {
+    "id": "osm69",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.758975,
+    "lon": -95.364936,
+    "distance_m": 170
+   },
+   {
+    "id": "osm70",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.757313,
+    "lon": -95.366666,
+    "distance_m": 119
+   },
+   {
+    "id": "osm71",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.757519,
+    "lon": -95.366551,
+    "distance_m": 105
+   },
+   {
+    "id": "osm72",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.753304,
+    "lon": -95.363757,
+    "distance_m": 497
+   },
+   {
+    "id": "osm73",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.757842,
+    "lon": -95.36163,
+    "distance_m": 372
+   },
+   {
+    "id": "osm74",
+    "name": null,
+    "category": "bus_stop",
+    "group": "Transit stops",
+    "lat": 29.757409,
+    "lon": -95.366882,
+    "distance_m": 138
+   },
+   {
+    "id": "osm75",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.759818,
+    "lon": -95.362104,
+    "distance_m": 413
+   },
+   {
+    "id": "osm76",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.755411,
+    "lon": -95.367077,
+    "distance_m": 282
+   },
+   {
+    "id": "osm77",
+    "name": null,
+    "category": "station",
+    "group": "Transit stops",
+    "lat": 29.757241,
+    "lon": -95.363754,
+    "distance_m": 168
+   },
+   {
+    "id": "osm78",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757338,
+    "lon": -95.363562,
+    "distance_m": 184
+   },
+   {
+    "id": "osm79",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758466,
+    "lon": -95.367057,
+    "distance_m": 187
+   },
+   {
+    "id": "osm80",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757314,
+    "lon": -95.365316,
+    "distance_m": 27
+   },
+   {
+    "id": "osm81",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757696,
+    "lon": -95.365897,
+    "distance_m": 47
+   },
+   {
+    "id": "osm82",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.755288,
+    "lon": -95.36303,
+    "distance_m": 342
+   },
+   {
+    "id": "osm83",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.755679,
+    "lon": -95.368427,
+    "distance_m": 352
+   },
+   {
+    "id": "osm84",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757736,
+    "lon": -95.366417,
+    "distance_m": 96
+   },
+   {
+    "id": "osm85",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.75756,
+    "lon": -95.363445,
+    "distance_m": 195
+   },
+   {
+    "id": "osm86",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757085,
+    "lon": -95.362579,
+    "distance_m": 283
+   },
+   {
+    "id": "osm87",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758376,
+    "lon": -95.360977,
+    "distance_m": 444
+   },
+   {
+    "id": "osm88",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.757664,
+    "lon": -95.365592,
+    "distance_m": 21
+   },
+   {
+    "id": "osm89",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758215,
+    "lon": -95.364084,
+    "distance_m": 154
+   },
+   {
+    "id": "osm90",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.761046,
+    "lon": -95.365414,
+    "distance_m": 393
+   },
+   {
+    "id": "osm91",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758084,
+    "lon": -95.365518,
+    "distance_m": 63
+   },
+   {
+    "id": "osm92",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.756546,
+    "lon": -95.36731,
+    "distance_m": 209
+   },
+   {
+    "id": "osm93",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758635,
+    "lon": -95.365916,
+    "distance_m": 132
+   },
+   {
+    "id": "osm94",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.754789,
+    "lon": -95.367525,
+    "distance_m": 364
+   },
+   {
+    "id": "osm95",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.754246,
+    "lon": -95.36512,
+    "distance_m": 366
+   },
+   {
+    "id": "osm96",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.760185,
+    "lon": -95.363214,
+    "distance_m": 368
+   },
+   {
+    "id": "osm97",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.758547,
+    "lon": -95.361268,
+    "distance_m": 421
+   },
+   {
+    "id": "osm98",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.753857,
+    "lon": -95.36589,
+    "distance_m": 410
+   },
+   {
+    "id": "osm99",
+    "name": null,
+    "category": "parking",
+    "group": "Parking",
+    "lat": 29.755682,
+    "lon": -95.362129,
+    "distance_m": 381
+   },
+   {
+    "id": "osm100",
+    "name": null,
+    "category": "hotel",
+    "group": "Hotels",
+    "lat": 29.755127,
+    "lon": -95.364025,
+    "distance_m": 300
+   },
+   {
+    "id": "osm101",
+    "name": "JW Marriott",
+    "category": "hotel",
+    "group": "Hotels",
+    "lat": 29.757704,
+    "lon": -95.365103,
+    "distance_m": 40
+   },
+   {
+    "id": "osm102",
+    "name": "JW Marriott",
+    "category": "hotel",
+    "group": "Hotels",
+    "lat": 29.755299,
+    "lon": -95.363929,
+    "distance_m": 288
+   },
+   {
+    "id": "osm103",
+    "name": "JW Marriott",
+    "category": "hotel",
+    "group": "Hotels",
+    "lat": 29.759662,
+    "lon": -95.365674,
+    "distance_m": 239
+   },
+   {
+    "id": "osm104",
+    "name": null,
+    "category": "hotel",
+    "group": "Hotels",
+    "lat": 29.755298,
+    "lon": -95.365529,
+    "distance_m": 247
+   },
+   {
+    "id": "osm105",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.760946,
+    "lon": -95.365082,
+    "distance_m": 383
+   },
+   {
+    "id": "osm106",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.753142,
+    "lon": -95.365783,
+    "distance_m": 488
+   },
+   {
+    "id": "osm107",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.757099,
+    "lon": -95.365128,
+    "distance_m": 57
+   },
+   {
+    "id": "osm108",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.754696,
+    "lon": -95.365112,
+    "distance_m": 316
+   },
+   {
+    "id": "osm109",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.757901,
+    "lon": -95.36463,
+    "distance_m": 91
+   },
+   {
+    "id": "osm110",
+    "name": null,
+    "category": "apartments",
+    "group": "Residential",
+    "lat": 29.75494,
+    "lon": -95.367576,
+    "distance_m": 353
+   }
+  ],
+  "place_groups": {
+   "Restaurants & cafes": 29,
+   "Bars & nightlife": 7,
+   "Offices & workplaces": 18,
+   "Transit stops": 24,
+   "Parking": 22,
+   "Hotels": 5,
+   "Residential": 6
+  },
+  "stats": {
+   "avg_roof_condition": 3.6,
+   "commercial_share_pct": 67,
+   "vehicles_seen": 214
+  },
+  "sources": [
+   {
+    "name": "Vexcel property data",
+    "status": "used",
+    "note": "21 parcels"
+   },
+   {
+    "name": "OpenStreetMap",
+    "status": "used",
+    "note": "111 places"
+   },
+   {
+    "name": "US Census ACS",
+    "status": "unavailable",
+    "note": "No CENSUS_API_KEY"
+   }
+  ],
+  "radius_reason": "Restaurants in a dense downtown core draw most customers from a 5\u20137 minute walk, so the agent chose 500 m rather than a driving-distance radius.",
+  "highlights": [
+   "Mature commercial core: 67% of nearby buildings are commercial",
+   "3 METRORail stations within walking distance",
+   "Heavy weekday office population (18 office buildings)",
+   "29 food venues \u2014 demand is proven but competition is intense"
+  ]
+ },
+ "risks": [
+  {
+   "text": "Kitchen exhaust and make-up air capacity unverified \u2014 could add $35k\u2013$75k",
+   "severity": "high",
+   "agent": "vexcel"
+  },
+  {
+   "text": "Deed restriction could prohibit food service (title search not done)",
+   "severity": "medium",
+   "agent": "compliance"
+  },
+  {
+   "text": "Occupancy cost is high relative to a 40-seat concept",
+   "severity": "medium",
+   "agent": "cost"
+  },
+  {
+   "text": "Intense nearby restaurant competition",
+   "severity": "medium",
+   "agent": "neighborhood"
+  },
+  {
+   "text": "ADA entrance and restroom compliance unknown",
+   "severity": "low",
+   "agent": "compliance"
+  }
+ ],
+ "open_questions": [
+  {
+   "question": "Does the building have existing HVAC capacity and a kitchen exhaust path?",
+   "why": "Determines whether a $35k\u2013$120k mechanical retrofit is needed.",
+   "suggested_source": "Landlord mechanical drawings or an HVAC contractor site visit",
+   "agent": "vexcel"
+  },
+  {
+   "question": "Is there a recorded deed restriction on food service?",
+   "why": "Houston enforces deed restrictions in place of zoning.",
+   "suggested_source": "Title company search",
+   "agent": "compliance"
+  },
+  {
+   "question": "What is the actual asking rent and TI allowance?",
+   "why": "Cost estimate uses an assumed market band.",
+   "suggested_source": "Listing broker / CoStar listing",
+   "agent": "cost"
+  }
+ ],
+ "conflicts": [
+  {
+   "description": "Neighborhood Agent rated parking as plentiful (22 facilities) while the Cost Agent added a parking-lease allowance.",
+   "agents": [
+    "neighborhood",
+    "cost"
+   ],
+   "resolution": "Compliance confirmed no minimum in the market-based area; parking allowance removed from required costs."
+  }
+ ],
+ "followups_run": [
+  {
+   "agent": "compliance",
+   "question": "Is the property inside a Houston market-based parking area?",
+   "outcome": "Yes \u2014 Downtown area (\u00a726-471); parking requirement changed from 52 spaces to none."
+  },
+  {
+   "agent": "vexcel",
+   "question": "Do roof vents or other rooftop objects suggest existing exhaust?",
+   "outcome": "6 roof vents detected, but no hood fan or AC units; HVAC remains unknown."
+  }
+ ],
+ "data_sources": [
+  {
+   "name": "Vexcel property data",
+   "status": "used",
+   "note": "Live: us-tx-houston-2026 collection"
+  },
+  {
+   "name": "OpenStreetMap (Overpass)",
+   "status": "used",
+   "note": "Places within 500 m"
+  },
+  {
+   "name": "Houston Code of Ordinances",
+   "status": "used",
+   "note": "Curated rules with citations"
+  },
+  {
+   "name": "US Census ACS",
+   "status": "unavailable",
+   "note": "Add CENSUS_API_KEY to enable demographics"
+  },
+  {
+   "name": "CoStar listings",
+   "status": "unavailable",
+   "note": "No listing rent \u2014 assumption band used"
+  },
+  {
+   "name": "Matterport",
+   "status": "unavailable",
+   "note": "No tour linked to this property"
+  }
+ ]
+}

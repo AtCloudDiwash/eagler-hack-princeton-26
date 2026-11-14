@@ -1,0 +1,48 @@
+# How OpenStreetMap tags map to place groups the Neighborhood Agent reasons about.
+# Each group lists tag=value matchers ("*" = any value). A place joins the first group it matches.
+# Business types (business_types.yaml place_roles) decide which groups mean competition/demand/access.
+
+food_drink:
+  label: Restaurants & cafes
+  color: "#f97316"
+  match: {amenity: [restaurant, fast_food, cafe, bar, pub, food_court, ice_cream]}
+dental_medical:
+  label: Dental & medical
+  color: "#f43f5e"
+  match: {amenity: [dentist, doctors, clinic, hospital, pharmacy], healthcare: ["*"]}
+fitness:
+  label: Gyms & fitness
+  color: "#a855f7"
+  match: {leisure: [fitness_centre, sports_centre]}
+transit:
+  label: Transit stops
+  color: "#38bdf8"
+  match: {highway: [bus_stop], railway: [station, tram_stop, halt]}
+parking:
+  label: Public parking
+  color: "#94a3b8"
+  match: {amenity: [parking]}
+offices:
+  label: Offices
+  color: "#22d3ee"
+  match: {office: ["*"]}
+lodging:
+  label: Hotels & attractions
+  color: "#eab308"
+  match: {tourism: [hotel, attraction, museum]}
+education:
+  label: Schools & universities
+  color: "#84cc16"
+  match: {amenity: [school, university, college, kindergarten, library]}
+entertainment:
+  label: Entertainment & venues
+  color: "#ec4899"
+  match: {amenity: [cinema, theatre], leisure: [stadium]}
+retail:
+  label: Shops
+  color: "#14b8a6"
+  match: {shop: ["*"], amenity: [marketplace]}
+residential_services:
+  label: Community & daily needs
+  color: "#64748b"
+  match: {amenity: [bank, fuel, place_of_worship, community_centre], leisure: [park]}
