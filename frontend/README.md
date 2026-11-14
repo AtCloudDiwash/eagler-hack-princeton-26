@@ -25,7 +25,7 @@ API_ORIGIN=http://localhost:8000
 |---|---|
 | `npm run dev` | Dev server (Turbopack) |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Vitest + React Testing Library (`test/**/*.test.ts(x)`, jsdom) |
+| `npm test` | Vitest + React Testing Library (`test/**/*.test.ts(x)`, jsdom); 64 tests in 8 files |
 | `npm run lint` | ESLint (`eslint-config-next`) |
 | `npm run e2e` | Playwright end-to-end: Austin and Houston demo flows + error state, desktop and 375px mobile (starts the backend in mock mode and the frontend, or reuses servers already running) |
 
@@ -41,6 +41,11 @@ API_ORIGIN=http://localhost:8000
   rewrite and render as plain `<img>`. The aerial (`components/analysis/AerialPanel.tsx`) uses a square
   frame, a "Live · Vexcel" badge + attribution for live imagery, and Top-down / Angled tabs. The browser
   never calls Vexcel or sees its key.
+- AI (backend LLM, local Ollama `qwen3:8b` by default): `components/analysis/AiSummaryPanel.tsx` shows the
+  grounded `ai_summary` with a "Local AI · qwen3:8b" badge and the caveat that costs and compliance are
+  rule-based; the comparison table adds a "Why (AI)" row and each card a one-line reason; the report shows
+  parser / LLM badges; the header pill adds "Local AI ready" and the progress overlay a "Writing summary
+  (local AI)" step when `/health` reports an Ollama model. All of it disappears when there is no summary.
 - The profile form defaults to Houston, TX (the demo city).
 - Theme tokens (navy surfaces, cyan accent, PASS/RISK/UNKNOWN colors) live in `app/globals.css` under
   `@theme`. There is no `tailwind.config.js`.

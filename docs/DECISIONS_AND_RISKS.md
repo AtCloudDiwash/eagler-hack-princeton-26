@@ -11,8 +11,9 @@
   `next.config.ts` proxies them to `API_ORIGIN` (default `http://localhost:8000`). No backend URL is baked
   into client code, and no `NEXT_PUBLIC_` variable is needed. CORS (`CORS_ORIGINS`) is still enabled for
   direct calls.
-- **FastAPI + Pydantic v2** with a synchronous pipeline. A 5-property analysis runs in milliseconds
-  (mock or warm Vexcel cache), so there are no background jobs or polling.
+- **FastAPI + Pydantic v2** with a synchronous pipeline. The deterministic part of a 5-property analysis
+  runs in milliseconds (mock or warm Vexcel cache); with the warm local LLM the whole request takes about
+  7 s, still short enough for a spinner, so there are no background jobs or polling.
 - **Vitest + React Testing Library** for the frontend (not Jest), plus **Playwright** E2E.
 
 ### Demo city and data
@@ -43,10 +44,26 @@
   Stored runs re-validate on read, so new fields get defaults.
 
 ### Agents and rules
-- **Requirements parser:** the regex parser is always available. If `ANTHROPIC_API_KEY` is set, Claude
-  (`ANTHROPIC_MODEL`, default `claude-haiku-5-5`) is tried first with schema-constrained JSON, an 8 s
-  timeout and no retries; any error falls back to regex. This is the only LLM in our code (image
-  analysis is Vexcel's AI, consumed as facts).
+- **Local LLM for parsing and explanations only** (`LLM_PROVIDER=ollama`, `qwen3:8b`). The LLM does two
+  things: (1) extract requirement fields from the free text, merged over the always-on regex parser, and
+  (2) write one grounded `ai_summary` of the **already computed** ranking. It never computes costs,
+  scores, compliance statuses or ranks (CLAUDE.md: deterministic, rule-based cost engine; no ML for
+  costs). Why local: free, no key, works offline at the venue, and the owner's plans and budget never
+  leave the machine. Why qwen3:8b: reliable JSON with Ollama's schema-constrained `format`, fast enough
+  on a laptop (parse 1.4-1.7 s, summary 5.6-6.1 s warm on an M4 Pro); `qwen3:14b` reads slightly better
+  but is about 2x slower. Calls use `think: false` (qwen3's reasoning trace would add seconds) and
+  `temperature: 0`.
+- **Fail closed to deterministic.** Ollama down, model not pulled, timeout (`LLM_TIMEOUT_SECONDS`, 20 s),
+  truncated or invalid JSON → regex parser and `ai_summary: null`; the UI then simply hides the panel.
+  Availability is probed with `GET /api/tags` and cached 30 s, so a missing Ollama costs nothing per
+  request.
+- **Grounding guardrail instead of trusting the summary.** The LLM only sees a compact digest of the
+  result (preformatted `$` strings, scores, statuses, top flags). Its output is rejected if any `$` figure,
+  quoted fit score or property id is not in the digest. Rejecting the whole summary is simpler and safer
+  than editing it.
+- **Claude is a provider option, not the default.** `LLM_PROVIDER=anthropic` (+ `ANTHROPIC_API_KEY`) routes
+  the same two calls to Claude. A key alone no longer switches the parser to Claude, so a stray key in
+  `.env` can't silently send data to a cloud API. Image analysis remains Vexcel's AI, consumed as facts.
 - **Deterministic cost bands, no ML, ranges only** (`costs.yaml`). Permits are always included.
   Soft costs are listed in `line_items` / `breakdown`, so they sum to `fit_out_estimate`.
 - **Ranking with a minimum fit score of 55** (was 25): qualifying spaces (score >= `ranking.min_score`)
@@ -103,7 +120,11 @@
 | Interior facts are mocked | Facts carry confidence; < 0.7 is flagged "verify on site"; overlays are illustrative |
 | Licensed imagery leaks | Cache gitignored; only derived facts are snapshotted; attribution shown under live imagery |
 | Vexcel key leaks | Header-only, backend-only, redacted from logs (tested); rotate any key that was pasted anywhere |
-| Claude returns bad output or is slow | Strict schema, range checks, 8 s timeout, regex fallback; tests use a fake client |
+| LLM returns bad output (Ollama or Claude) | Schema-constrained JSON, range checks on parsed fields, `<think>` stripping, truncation detection; regex fallback / `ai_summary: null`; tests use a fake Ollama server and a fake Claude client |
+| **Wrong non-numeric claims slip through the guardrail** (e.g. calling a PASS a risk, a wrong reason for a rank) | The guardrail checks only `$` figures, scores and ids. Mitigated by the digest containing statuses and reasons verbatim, a prompt that forbids contradicting statuses, `temperature: 0`, the caveat "Written by AI from the numbers below; costs and compliance are rule-based", and the deterministic results shown right below it. Read the summary during the dry run |
+| **LLM latency** (warm ~7 s per analysis, ~14 s cold, 14b ~13 s) | Background warm-up at startup, `keep_alive` 30 min, a fixed `num_ctx` (no reloads), one summary call per analysis (not per property), a "Writing summary (local AI)" progress step; `LLM_PROVIDER=none` for millisecond runs |
+| **Memory** (5.2 GB model resident; 8b + 14b together thrash) | Default to 8b, run one model at a time, close heavy apps before the demo; Ollama unloads after `OLLAMA_KEEP_ALIVE` |
+| Ollama not running on the demo machine | Same ranking via regex, panel hidden; `/health` and the "Local AI ready" pill show the state before the demo |
 | Broken YAML during a live edit | Validation error names the entry; malformed registry → clear 500; unknown evaluator → UNKNOWN |
 | Live demo failure | Warm cache, mock mode with identical numbers, Austin dataset, Playwright E2E, pre-opened report tab, curl fallback ([DEMO_RUNBOOK.md](DEMO_RUNBOOK.md)) |
 | Stored analyses readable by anyone with the id | Acceptable for a local demo; add auth before deployment |
@@ -115,8 +136,12 @@ Found while writing the docs.
 1. **Unused config** (open). `GEOCODING_API_KEY` and the `jurisdictions.yaml` keys `building_code`,
    `health_code` and `plumbing_fixture_note` are loaded but not read by any code (`grease_code` is now
    read by the grease interceptor check).
-2. **`/health` vs `mode.parser`** (intended). `/health` reports the *configured* parser, while
-   `AnalyzeResponse.mode.parser` reports the parser *actually used*. Documented in API_CONTRACT.md.
+2. **`/health` vs `mode.parser`** (intended). `/health` reports the parser / LLM that is *configured and
+   reachable right now* (Ollama probe cached 30 s), while `AnalyzeResponse.mode.parser` / `mode.llm`
+   report what was *actually used* in that run. Documented in API_CONTRACT.md.
+3. **Summary step depends on `/health`** (cosmetic). The frontend adds the "Writing summary" progress step
+   from `/health` `mode.llm`, fetched when `/properties` loads; if Ollama stops in between, the step still
+   shows and the report simply has no panel.
 
 Fixed after the Houston docs pass: overlay boxes now follow the image they were drawn for (hand-made
 fixture boxes are dropped over live Vexcel imagery, snapshot/live boxes over the placeholder SVG); the

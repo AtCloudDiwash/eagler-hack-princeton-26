@@ -2,7 +2,9 @@
 
 A 3-minute live demo in **Houston, TX** with real Vexcel aerial imagery and AI roof/HVAC facts
 (live mode), or fully offline in mock mode. The ranking is identical in both modes; live mode adds the
-real aerial photo, the angled view and the building footprint box.
+real aerial photo, the angled view and the building footprint box. A **local LLM** (qwen3:8b on Ollama,
+on the demo laptop, no internet needed) reads the requirements and writes the AI summary; without it the
+ranking is identical, only the summary panel is missing.
 
 Why Houston: the sponsor's Vexcel key is geofenced to **Los Angeles and Houston**. The original Austin
 listings are kept as an offline dataset (mock mode only, see [Fallback plan](#fallback-plan)).
@@ -36,24 +38,44 @@ venv/bin/python scripts/snapshot_vexcel.py --dry-run \
   offline (venue Wi-Fi down) and keeps working after the key expires. The key must still be set,
   because live mode is `USE_MOCK_DATA=false` + a key.
 
-### 2. Start clean
+### 2. Local LLM (Ollama)
+
+```bash
+ollama pull qwen3:8b      # once, while online (~5.2 GB)
+ollama list               # qwen3:8b must be listed
+ollama serve              # or open the Ollama app (menu-bar icon); leave it running
+```
+
+- Start Ollama **before** the backend: on startup the backend loads the model in the background
+  (log line "Ollama model qwen3:8b loaded in N s"). Start the backend **~10 s before** the first
+  analysis so the model is warm; `ollama ps` shows it loaded.
+- Warm: a 5-property analysis takes about **7 s** (parse ~1.5 s, summary ~6 s; M4 Pro). Cold: about 14 s.
+- The model unloads after 30 min idle (`OLLAMA_KEEP_ALIVE=30m`). If the dry run is long before the demo,
+  set `OLLAMA_KEEP_ALIVE=2h` (or `-1`) in `backend/.env`, or just run one analysis right before going on.
+- Use `qwen3:8b`. `qwen3:14b` works but takes about 13 s; **never run both at once** (memory pressure
+  makes both slow). `ollama stop qwen3:14b` if you tried it.
+- Close memory-heavy apps: the 5.2 GB model stays in memory while loaded.
+
+### 3. Start clean
 
 ```bash
 # backend stopped: delete old runs so "Recent analyses" is empty (the DB is recreated on startup)
 rm -f backend/turnkey.db
-# terminal 1
+# terminal 1 (Ollama already running, see step 2)
 cd backend && venv/bin/uvicorn app.main:app --reload
 # terminal 2
 cd frontend && npm run dev
 ```
 
-### 3. Checklist
+### 4. Checklist
 
-- [ ] `curl localhost:8000/health` → `"status":"ok"`, `vexcel: "live"` (live demo) and `costar` /
-      `matterport` / `parser` = `mock` / `mock` / `regex`. In mock mode everything says `mock`.
+- [ ] `curl localhost:8000/health` → `"status":"ok"`, `vexcel: "live"` (live demo), `costar` /
+      `matterport` = `mock`, and **`parser: "ollama"`, `llm: "ollama:qwen3:8b"`**. In mock mode the three
+      providers say `mock`. `parser: "regex"` / `llm: "none"` means Ollama isn't reachable or the model
+      isn't pulled (fix it, then wait up to 30 s for the backend to notice).
 - [ ] Open http://localhost:3000. The header pill reads **API · mixed data** (live Vexcel) or
-      **API · mock data**.
-- [ ] Do one full dry run (click path below), then **reset the DB again** (step 2) so the history is
+      **API · mock data**, followed by **· Local AI ready**.
+- [ ] Do one full dry run (click path below), then **reset the DB again** (step 3) so the history is
       clean. Keep a finished report tab open as a backup first.
 - [ ] `git status`: `backend/criteria.yaml` and `backend/config/` are unmodified.
 - [ ] Open `backend/criteria.yaml` in an editor, scrolled to `roof_condition`, for the scaling segment.
@@ -70,8 +92,9 @@ cd frontend && npm run dev
 ### 2. Profile (0:20-0:40), home page `/`
 - Business type **Restaurant**. Type **"40 seats, kitchen needed, 2 bathrooms"**. City is already
   **Houston**, State **TX**.
-- Say: "Plain English. Anything I leave out is filled in and shown as an assumption. I didn't give a
-  parking number, so Houston's own parking code will be applied."
+- Say: "Plain English, read by a small AI model running locally on this laptop. Anything I leave out is
+  filled in and shown as an assumption. I didn't give a parking number, so Houston's own parking code
+  will be applied."
 - Click **Find spaces**. (**Use example** adds "20 parking spaces": the ranking stays the same, see below.)
 
 ### 3. Candidate spaces (0:40-1:00), `/properties`
@@ -80,7 +103,9 @@ cd frontend && npm run dev
 - **4720 Washington Avenue** shows an orange line: **Use restriction: no food service**.
 - Point at rents: 1903 Yale is the **most expensive at $6,300**; 240 W 19th is the cheapest at $4,500.
 - Expand **Criteria used (11)**: "This table comes straight from our YAML criteria registry."
-- **Select all** → **Compare 5 selected**.
+- **Select all** → **Compare 5 selected**. The progress overlay runs about 7 s and ends on **Writing
+  summary (local AI)**; talk over it ("checking 11 criteria per space, pricing the fit-out, then the
+  local model writes a summary").
 
 ### 4. Report (1:00-2:15), `/analysis/{id}`
 
@@ -100,33 +125,39 @@ against it) and the order is unchanged.
 Talking points, top to bottom:
 1. **Requirements summary**: 40 seats, occupant load 46, 2 restrooms, **Parking (city code) 14 spaces**
    (Houston Code §26-492: 10 per 1,000 sq ft × 1,400 sq ft, recomputed per property), 7 tons HVAC, 400 A.
-   Mode badges show which providers were live.
-2. **Side-by-side table**: "The most expensive lease is the cheapest to open. The cheapest lease, the retail box
+   Mode badges show which providers were live, **parser: Ollama** and **Local AI · qwen3:8b**.
+2. **AI summary panel** (above the table): read the first sentence. Then: "The AI explains, it doesn't
+   decide. Every cost, score and rank comes from our rules engine; the model gets those numbers and writes
+   them up in plain English. If it quotes a dollar figure or a score that isn't in our results, we throw
+   the summary away. It runs locally, so the owner's plans never leave the laptop." Point at the caveat
+   line and the **Why (AI)** row / the one-line reason on each card. (The exact wording varies run to run;
+   the numbers don't.)
+3. **Side-by-side table**: "The most expensive lease is the cheapest to open. The cheapest lease, the retail box
    at 240 W 19th, costs 1.5x to 2.5x as much in year one."
-3. **1903 Yale card → Visual evidence** (live mode): the **real Vexcel aerial** with a **Live · Vexcel**
+4. **1903 Yale card → Visual evidence** (live mode): the **real Vexcel aerial** with a **Live · Vexcel**
    badge and the attribution line. The dashed **Building footprint** box comes from Vexcel's AI building
    outline. Click **Angled** for the oblique (north-facing) photo. Facts with a cyan **live** dot came
    from the Vexcel API (served from the server-side cache), not from fixtures.
-4. **HVAC → "verify with landlord"**: "Vexcel's AI counted 2 rooftop units on this 19,863 sq ft building.
+5. **HVAC → "verify with landlord"**: "Vexcel's AI counted 2 rooftop units on this 19,863 sq ft building.
    Our suite is 2,000 sq ft, so its prorated share is about 1 ton against 10 needed. We don't guess:
    it's UNKNOWN, excluded from the score, no fake cost, and it becomes a landlord question:
    *Which rooftop HVAC units serve this suite?*"
-5. **Roof condition from AI**: 1903 Yale's roof scores 4/5 (metal). On **240 W 19th** the roof scores
+6. **Roof condition from AI**: 1903 Yale's roof scores 4/5 (metal). On **240 W 19th** the roof scores
    **2/5** with water pooling, so the engine adds a **roof repair** line ($7.2k-$16.2k, per sq ft of
    the suite).
-6. **Houston has no zoning**: the zoning row on every card says so and cites the deed-restriction rules
+7. **Houston has no zoning**: the zoning row on every card says so and cites the deed-restriction rules
    (Code Ch. 10 §§10-551–555). Then **4720 Washington**: red "Blocked by a hard requirement". "Houston
    doesn't zone, but the City enforces deed restrictions, and this one says no food service. You can't
    permit your way around that."
-7. **801 St Emanuel → parking**: "0 on-site spaces and it still passes: it's inside the East Downtown
+8. **801 St Emanuel → parking**: "0 on-site spaces and it still passes: it's inside the East Downtown
    market-based parking area, where Houston sets no minimum (§26-471)." Compare 240 W 19th: RISK, 4
    spaces vs 18 required by §26-492.
-8. **3701 Kirby**: "Cheaper on paper than #2, but it's a medical office: fit score 50, so it's flagged
+9. **3701 Kirby**: "Cheaper on paper than #2, but it's a medical office: fit score 50, so it's flagged
    weak fit and ranked after real restaurant candidates." (Run it as a *Dental clinic* and Kirby wins.)
-9. **Cost breakdown** (801 St Emanuel): hood $15-30k, grease interceptor $8-20k, general conditions,
+10. **Cost breakdown** (801 St Emanuel): hood $15-30k, grease interceptor $8-20k, general conditions,
    contingency, permits. "Ranges from fixed cost bands, never a fake-precise number."
-10. **Landlord letter**: **Copy**. "A ready-to-send request for TI and free rent during build-out."
-11. Reload: the report comes back from SQLite and appears under "Recent analyses".
+11. **Landlord letter**: **Copy**. "A ready-to-send request for TI and free rent during build-out."
+12. Reload: the report comes back from SQLite and appears under "Recent analyses".
 
 **Sample-listing honesty**: the buildings and coordinates are real and the Vexcel data is real; rent,
 size, previous use, TI, the interior facts (Matterport) and the striped parking counts are illustrative
@@ -154,12 +185,16 @@ Emanuel to 41.7, weak fit.)
 ### 6. Close (2:45-3:00)
 > "Real Vexcel aerials and AI roof and HVAC facts, Houston's actual parking and deed-restriction rules,
 > one ranked answer: what it costs to open, what's risky, and what to ask the landlord. Deterministic
-> rules with citations, so every number is explainable."
+> rules with citations, so every number is explainable, and a local AI that explains them in plain
+> English without ever changing them."
 
 ## Fallback plan
 
 | Problem | Fix |
 |---|---|
+| Ollama down, model not pulled, or `/health` says `parser: "regex"` | The app keeps working: the regex parser reads the demo text identically and the ranking, costs and statuses are unchanged; only the AI summary panel, the "Why (AI)" row and the "Local AI ready" pill disappear. Present without them, or `ollama serve` and wait ~30 s |
+| Analysis feels slow (>10 s) | Model was cold or memory is tight (14b loaded too?). `ollama ps`; `ollama stop qwen3:14b`; run one throwaway analysis to warm it. Worst case set `LLM_PROVIDER=none` in `backend/.env` and restart uvicorn: millisecond analyses, no summary |
+| No summary panel although Ollama is up | The guardrail rejected the summary (log: "AI summary skipped ... ungrounded") or the call timed out; the ranking is unaffected. Re-run the comparison or move on |
 | No internet | Live mode serves the pre-warmed cache with no calls. If the cache was not warmed, set `USE_MOCK_DATA=true`, restart uvicorn: same ranking, placeholder aerials (no live badge, no footprint box) |
 | Aerial shows "Placeholder imagery" in live mode | Cache missing or the call failed (it falls back per item). Re-run the pre-warm command online, or present in mock mode |
 | Key expired / rejected (after 2026-12-01) | Cached properties keep working. Otherwise switch to mock mode |
@@ -182,8 +217,16 @@ Emanuel to 41.7, weak fit.)
   prorated by floor area and a short share becomes a landlord question instead of a cost.
 - **Why "verify" instead of RISK for HVAC?** A prorated share is an estimate; the building's units may
   well serve the suite. Penalizing it would push good restaurant spaces down on a guess.
-- **Is this AI?** Vexcel's AI does the image analysis. Our agent pipeline is deterministic rules for
-  trust and explainability; Claude is optional for parsing free text, with a regex fallback. No ML in costs.
+- **Is this AI?** Vexcel's AI does the image analysis. A local LLM (qwen3:8b on Ollama) reads the
+  free-text requirements (regex fallback) and writes the plain-English summary of a ranking that is
+  already computed. Compliance, costs, scores and ranks are deterministic rules for trust and
+  explainability. No ML in costs.
+- **Can the AI make things up?** It only sees our computed digest, and any dollar figure, fit score or
+  property id that isn't in it gets the whole summary rejected (then no panel is shown). It could still
+  word a non-numeric point badly, which is why the panel says "Written by AI from the numbers below;
+  costs and compliance are rule-based."
+- **Why local instead of a cloud model?** Free, works offline at the venue, and a business owner's plans
+  and budget stay on their machine. Claude is a config switch (`LLM_PROVIDER=anthropic`).
 - **How accurate are the costs?** Planning ranges from configurable bands, with every assumption listed.
 - **Other cities / businesses?** Add a `jurisdictions.yaml` block (Houston and Austin are loaded; others
   use model codes) and a `business_types.yaml` block. A dental clinic already works.

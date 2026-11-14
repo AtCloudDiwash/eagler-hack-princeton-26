@@ -67,7 +67,14 @@ shows a cyan "live" dot).
 `analysis_id` (uuid4 hex), `created_at` (ISO-8601 UTC, ms, `Z`), `business_type`, `requirements`,
 `ranking_basis` (sentence), `min_score` (the `ranking.min_score` threshold used), `results`
 (sorted by rank), `mode` (`costar/matterport/vexcel: mock|live`, `parser`: the parser actually
-used), `disclaimer` (from `costs.yaml`).
+used, `regex|ollama|claude`; `llm`: the model label used for the parse or summary in this run, e.g.
+`ollama:qwen3:8b`, else `none`), `disclaimer` (from `costs.yaml`), `ai_summary` (below).
+
+### `AISummary` (`AnalyzeResponse.ai_summary`, nullable)
+Written by `services/ranking_summary.summarize_ranking` after ranking: `text` (2-4 sentences),
+`per_property` (`{property_id: one sentence}`), `model` (e.g. `ollama:qwen3:8b`), `grounded: true`.
+`null` when no LLM is reachable, the call fails or the guardrail rejects it (a `$` figure, fit score or
+property id not in the result), and in runs stored before it existed. It never changes any other field.
 
 ### `AnalysisResult` (one per property)
 

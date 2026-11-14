@@ -6,7 +6,7 @@
 
 **Key Problem:** Traditional real estate listings show rent and size, but do not reveal the hidden costs of converting a space. E.g. does the space have restaurant-grade ventilation? Enough plumbing? Suitable parking? Tenants currently spend weeks and money on architects and inspections to answer these questions.
 
-**Proposed Solution:** An agent pipeline (deterministic rules, with optional Claude for parsing free text) that:
+**Proposed Solution:** An agent pipeline (deterministic rules; a local LLM, qwen3:8b on Ollama, reads the free text and explains the finished ranking, with a regex fallback) that:
 - Takes user requirements (e.g. "40 seats, kitchen needed, 2 bathrooms" for a restaurant in Houston, TX; a 4-chair dental clinic also works).
 - Pulls candidate properties (CoStar-shaped listings; sample listings at real Houston buildings until CoStar access is connected).
 - Uses real Vexcel aerial imagery and AI property facts (rooftop HVAC units, roof condition, building footprint, paving) and 3D-tour data (Matterport-shaped fixtures for now) to **observe** existing features.

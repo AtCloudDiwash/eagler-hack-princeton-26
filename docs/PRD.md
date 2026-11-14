@@ -25,6 +25,7 @@
    - The app displays a summary card for each: total estimated cost, a composite score, and key pros/cons.
    - Properties are ranked by lowest first-year cost (cost to open + 12 months rent) among spaces with a fit score of at least `ranking.min_score` (55); weak fits come next and disqualified spaces last.
    - Criteria weights are adjusted in `backend/criteria.yaml` (no settings UI in the MVP).
+   - As a user, I get a short plain-English summary of why the spaces rank as they do, written by a local LLM from the computed results only (hidden when the LLM is unavailable; it never changes a number).
 
 6. **Landlord Request Drafting**
    - As a user, I can generate a sample letter or checklist of items to present to the landlord (e.g. "Which rooftop HVAC units serve this suite, and what is their tonnage and age?").
@@ -50,4 +51,5 @@
 - [x] Compliance checks show PASS/RISK/UNKNOWN based on rules in code and config (e.g. ADA 32 in. clear width).
 - [x] Criteria weights changed in YAML affect scoring output (hot reload; covered by tests).
 - [x] Live Vexcel imagery and AI facts drive real checks (HVAC, roof, footprint), with mock mode reproducing the same ranking.
+- [x] Free text is parsed by a local LLM (Ollama `qwen3:8b`) with a regex fallback, and a grounded AI summary explains the ranking without changing any cost, score, status or rank.
 - [x] The demo scenario (restaurant, 5 Houston spaces; Austin as an offline dataset) is fully functional and presentable ([DEMO_RUNBOOK.md](DEMO_RUNBOOK.md)).

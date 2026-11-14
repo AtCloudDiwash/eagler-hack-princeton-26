@@ -6,7 +6,7 @@ Phases follow `prompts/`. Each was executed from the repo root and builds on the
 |---|---|---|---|
 | 00 | `00-bootstrap.md` | Done | Monorepo, docs skeleton, `.gitignore`, `.env.example`, backend models/providers/config |
 | 01 | `01-backend-skeleton.md` | Done | FastAPI app, `/health`, routers for business types, criteria, properties, analyze, analyses; CORS; static media |
-| 02 | `02-agent-workflow.md` | Done | Five-step orchestrator, requirements parser (regex + optional Claude), evaluator registry, compliance engine, cost engine, scoring, landlord questions + letter, SQLite run history |
+| 02 | `02-agent-workflow.md` | Done | Five-step orchestrator, requirements parser (regex + optional LLM; Claude at the time, local Ollama since phase 05), evaluator registry, compliance engine, cost engine, scoring, landlord questions + letter, SQLite run history |
 | 03 | `03-frontend-skeleton.md` | Done | Next.js 16 App Router: profile form, property selection, analysis report, dark navy/cyan theme, Vitest tests |
 | 04 | `04-integrations.md` | Done | **Live Vexcel** (ortho, oblique-north, `/property/extract` AI facts, disk cache, per-item fallback, snapshot script); CoStar / Matterport adapters behind keys with fixture fallback; aerial footprint and floor-plan overlays |
 | scale | `scale-criteria.md` | Done | `window_visibility` added via `criteria.yaml` + one evaluator; later `roof_condition` the same way; test proves config-only scaling |
@@ -25,11 +25,14 @@ Phases follow `prompts/`. Each was executed from the repo root and builds on the
 - [x] New rules: `roof_condition` + `roof_repair`; parking estimate from paved area; HVAC prorated to
       the suite share with "verify with landlord"; use-restriction hard block
 - [x] "Sample listing" badge and use-restriction line on property cards
-- [x] All tests green (backend 152, frontend 49, Playwright 6); lint clean
+- [x] **Local LLM** (Ollama `qwen3:8b`, `LLM_PROVIDER`): LLM requirements parsing with regex fallback, one
+      grounded ranking summary per analysis (guardrail: unknown `$` / score / id → `ai_summary: null`); AI
+      summary panel, "Why (AI)" row, parser / LLM badges, "Local AI ready" pill, "Writing summary" step
+- [x] All tests green (backend 178, frontend 64; Playwright 6 before the LLM work); lint clean
 - [x] Live mode verified end to end (ranking matches mock, all 5 Houston results `vexcel-live`,
       9-10 live facts each, cached images served, key absent from logs)
 - [x] Documentation re-synced to the code (this pass): README, `.env.example`, all of `docs/`
-- [ ] Pre-warm the Vexcel cache and dry-run [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) on the presentation machine
+- [ ] Pre-warm the Vexcel cache, pull and warm `qwen3:8b`, and dry-run [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) on the presentation machine
 - [ ] Clean up and commit ("Final polish before demo")
 
 ## Remaining / stretch (only if time allows)
@@ -38,6 +41,6 @@ Phases follow `prompts/`. Each was executed from the repo root and builds on the
 - Matterport tour links for the listings (the iframe viewer is ready; set `matterport_url`).
 - Peri validation: record a small business owner interview and add the quote to the pitch
   ([SPONSOR_STRATEGY.md](SPONSOR_STRATEGY.md)).
-- Known issues in [DECISIONS_AND_RISKS.md](DECISIONS_AND_RISKS.md#known-issues) (hand-made parking boxes
-  on live imagery, Austin-specific grease citation).
+- Open items in [DECISIONS_AND_RISKS.md](DECISIONS_AND_RISKS.md#known-issues) (unused config keys; the
+  overlay-box and grease-citation issues are fixed).
 - Optional AWS deployment (backend container + static frontend; check Vexcel terms for cached imagery).

@@ -168,13 +168,58 @@ Functions: `get_interior(prop)`, `get_interior_images(property_id, matterport_ur
 A fact that is absent is unknown, which is how the missing-data policies get exercised (e.g.
 property-hou-05 has no grease interceptor fact).
 
-## Anthropic Claude (optional, requirements parser)
+## LLM: local Ollama (default) or Claude (`app/services/llm.py`)
 
-If `ANTHROPIC_API_KEY` is set, `requirements_parser.claude_extract` calls the Messages API
-(`ANTHROPIC_MODEL`, default `claude-haiku-5-5`) with a JSON-schema output format, an 8 s timeout and
-no retries. Validated fields are merged over the regex result. Any failure falls back to regex. This
-is independent of `USE_MOCK_DATA`. `/health` reports `parser: "claude"` when a key is configured, and
-`AnalyzeResponse.mode.parser` reports the parser actually used for that run.
+The LLM is not a data provider and is independent of `USE_MOCK_DATA`. It does two jobs only: extract
+requirement fields from the free text (regex fallback) and write the grounded `ai_summary` of a finished
+ranking (`null` fallback). It never computes costs, scores, statuses or ranks. `LLM_PROVIDER` picks it:
+
+| `LLM_PROVIDER` | What runs | `mode.parser` / `mode.llm` |
+|---|---|---|
+| `ollama` (default) | Local model served by Ollama (`OLLAMA_MODEL`, default `qwen3:8b`) | `ollama` / `ollama:qwen3:8b` |
+| `anthropic` | Claude via the Anthropic SDK (`ANTHROPIC_MODEL`, default `claude-haiku-5-5`); needs `ANTHROPIC_API_KEY` | `claude` / `anthropic:<model>` |
+| `none` (or any other value) | No LLM: regex parser, `ai_summary: null` | `regex` / `none` |
+
+`ANTHROPIC_API_KEY` on its own no longer enables Claude; it is used only with `LLM_PROVIDER=anthropic`.
+
+### Ollama
+
+Setup: install Ollama (ollama.com), `ollama pull qwen3:8b` (~5.2 GB), and run `ollama serve` (or open
+the Ollama app) at `OLLAMA_BASE_URL` (default `http://localhost:11434`). No key; nothing leaves the
+machine.
+
+- **Availability:** `llm.is_available()` calls `GET /api/tags` (1.5 s timeout) and checks the configured
+  model is pulled. The answer is cached for 30 s, and a timed-out or unreachable chat call marks Ollama
+  unavailable for that window, so a dead Ollama costs at most one timeout. If Ollama starts after the
+  backend, it is picked up within 30 s.
+- **Calls:** `POST /api/chat` with `stream: false`, the JSON schema as `format` (structured outputs),
+  `think: false` (qwen3's reasoning trace off; any stray `<think>` block is stripped anyway),
+  `keep_alive` (`OLLAMA_KEEP_ALIVE`, default `30m`) and `options: {temperature: 0, num_predict,
+  num_ctx}` (`OLLAMA_NUM_CTX`, default 8192; kept identical on every call because a different `num_ctx`
+  makes Ollama reload the model). Timeout `LLM_TIMEOUT_SECONDS` (default 20). `done_reason: "length"`
+  (truncated) and invalid JSON are errors.
+- **Warm-up:** on startup `llm.warm_up()` sends an empty `/api/generate` with the same `keep_alive` /
+  `num_ctx` in a background thread, so the first analysis doesn't pay the model load. Start Ollama first,
+  then the backend, and give it ~10 s.
+- **Latency** (MacBook M4 Pro, warm `qwen3:8b`): parse 1.4-1.7 s, summary 5.6-6.1 s, whole 5-property
+  analysis about 7 s; about 14 s with a cold model. `qwen3:14b` works and is a bit more fluent but about
+  2x slower (about 13 s warm). Don't run both models at once: they compete for memory.
+- **Live check:** `cd backend && venv/bin/python scripts/llm_live_check.py [--model qwen3:14b] [--runs 2]
+  [--details "..."]` runs the Houston demo through `analyze_properties` and prints the parsed
+  requirements, the `ai_summary` and each LLM call's time. It is not part of pytest.
+
+### Claude (alternative provider)
+
+With `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`, the same two calls go to the Messages API with a
+JSON-schema output format, `LLM_TIMEOUT_SECONDS` and no retries. A stop reason other than `end_turn`
+is treated as a failure.
+
+### Reporting
+
+`/health` reports the parser / LLM that is configured **and reachable right now** (`regex` / `none`
+when Ollama is down or the model isn't pulled). `AnalyzeResponse.mode.parser` is the parser actually
+used for that run and `mode.llm` the model used for its parse or summary (else `"none"`). See
+[API_CONTRACT.md](API_CONTRACT.md).
 
 ## Geocoding (not implemented)
 

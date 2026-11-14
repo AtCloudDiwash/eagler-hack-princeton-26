@@ -24,7 +24,7 @@ Focus on the following sponsors/prizes:
 
 - **Scale AI, LangChain, Agent Platforms**
   - *Fit:* Potential use of LLM orchestration or datasets.
-  - *Built:* Optional Claude requirements parser (`ANTHROPIC_API_KEY`, regex fallback). The five-step agent pipeline is plain Python functions; LangChain was not needed.
+  - *Built:* A local LLM (qwen3:8b on Ollama, `LLM_PROVIDER=ollama`) parses the free-text requirements (regex fallback) and writes a grounded plain-English summary of the finished ranking (rejected if it cites a number not in the results). Claude is a config switch (`LLM_PROVIDER=anthropic`). Costs, scores, statuses and ranks stay deterministic. The agent pipeline is plain Python functions; LangChain was not needed.
   - *Note:* Keep it simple; do not overshoot scope.
 
 - **Photon, arlq, ChatOverflow, Projects Board, Justin Bojarski**
