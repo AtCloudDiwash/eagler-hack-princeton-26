@@ -194,7 +194,7 @@ def test_request_shape_and_key_only_in_header(vexcel_live):
         assert call["params"]["wkt"] == f"POINT({LA_LON} {LA_LAT})" and call["timeout"] == settings.provider_timeout_seconds
     by_item = {c["item"]: c["params"] for c in fake.calls}
     assert by_item["ortho"]["bbox-dimensions"] == "100,100" and by_item["ortho"]["layer"] == "urban"
-    assert by_item["oblique"]["product-type"] == "oblique-n"
+    assert by_item["oblique"]["product-type"] == "oblique-north"
     assert by_item["property"]["unit-system"] == "imperial"
 
 

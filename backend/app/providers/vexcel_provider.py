@@ -7,7 +7,7 @@ backend/static/aerials/.
 Live mode (USE_MOCK_DATA=false + VEXCEL_API_KEY), for a property with coordinates:
 
     GET {VEXCEL_API_BASE_URL}/ortho/extract      top-down orthophoto (JPEG)
-    GET {VEXCEL_API_BASE_URL}/oriented/extract   north-facing oblique photo (JPEG)
+    GET {VEXCEL_API_BASE_URL}/oriented/extract   oblique-north photo (JPEG)
     GET {VEXCEL_API_BASE_URL}/property/extract   AI property attributes (GeoJSON)
 
 The key travels only in the `X-API-KEY` header. Responses are cached on disk under
@@ -46,7 +46,7 @@ ATTRIBUTION = "© Vexcel Imaging US, Inc."
 BBOX_METERS = (100.0, 100.0)
 ORTHO_PIXELS = (800, 800)
 IMAGERY_LAYER = "urban"
-OBLIQUE_PRODUCT = "oblique-n"
+OBLIQUE_PRODUCT = "oblique-north"  # valid: oblique-north|south|east|west (oblique-n silently returns nadir)
 
 DEFAULT_TONS_PER_UNIT = 5.0
 DEFAULT_SQFT_PER_SPACE = 350.0
