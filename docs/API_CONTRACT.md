@@ -22,7 +22,7 @@ Types below use TypeScript notation. `Status = "PASS" | "RISK" | "UNKNOWN"`.
 ### GET /health
 
 ```ts
-{ status: "ok"; mode: { costar: "mock" | "live"; matterport: "mock" | "live"; vexcel: "mock" | "live"; parser: "regex" | "claude" } }
+{ status: "ok"; mode: { costar: "mock" | "live"; matterport: "mock" | "live"; vexcel: "mock" | "live"; parser: "regex" | "ollama" | "claude"; llm: string /* e.g. "ollama:qwen3:8b", "anthropic:claude-haiku-5-5", "none" */ } }
 ```
 
 `mode.parser` here is the parser that is *configured* ("claude" when `ANTHROPIC_API_KEY` is set).
@@ -106,8 +106,14 @@ Response (`AnalyzeResponse`):
   ranking_basis: string;        // human sentence, e.g. "Ranked by first-year cost (cost to open + 12 months rent) among properties with a fit score of at least 55; weak fits (score below 55) next, then disqualified properties; ties broken by criteria score."
   min_score: number;            // costs.yaml ranking.min_score; non-disqualified results scoring below it are weak fits (0 = gate off / older runs)
   results: AnalysisResult[];    // already sorted by rank (1 = best)
-  mode: { costar: string; matterport: string; vexcel: string; parser: "regex" | "claude" };
+  mode: { costar: string; matterport: string; vexcel: string; parser: "regex" | "ollama" | "claude"; llm: string };
   disclaimer: string;
+  ai_summary: {                  // null when no LLM is reachable or the call failed (UI hides the panel)
+    text: string;                // 2-4 sentence plain-English explanation of the ranking
+    per_property: Record<string, string>;  // property_id -> one sentence "why this rank"
+    model: string;               // e.g. "ollama:qwen3:8b"
+    grounded: true;              // generated only from this response's numbers/statuses; never changes them
+  } | null;
 }
 
 Requirements = {
