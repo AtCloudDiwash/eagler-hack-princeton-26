@@ -10,7 +10,7 @@ from agents.base import AgentReport, RunContext, ToolBudget, building_facts_resu
 from config import roof_condition_labels
 from schemas import AgentFinding, AgentMetricAssessment
 from services.vexcel import FIELD_NOTES, primary_structure, stories_estimate
-from services.verdicts import size_assessment
+from services import sizing
 
 SOURCE = "Vexcel /property/extract (AI-detected from aerial imagery)"
 ROLE = (
@@ -55,8 +55,8 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
     @tool
     def check_size_fit() -> dict:
         """Compare the user's space need (their program's size range) with this building: a CoStar-listed
-        suite when there is one, otherwise the ground-floor footprint and stories. Uses the same thresholds
-        as the engine's size verdict."""
+        suite when there is one, otherwise the ground-floor footprint and stories. Uses the same graded
+        size fit as the engine's size verdict (too small and too big both score lower)."""
         footprint = s.get("footprint.area")
         stories = stories_estimate(s) or 1
         if not footprint:
@@ -67,9 +67,10 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         size = (ctx.program or {}).get("size") or {}
         target, lo, hi = size.get("target_sqft", ctx.target_sqft), size.get("min_sqft", round(ctx.target_sqft * 0.85)), size.get("max_sqft", round(ctx.target_sqft * 1.3))
         p = ctx.property
-        assessed = size_assessment(target, lo, hi, best_space=p.get("best_space"), space_count=p.get("space_count") or 0, available_sqft=p.get("available_sqft"),
-                                   footprint_sqft=footprint, stories=stories, ground_floor_required=((ctx.program or {}).get("building") or {}).get("ground_floor") == "required")
-        verdict = f"{assessed[0]} — {assessed[1]}" if assessed else "unknown"
+        graded = sizing.fit({"target_sqft": target, "min_sqft": lo, "max_sqft": hi}, best_space=p.get("best_space"), closest_space_sqft=p.get("closest_space_sqft"),
+                            space_count=p.get("space_count") or 0, available_sqft=p.get("available_sqft"), footprint_sqft=footprint, stories=stories,
+                            ground_floor_required=((ctx.program or {}).get("building") or {}).get("ground_floor") == "required")
+        verdict = f"{graded.status} (fit {graded.score:.2f}) — {graded.reason}" if graded else "unknown"
         return {
             "summary": f"Ground floor {footprint:,.0f} sq ft vs need ~{ctx.target_sqft:,} sq ft ({ratio:.1f}x): {verdict}",
             "data": {
@@ -82,7 +83,8 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
                 "assumed_leased_sqft": round(leased),
                 "ideal_range_sqft": [ctx.business["sizing"]["ideal_min_sqft"], ctx.business["sizing"]["ideal_max_sqft"]],
                 "program_range_sqft": [lo, hi],
-                "size_verdict": assessed[0] if assessed else None,
+                "size_verdict": graded.status if graded else None,
+                "size_fit_score": round(graded.score, 2) if graded else None,
             },
             "guidance": ["Ground-floor space matters for customer-facing uses; upper floors rarely suit restaurants or gyms.", FIELD_NOTES["footprint.area"]],
         }

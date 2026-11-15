@@ -23,7 +23,7 @@ from config import metrics_registry
 from schemas import AgentMetricAssessment
 from services import costs as cost_engine
 from services import program as space_program
-from services import rules
+from services import rules, sizing
 from services.vexcel import primary_structure, stories_estimate
 
 RANK = {"blocker": 0, "weak": 1, "adequate": 2, "strong": 3}
@@ -86,44 +86,6 @@ def interior_scan(ctx: Any) -> dict | None:
     return facts
 
 
-def size_assessment(target: int, lo: int, hi: int, *, best_space: dict | None = None, space_count: int = 0, available_sqft: float | None = None,
-                    interior_sqft: float | None = None, footprint_sqft: float | None = None, stories: int | None = None, ground_floor_required: bool = False) -> tuple[str, str, dict] | None:
-    """(status, reason, data) for the size_fit metric, from the most direct size evidence available. Shared with the
-    Vexcel Agent's check_size_fit tool so the tool and the verdict use one set of thresholds."""
-    if best_space and best_space.get("sqft"):
-        sq = best_space["sqft"]
-        suite = f"Suite {best_space['suite']}" if best_space.get("suite") else "A listed space"
-        if lo <= sq <= hi:
-            return "strong", f"{suite} is {sq:,.0f} rentable sq ft, inside your {lo:,}-{hi:,} sq ft range (CoStar listing).", {"basis": "costar_listing", "sqft": sq, "range": [lo, hi]}
-        return ("adequate" if sq > hi else "weak"), f"The closest listed space is {sq:,.0f} sq ft vs your {lo:,}-{hi:,} sq ft range (CoStar listing).", {"basis": "costar_listing", "sqft": sq, "range": [lo, hi]}
-    if interior_sqft:
-        r = interior_sqft / target
-        data = {"basis": "interior_scan", "sqft": round(interior_sqft), "ratio": round(r, 2), "range": [lo, hi]}
-        if lo <= interior_sqft <= hi:
-            return "strong", f"The interior scan measures {interior_sqft:,.0f} sq ft, inside your {lo:,}-{hi:,} sq ft range.", data
-        if interior_sqft > hi:
-            return "adequate", f"The interior scan measures {interior_sqft:,.0f} sq ft, {r:.1f}x your ~{target:,} sq ft need (more space than needed).", data
-        return "weak", f"The interior scan measures only {interior_sqft:,.0f} sq ft vs the ~{lo:,} sq ft minimum for your program.", data
-    if space_count:
-        avail = available_sqft or 0
-        data = {"basis": "costar_spaces", "spaces": space_count, "available_sqft": avail, "range": [lo, hi]}
-        if avail >= lo:
-            return "adequate", f"CoStar lists {space_count} space(s) ({avail:,.0f} sq ft in total) but none in your {lo:,}-{hi:,} sq ft range; spaces may be combined or divided.", data
-        return "weak", f"CoStar lists {space_count} space(s) totalling only {avail:,.0f} sq ft, below your ~{lo:,} sq ft minimum.", data
-    if footprint_sqft:
-        r = footprint_sqft / target
-        st = stories or 1
-        data = {"basis": "footprint", "footprint_sqft": round(footprint_sqft), "stories": st, "ratio": round(r, 2), "range": [lo, hi]}
-        if 0.85 <= r <= 1.3:
-            return "strong", f"The {footprint_sqft:,.0f} sq ft ground floor matches your ~{target:,} sq ft need ({r:.1f}x).", data
-        if r > 1.3:
-            return "adequate", f"The {footprint_sqft:,.0f} sq ft ground floor is {r:.1f}x your ~{target:,} sq ft need: you would lease part of it (suite availability unverified).", data
-        if st > 1 and footprint_sqft * st >= lo:
-            return ("weak" if ground_floor_required else "adequate"), f"Only {footprint_sqft:,.0f} sq ft per floor: ~{target:,} sq ft would span several floors" + (", but this use needs one street-level floor." if ground_floor_required else "."), data
-        return "weak", f"The {footprint_sqft:,.0f} sq ft footprint is below the ~{lo:,} sq ft minimum for your program.", data
-    return None
-
-
 # ---------------------------------------------------------------- resolvers
 
 def _permitted_use(ctx: Any) -> Verdict | None:
@@ -149,17 +111,17 @@ def _size_fit(ctx: Any) -> Verdict | None:
     p = ctx.property
     s = _structure(ctx)
     interior = interior_scan(ctx) or {}
-    result = size_assessment(
-        target, lo, hi, best_space=p.get("best_space"), space_count=p.get("space_count") or 0, available_sqft=p.get("available_sqft"),
+    graded = sizing.fit(
+        {"target_sqft": target, "min_sqft": lo, "max_sqft": hi}, best_space=p.get("best_space"), closest_space_sqft=p.get("closest_space_sqft"),
+        space_count=p.get("space_count") or 0, available_sqft=p.get("available_sqft"),
         interior_sqft=interior.get("indoor_area_with_walls_sqft") or interior.get("indoor_area_sqft"),
         footprint_sqft=p.get("area_sqft") or s.get("footprint.area"), stories=_fact(ctx, "stories") or p.get("stories_est") or stories_estimate(s),
         ground_floor_required=((ctx.program or {}).get("building") or {}).get("ground_floor") == "required",
     )
-    if not result:
+    if not graded:
         return None
-    status, reason, data = result
-    eid = _evidence(ctx, "size_check", reason, {**data, "need_sqft": target}, "Program size vs. building/listing data")
-    return Verdict("size_fit", status, reason, (eid,), "building data")
+    eid = _evidence(ctx, "size_check", graded.reason, {**graded.data, "score": round(graded.score, 2), "need_sqft": target}, "Program size vs. building/listing data")
+    return Verdict("size_fit", graded.status, graded.reason, (eid,), "building data")
 
 
 def _occupancy_requirements(ctx: Any) -> Verdict | None:

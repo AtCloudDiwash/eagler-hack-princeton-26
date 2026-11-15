@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from config import business_types, needs_registry
 from schemas import Budget, Intent, Need
-from services import program
+from services import program, sizing
 from services.llm import chat_model
 
 log = logging.getLogger("turnkey.intent")
@@ -66,7 +66,7 @@ def parse_rules(query: str) -> Intent:
     # "boutique gym", "dental office": a business word right after the first one is the noun, so it wins
     if len(hits) > 1 and hits[1][2] != best and 0 <= hits[1][0] - hits[0][1] <= 2:
         best = hits[1][2]
-    sqft = re.search(r"(\d[\d,]{2,7})\s*(?:sq\.?\s*ft|sf\b|square\s*feet|sqft)", q)
+    sqft, sqft_min, sqft_max = sizing.parse_size_request(query)
     stop = r"with|for|that|which|and|under|below|within|by|open|must|need|needs|near|close|want|wants|ideally|serving|looking"
     loc = re.search(rf"\b(?:in|near|around|at)\s+([A-Za-z][A-Za-z .,'-]{{1,60}}?)(?:[.?!]|$|,?\s+(?:{stop})\b)", query)
     counts = program.parse_counts(query, best)
@@ -76,7 +76,11 @@ def parse_rules(query: str) -> Intent:
         business_label=types[best]["label"],
         location_text=loc.group(1).strip(" ,.") if loc else None,
         seats=counts.get("seats"),
-        sqft=int(sqft.group(1).replace(",", "")) if sqft else None,
+        sqft=sqft,
+        sqft_min=sqft_min,
+        sqft_max=sqft_max,
+        concept=sizing.parse_concept(query, best),
+        size_hint=sizing.parse_size_hint(query),
         requirements=sorted(n.label for n in needs),
         budget=parse_budget(query),
         parser="rules",
@@ -131,8 +135,8 @@ async def parse(query: str) -> Intent:
         return rules
     if out.business_type not in types:
         return rules
-    if out.business_type != rules.business_type:  # counts depend on the business's sizing drivers
-        rules = rules.model_copy(update={"occupancy": program.parse_counts(query, out.business_type)})
+    if out.business_type != rules.business_type:  # counts and concepts depend on the business
+        rules = rules.model_copy(update={"occupancy": program.parse_counts(query, out.business_type), "concept": sizing.parse_concept(query, out.business_type)})
     valid_fields = {d["field"] for d in types[out.business_type]["program"]["drivers"]}
     occupancy = {**{k: v for k, v in out.size_counts.items() if k in valid_fields and v and v > 0}, **rules.occupancy}
     if out.staff and "staff" not in occupancy and "staff" not in {kw for d in types[out.business_type]["program"]["drivers"] for kw in d["keywords"]}:
@@ -149,7 +153,12 @@ async def parse(query: str) -> Intent:
         business_label=types[out.business_type]["label"],
         location_text=out.location or rules.location_text,
         seats=occupancy.get("seats"),
-        sqft=out.sqft or rules.sqft,
+        # the rules read size qualifiers ("at least", "under", ranges); the LLM's single number only fills a gap
+        sqft=rules.sqft or (out.sqft if out.sqft and out.sqft >= 100 else None),
+        sqft_min=rules.sqft_min,
+        sqft_max=rules.sqft_max,
+        concept=rules.concept,
+        size_hint=rules.size_hint,
         requirements=_dedupe_requirements([*(n.label for n in needs.values()), *extras]),
         budget=(Budget(amount=out.budget_amount, period=out.budget_period or "upfront", text=rules.budget.text if rules.budget else "")
                 if out.budget_amount and out.budget_amount >= 100 else rules.budget),
@@ -174,6 +183,6 @@ def _dedupe_requirements(items: list[str]) -> list[str]:
 
 
 def target_sqft(intent: Intent) -> tuple[int, str]:
-    """(target usable sq ft, explanation) from the space program (stated sq ft, sizing counts or business default)."""
-    target, _, _, basis = program.target_size(intent)
-    return target, basis[0] if basis else "typical size for this business"
+    """(target usable sq ft, explanation) from the size estimate (stated sq ft, sizing counts or the concept's typical size)."""
+    est = sizing.estimate(intent)
+    return est["target_sqft"], est["basis"][0] if est["basis"] else "typical size for this business"

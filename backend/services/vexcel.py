@@ -10,6 +10,7 @@ Without a key the client serves a recorded Houston sample (demo mode, clearly la
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
@@ -79,7 +80,9 @@ def _demo_features(lat: float, lon: float, box_m: float, limit: int) -> list[dic
 
 
 async def property_extract(lat: float, lon: float, box_m: float, limit: int = 100, calculated: bool = False) -> list[dict]:
-    """Parcels (GeoJSON features) whose data intersects a box of `box_m` around the point, nearest first."""
+    """Up to `limit` (max 500) parcels (GeoJSON features) in a box reaching `box_m` from the point. The API
+    returns them in no particular order (often the box's edges first), so in a dense area this is NOT the
+    nearest parcels: use property_sweep() to cover an area."""
     if not settings.vexcel_api_key:
         return _demo_features(lat, lon, box_m, limit)
     params: dict[str, Any] = {
@@ -94,6 +97,44 @@ async def property_extract(lat: float, lon: float, box_m: float, limit: int = 10
         params["include"] = "precomputed,calculated"
     data = await _get("/property/extract", params)
     return data.get("features", [])
+
+
+PAGE_SIZE = 500  # the API's cap per request; `total-records` caps the sum over all pages
+
+
+async def property_sweep(lat: float, lon: float, radius_m: float, max_pages: int = 8, calculated: bool = False) -> tuple[list[dict], bool]:
+    """Every parcel in the box reaching `radius_m` from the point, paged (up to max_pages x 500), deduplicated.
+    Returns (features, complete); complete is False when the area held more parcels than max_pages could fetch."""
+    if not settings.vexcel_api_key:
+        return _demo_features(lat, lon, radius_m * 2, 100_000), True
+    base: dict[str, Any] = {"wkt": f"POINT({lon:.6f} {lat:.6f})", "srid": 4326, "buffer-meter": int(radius_m),
+                            "total-records": PAGE_SIZE * max_pages, "page-size": PAGE_SIZE, "unit-system": "imperial"}
+    if calculated:
+        base["include"] = "precomputed,calculated"
+
+    async def page(n: int) -> list[dict]:
+        try:
+            return (await _get("/property/extract", {**base, "page": n})).get("features", [])
+        except VexcelError as err:
+            if n > 1 and err.status == 400 and "past the end" in err.message.lower():
+                return []
+            raise  # outages and rejected requests do not mean the search is complete
+
+    features: dict[str, dict] = {}
+    n, last = 1, await page(1)
+    batch = [last]
+    while True:
+        for fs in batch:
+            for f in fs:
+                features.setdefault(json.dumps(f.get("geometry"), sort_keys=True), f)
+        if len(batch[-1]) < PAGE_SIZE or n >= max_pages:
+            return list(features.values()), len(batch[-1]) < PAGE_SIZE
+        # more pages: fetch up to three at a time
+        nxt = list(range(n + 1, min(n + 3, max_pages) + 1))
+        batch = await asyncio.gather(*(page(i) for i in nxt))
+        n = nxt[-1]
+        while len(batch) > 1 and not batch[-1]:
+            batch.pop()  # pages past the end come back empty
 
 
 # ---------------------------------------------------------------- interpretation helpers
