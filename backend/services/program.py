@@ -79,7 +79,12 @@ def parse_needs(query: str) -> list[Need]:
         for kw in sorted(cfg["keywords"], key=len, reverse=True):
             m = re.search(_kw_pattern(kw), q)
             if m:
-                found[nid] = Need(id=nid, label=cfg["label"], priority=_priority(query, m.start()))
+                priority = _priority(query, m.start())
+                only_before = re.search(r"\bonly\s*(?:on\s+)?(?:the\s+)?$", q[max(0, m.start() - 20):m.start()])
+                only_after = re.match(r"\s+(?:spaces?\s+)?only\b", q[m.end():])
+                if nid == "ground_floor" and (only_before or only_after):
+                    priority = "must"
+                found[nid] = Need(id=nid, label=cfg["label"], priority=priority)
                 break
     return list(found.values())
 

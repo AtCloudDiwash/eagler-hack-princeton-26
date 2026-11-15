@@ -1,4 +1,6 @@
-# Turnkey Matchmaker
+<img src="assets/brand/logo/eagleeye-logo-dark.png" alt="EagleEye" width="96" />
+
+# EagleEye
 
 Find and vet a commercial building for a specific business. Describe what you want to open, pick a
 building on a live Vexcel aerial map, and a team of local AI agents investigates whether that building
@@ -51,8 +53,7 @@ which provider served how many calls, and switches appear in the live log. Usage
 
 1. **Query → intent.** `services/intent.py`: rules plus Codex (schema-constrained JSON) extract business type,
    seats/sq ft, location and requirements.
-2. **Discovery (no agents).** `services/discovery.py`: Vexcel has no listings or text search (checked
-   against its OpenAPI spec), so discovery geocodes the place, pulls Vexcel parcels around it
+2. **Discovery (no agents).** `services/discovery.py`: discovery geocodes the place, pulls Vexcel parcels around it
    (`/property/extract`, `include=calculated` for roof height), keeps building types that suit the
    business and pre-screens them deterministically (type, size, roof, data). Outside the key's geofence
    (LA + Houston) it falls back to OpenStreetMap footprints and says so. No key → labelled demo mode
@@ -62,7 +63,16 @@ which provider served how many calls, and switches appear in the live log. Usage
    `services/refine.py`): "make it 60 seats", "only ground floor", "budget $8k a month", "drop parking", "near Rice"
    change the current search (everything else is kept, the results re-run, and the changes show as chips), while
    questions about the matches ("which two would you shortlist?") are answered from the current results without a new
-   search. Keep going until the matches look right; the analysis then receives the whole conversation.
+   search. Map and nearby-place questions run separately from requirement changes: competitors, nearest
+   cafes, named businesses, zoom, aerial/street layers and 2D/3D views can be requested in chat.
+   Visual searches (e.g. "show buildings with outdoor patios") use Vexcel's documented
+   `/embedding/extract` semantic imagery API and highlight matching regions, with verification caveats.
+   Each map question is one **interaction type** (`services/discovery_chat.py`): find nearby, find the nearest,
+   find by description, explore surroundings, inspect, adjust results, control the view, and back. Follow-ups build
+   on a map context the client sends: "which is closest?" → "what's around it?" → "only parking" → "back".
+   A strip above the input shows and edits that context (**Around** · **Within** · **Showing**). Result cards and place
+   pins are clickable and become the new "it". Suggested next questions appear under each answer.
+   Keep going until the matches look right; analysis receives the final effective intent and stores the conversation separately.
 4. **Select a building.** Readable key facts plus the complete Vexcel JSON, and a neighborhood view:
    Vexcel neighbor parcels plus OpenStreetMap places within an adjustable radius. The slow Overpass
    fetch is started for the whole search area at search time and cached in SQLite.

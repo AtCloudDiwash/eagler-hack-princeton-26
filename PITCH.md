@@ -1,4 +1,4 @@
-# Pitch Playbook: Turnkey Matchmaker (HackPrinceton Fall 2026)
+# Pitch Playbook: EagleEye (HackPrinceton Fall 2026)
 
 You get 2 minutes live plus an optional 2-minute video. Every line below helps with one of the
 four scores: **Creativity, Utility, Charity, Avidity**.
@@ -42,7 +42,7 @@ opinions, and "not detected" never blocks a space. Say it in one line, then move
 | Time | Who | Say | On screen |
 |---|---|---|---|
 | 0:00-0:20 | A | "Meet Maria. She saved for ten years to open her first restaurant. She found a space for $2,800 a month and signed. Then the contractor told her it needs a $140,000 hood and grease trap, and the deed bans food service. She never opens. **Listings tell you the rent. Nobody tells you the cost to open.**" | Title slide or the home page, with the query already typed |
-| 0:20-0:35 | A | "Turnkey Matchmaker: describe your business in plain English and pick a building on a live aerial map." | B presses enter: *"40-seat restaurant with a kitchen in Houston Heights"*. Candidates appear on the Vexcel map. |
+| 0:20-0:35 | A | "EagleEye: describe your business in plain English and pick a building on a live aerial map." | B presses enter: *"40-seat restaurant with a kitchen in Houston Heights"*. Candidates appear on the Vexcel map. |
 | 0:35-1:05 | A | "Five AI agents now investigate this building for *your* business: one reads Vexcel's aerial AI data (roof condition, rooftop HVAC units), one checks the neighborhood and competition, one checks Houston's real parking code and deed restrictions, and a cost agent prices only what the evidence shows is needed." | B clicks a building, then Analyze. The live agent log scrolls. **After ~5 s, open the pre-run result** (don't wait live). |
 | 1:05-1:35 | A | "Here's the verdict. This one's rent is $600 a month higher, but it's **$180k cheaper to open**, because it's a former restaurant. And this one is disqualified: a deed restriction bans food service. Every finding links to its evidence, and when we don't know something, we say *unknown* and tell you what to ask the landlord." | Compare view: the two buildings side by side. Point at the verdict, the cost range, one evidence chip, one "unknown" item. |
 | 1:35-1:50 | A | "The AI never makes up a number: agents gather evidence, deterministic rules score it. And adding a new business type or rule is just a YAML edit; we support restaurants, dental clinics, gyms, retail and offices today." | Quickly show `business_types.yaml` or the business switcher (optional) |
@@ -83,7 +83,7 @@ wanted to give the corner bakery the site-selection analyst it can't afford.
 
 **What it does**
 Describe your business in plain English ("40-seat restaurant with a kitchen in Houston Heights").
-Turnkey Matchmaker finds candidate buildings on a live Vexcel aerial map. For the one you choose,
+EagleEye finds candidate buildings on a live Vexcel aerial map. For the one you choose,
 a team of AI agents investigates whether it fits *your* business:
 - **Vexcel agent**: roof condition, rooftop HVAC units, footprint and paving from aerial AI.
 - **Neighborhood agent**: competition, demand and transit from OpenStreetMap and Census data.

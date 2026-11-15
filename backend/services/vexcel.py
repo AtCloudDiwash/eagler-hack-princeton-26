@@ -2,6 +2,7 @@
 
 Endpoints used (checked against the public OpenAPI spec at /v2/api-docs):
   /ortho/tile        XYZ ortho imagery tiles (layer urban | wide-area)
+  /embedding/extract semantic text-to-imagery similarity regions (not named businesses or vacancies)
   /property/extract  GeoJSON parcels + structures with AI-detected attributes around a WKT point
                      (buffer-meter = box width/height; total-records caps billable results;
                      include=precomputed,calculated adds roof height/elevation)
@@ -272,3 +273,24 @@ FIELD_NOTES: dict[str, str] = {
     "roof-defects": "Detected defects: discoloration/water ponding, patches, tarps, debris, structural damage. Percent = share of roof area.",
     "metadata.ortho-date-estimate": "Approximate imagery date; conditions may have changed since.",
 }
+
+
+async def semantic_search(text: str, lat: float, lon: float) -> dict:
+    """Visual similarity regions, not verified POIs or available suites.
+
+    Contract: https://api.vexcelgroup.com/v2/api-docs, /embedding/extract.
+    """
+    if not settings.vexcel_api_key:
+        raise VexcelError(401, "Semantic imagery search needs a live Vexcel key")
+    result = await _get("/embedding/extract", {
+        "search-text": text[:500], "wkt": f"POINT({lon} {lat})", "buffer-meter": 1600,
+        "total-records": 12, "page-size": 12, "include": "score,geometry,quadkey,collection",
+    })
+    features = []
+    for feature in result.get("features", []):
+        geom, props = feature.get("geometry"), feature.get("properties") or {}
+        if not geom or geom.get("type") not in {"Polygon", "MultiPolygon"}:
+            continue
+        features.append({"type": "Feature", "geometry": geom,
+                         "properties": {k: props.get(k) for k in ("score", "quadkey", "collection")}})
+    return {"type": "FeatureCollection", "features": features}

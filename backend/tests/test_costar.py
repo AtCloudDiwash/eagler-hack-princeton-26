@@ -101,3 +101,96 @@ def test_older_index_records_still_summarize():
     assert s["building_class"] is None and s["sprinklers"] is None and s["listing_condition"] is None
     fields = costar.candidate_fields(costar.match(29.76, -95.37), 1500, 2200, 1800)
     assert fields["stories"] == 1 and fields["gross_sqft"] == 25000 and fields["parking_ratio"] == 4.0
+
+
+def test_selection_survives_another_search_and_drives_panel(monkeypatch):
+    from schemas import Intent
+    from services import fit_summary
+    rec = costar.match(29.76, -95.37)
+    intent = Intent(sqft=3400)
+    chosen = costar.candidate_fields(rec, 3000, 4000, 3400)["best_space"]
+    assert chosen["suite"] == "110" and chosen["listing_id"] == 9
+    # Another search overwrote the stored building with Suite 105.
+    stored = {"id": "test", "lat": 29.76, "lon": -95.37, **costar.candidate_fields(rec, 1500, 2000, 1800)}
+    resolved = costar.selected_fields(stored, Intent(sqft=1800), chosen)
+    assert resolved["best_space"]["suite"] == "110"
+    tiles = fit_summary.tiles(resolved, None, intent)
+    assert next(t for t in tiles if t["id"] == "space")["sub"] == "Suite 110"
+    assert "3,400 sq ft" in next(t for t in tiles if t["id"] == "monthly")["hint"]
+    with pytest.raises(ValueError, match="no longer available"):
+        costar.selected_fields(stored, intent, {**chosen, "listing_id": 999})
+
+
+def test_pending_leases_do_not_supply_an_available_space():
+    from copy import deepcopy
+
+    rec = deepcopy(PROPS[0])
+    for listing in rec["lease_listings"]:
+        for space in listing["spaces"]:
+            space["lease_pending"] = True
+    fields = costar.candidate_fields(rec, 1500, 4000, 1800)
+    assert fields["space_count"] == 2
+    assert fields["best_space"] is None
+
+
+def test_divisible_suite_uses_requested_portion_not_maximum_area():
+    from copy import deepcopy
+
+    rec = deepcopy(PROPS[0])
+    rec['lease_listings'][0]['spaces'] = [{**rec['lease_listings'][0]['spaces'][0], 'suite': 'Ground retail', 'sqft_min': 500, 'sqft_max': 10000}]
+    fields = costar.candidate_fields(rec, 970, 1280, 1110, True)
+    assert fields['best_space']['sqft'] == 1110
+    assert fields['best_space']['sqft_max'] == 10000
+    assert fields['best_space']['suite'] == 'Ground retail'
+
+
+def test_suggested_portion_survives_selection_and_drives_cost_tiles(monkeypatch):
+    from copy import deepcopy
+    from schemas import Intent
+    from services import fit_summary
+
+    rec = deepcopy(PROPS[0])
+    rec['lease_listings'][0]['spaces'] = [{**rec['lease_listings'][0]['spaces'][0], 'suite': 'Ground floor retail', 'sqft_min': 500, 'sqft_max': 10000}]
+    monkeypatch.setattr(costar, 'match', lambda *args: rec)
+    intent = Intent(sqft=1200)
+    fields = costar.candidate_fields(rec, 1000, 1500, 1200, True)
+    prop = {'id': 'divisible', 'lat': 29.76, 'lon': -95.37, **fields}
+    resolved = costar.selected_fields(prop, intent, fields['best_space'])
+    tiles = fit_summary.tiles(resolved, None, intent)
+    space = next(t for t in tiles if t['id'] == 'space')
+    monthly = next(t for t in tiles if t['id'] == 'monthly')
+    assert space['value'] == '1,200 sq ft' and space['sub'] == 'Ground floor retail'
+    assert '10,000' in space['hint'] and 'landlord confirmation' in space['hint']
+    assert '1,200 sq ft' in monthly['hint']
+    # Below the advertised minimum, suggest the minimum with the same division caveat.
+    prop = costar.selected_fields(prop, Intent(sqft=300), fields['best_space'])
+    assert next(t for t in fit_summary.tiles(prop, None, Intent(sqft=300)) if t['id'] == 'space')['value'] == '500 sq ft'
+
+
+@pytest.mark.parametrize("bounds,target", [((2180, 2180), 2180), ((500, 10000), 1200)])
+def test_property_detail_keeps_suggested_suite_first_in_leasing_list(monkeypatch, bounds, target):
+    """The same suite and proposed area must survive the summary's 20-row limit."""
+    from copy import deepcopy
+    from main import _detail
+    from schemas import Intent
+
+    rec = deepcopy(PROPS[0])
+    template = rec["lease_listings"][0]["spaces"][0]
+    chosen = {**template, "suite": "3445", "sqft_min": bounds[0], "sqft_max": bounds[1]}
+    rec["lease_listings"] = [{**rec["lease_listings"][0], "spaces": [
+        {**template, "suite": f"Other {i}", "sqft_min": 600 + i * 10, "sqft_max": 600 + i * 10}
+        for i in range(24)
+    ] + [chosen]}]
+    monkeypatch.setattr(costar, "match", lambda *args: rec)
+    intent = Intent(sqft=target)
+    selection = {"listing_id": rec["lease_listings"][0]["listing_id"], "suite": "3445", "floor": chosen["floor"]}
+    prop = costar.selected_fields({"id": "selected", "lat": 29.76, "lon": -95.37}, intent, selection)
+    detail = _detail(prop, None, intent)
+    tile = next(t for t in detail["highlights"] if t["id"] == "space")
+    first = detail["costar"]["spaces"][0]
+    assert first["suite"] == detail["best_space"]["suite"] == "3445"
+    assert first["sqft"] == detail["best_space"]["sqft"] == target
+    assert tile["value"] == f"{target:,} sq ft" and tile["sub"] == "Suite 3445"
+    assert first["sqft_max"] == bounds[1]
+    assert first["rent_per_sqft_yr"] == detail["best_space"]["rent_per_sqft_yr"]
+    assert len(detail["costar"]["spaces"]) == 20

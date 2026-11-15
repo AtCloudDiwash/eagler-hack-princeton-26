@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import uuid
 
@@ -13,9 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 import multi_agent_engine
 from config import business_types, settings
-from schemas import AnalysisRequest, MatterportLinkRequest, RefineRequest, RefineResponse, SearchRequest, SearchResponse
+from schemas import AnalysisRequest, MatterportLinkRequest, RefineRequest, RefineResponse, SearchRequest, SearchResponse, Intent
 from services import costar, discovery, external, matterport, neighborhood, vexcel
 from services.llm import llm_status
+from services.suite_tours import resolve_property as _suite_tours
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("turnkey.api")
@@ -75,7 +77,7 @@ def _detail(prop: dict, raw: dict | None, intent=None) -> dict:
 
     tiles = fit_summary.tiles(shown, raw, intent) if intent else building_facts.highlights(shown, raw)
     return {**shown, "key_facts": facts, "highlights": tiles, "raw": raw, "imagery": vexcel.imagery_meta(raw), "matterport": matterport.link_info(shown),
-            "costar": costar.summarize(p) if p else None}
+            "costar": costar.summarize(p, selected_space=shown.get("best_space")) if p else None}
 
 
 async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:
@@ -120,6 +122,10 @@ async def refine_search(req: RefineRequest) -> RefineResponse:
 
     if not req.message.strip():
         raise HTTPException(400, "Message is empty")
+    from services import discovery_chat
+    map_reply = await discovery_chat.respond(req)
+    if map_reply is not None:
+        return map_reply
     out = await refine.refine(req.intent, req.message.strip(), req.history, req.matches)
     result = await discovery.search(req.message, intent=out["intent"]) if out["action"] == "refine" else None
     return RefineResponse(action=out["action"], reply=out["reply"], changes=out["changes"], result=result)
@@ -127,7 +133,8 @@ async def refine_search(req: RefineRequest) -> RefineResponse:
 
 @app.get("/api/properties/{prop_id}")
 async def property_detail(prop_id: str, business_type: str | None = None, sqft: int | None = Query(None, ge=100, le=1_000_000),
-                          budget_amount: float | None = None, budget_period: str | None = None) -> dict:
+                          budget_amount: float | None = None, budget_period: str | None = None,
+                          search_intent: str | None = None, selection: str | None = None) -> dict:
     stored = db.get_property(prop_id)
     if not stored:
         raise HTTPException(404, "Unknown property (run a search first)")
@@ -141,6 +148,13 @@ async def property_detail(prop_id: str, business_type: str | None = None, sqft: 
     from services.fit_summary import intent_from_params
 
     intent = intent_from_params(business_type, sqft, budget_amount, budget_period)
+    try:
+        if search_intent:
+            intent = Intent.model_validate_json(search_intent)
+        if intent:
+            prop = costar.selected_fields(prop, intent, json.loads(selection) if selection else None)
+    except (ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
     prop, tours_view = await _suite_tours(prop, raw, intent)
     if not (tours_view and tours_view["match"]):
         prop = await _replace_amenity_scan(prop, raw)
@@ -149,37 +163,6 @@ async def property_detail(prop_id: str, business_type: str | None = None, sqft: 
     detail = _detail(prop, raw, intent)
     detail["matterport_tours"] = tours_view
     return detail
-
-
-async def _suite_tours(prop: dict, raw: dict | None, intent, autolink: bool = True) -> tuple[dict, dict | None]:
-    """The building's 3D tours, fetched live and labelled against the suite the user would lease. When a tour of that
-    suite exists and the current tour was auto-linked (not the user's choice), link the suite's tour instead."""
-    from services import program as space_program
-    from services import suite_tours
-
-    rec = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
-    space = prop.get("best_space")
-    if intent and rec:  # the suite chosen for THIS request
-        prog = space_program.build(intent)
-        size = prog["size"]
-        space = costar.candidate_fields(rec, size["min_sqft"], size["max_sqft"], size["target_sqft"], prog["building"]["ground_floor"] == "required").get("best_space") or space
-    try:
-        tours = await asyncio.wait_for(suite_tours.building_tours(prop, rec), timeout=12)
-    except asyncio.TimeoutError:
-        return prop, None
-    view = suite_tours.for_property(tours, space, prop.get("matterport_model_id"))
-    m, linked = view["match"], prop.get("matterport_model_id")
-    auto = prop.get("matterport_auto_model_id")
-    # The user's own choice (pasted, or picked from the tour list) is never replaced: a link that differs from the
-    # auto-linked id, or (older records without an auto id) one that isn't among the building's known tours.
-    user_linked = prop.get("matterport_user_linked") or (bool(linked) and (auto != linked if auto else linked not in {t["id"] for t in tours}))
-    if autolink and not prop.get("matterport_user_unlinked") and m and m["confidence"] == "strong" and linked != m["id"] and not user_linked:
-        t = next(x for x in tours if x["id"] == m["id"])
-        prop = {**prop, "matterport_model_id": m["id"], "matterport_auto_model_id": m["id"], "matterport_lookup_done": True,
-                "matterport_note": f"Tour of Suite {view['suite']} ('{t['name']}')" + (f"; {'; '.join(m['caveats'])}." if m["caveats"] else ".")}
-        db.save_property(prop, raw)
-        view = suite_tours.for_property(tours, space, m["id"])
-    return prop, view
 
 
 @app.get("/api/properties/{prop_id}/neighborhood")
@@ -236,8 +219,13 @@ async def start_analysis(req: AnalysisRequest) -> dict:
     stored = db.get_property(req.property_id)
     if not stored:
         raise HTTPException(404, "Unknown property")
+    try:
+        selected = costar.selected_fields(stored[0], req.intent, req.selection)
+    except ValueError as err:
+        raise HTTPException(422, str(err)) from err
     analysis_id = uuid.uuid4().hex[:12]
-    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(*stored), req.radius_m, req.mode, req.search_id, req.requirements)
+    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(selected, stored[1], req.intent), req.radius_m,
+                       req.mode, req.search_id, req.requirements, req.conversation_history)
     task = asyncio.create_task(multi_agent_engine.run_analysis(analysis_id, req))
     _running.add(task)
     task.add_done_callback(_running.discard)

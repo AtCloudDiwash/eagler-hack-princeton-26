@@ -1,9 +1,9 @@
 "use client";
 
-import { AnimatePresence, motion, useInView } from "motion/react";
+import { AnimatePresence, motion, useScroll, useMotionValueEvent } from "motion/react";
 import { ArrowLeft, BadgeCheck, Box, ClipboardList, Building2, ChevronDown, CircleDollarSign, FileSearch, Gauge, Landmark, MapPinned, PlayCircle, Scale, ThumbsDown, ThumbsUp, Users, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Analysis, AnalysisResult, Costs } from "@/lib/api-types";
 import { fmtMoney, fmtRange, fmtFootprint, titleCase, VERDICT_STYLE } from "@/lib/format";
 import { fmtClock } from "@/lib/humanize";
@@ -28,8 +28,9 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
   const rec = result.recommendation;
   const v = VERDICT_STYLE[rec.verdict];
   const p = analysis.property;
-  const heroRef = useRef<HTMLDivElement>(null);
-  const heroVisible = useInView(heroRef, { margin: "-80px 0px 0px 0px" });
+  const { scrollY } = useScroll();
+  const [compact, setCompact] = useState(false);
+  useMotionValueEvent(scrollY, "change", (y) => setCompact(y > 360));
   const [tab, setTab] = useState<Tab>("overview");
   const [expanded, setExpanded] = useState(false);
   const duration = analysis.events.length ? analysis.events[analysis.events.length - 1].t : null;
@@ -64,10 +65,9 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
         </div>
         {/* Compact score bar once the hero scrolls away */}
         <AnimatePresence>
-          {!heroVisible && (
-            // Overlay just below the sticky header: it must not change layout height, or the hero re-enters view,
-            // the bar collapses and the page jitters (feedback loop with useInView + scroll anchoring).
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="absolute inset-x-0 top-full border-b border-white/[0.06] bg-ink-950/95 shadow-lg shadow-black/30 backdrop-blur-xl">
+          {compact && (
+            // Overlay just below the sticky header: it must not change layout height, or the page jitters.
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="absolute inset-x-0 top-full overflow-hidden border-b border-white/[0.06] bg-ink-950/95 shadow-lg shadow-black/30 backdrop-blur-xl">
               <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2">
                 <ScoreRing value={rec.score} size={34} color={v.color} animateIn={false} />
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${v.bg} ${v.text}`}>{rec.label || v.label}</span>
@@ -85,7 +85,7 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {/* Hero */}
-        <motion.section ref={heroRef} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
           <div className="glass relative overflow-hidden rounded-3xl p-5 sm:p-6">
             <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: `${v.color}22` }} />
             <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
@@ -211,20 +211,21 @@ function ReasonList({ title, icon, color, items, empty }: { title: string; icon:
             const isOpen = open === i;
             return (
               <motion.li key={i} variants={stagger.item}>
-                <button onClick={() => setOpen(isOpen ? null : i)} className="w-full rounded-xl bg-white/[0.03] p-3 text-left ring-1 ring-inset ring-white/[0.05] transition hover:bg-white/[0.05]">
-                  <div className="flex items-start gap-2.5">
+                {/* The row toggles; evidence chips are their own buttons, so they sit beside (not inside) the toggle. */}
+                <div className="rounded-xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.05] transition hover:bg-white/[0.05]">
+                  <button onClick={() => setOpen(isOpen ? null : i)} aria-expanded={isOpen} className="flex w-full items-start gap-2.5 p-3 text-left">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-medium text-slate-100">{rest.length ? name : "Finding"}</div>
                       <p className={`mt-0.5 text-[12px] leading-snug text-slate-400 ${isOpen ? "" : "line-clamp-2"}`}>{body}</p>
-                      {isOpen && r.evidence_ids.length > 0 && (
-                        <div className="mt-1.5">
-                          <EvidenceChips ids={r.evidence_ids} />
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {isOpen && r.evidence_ids.length > 0 && (
+                    <div className="-mt-1.5 pb-3 pl-7 pr-3">
+                      <EvidenceChips ids={r.evidence_ids} />
+                    </div>
+                  )}
+                </div>
               </motion.li>
             );
           })}

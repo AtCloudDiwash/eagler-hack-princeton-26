@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS analyses (
   intent TEXT NOT NULL,
   property TEXT NOT NULL,
   radius_m INTEGER NOT NULL,
+  conversation_history TEXT NOT NULL DEFAULT '[]',
   events TEXT NOT NULL DEFAULT '[]',
   result TEXT,
   error TEXT
@@ -58,8 +59,9 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
         cols = {r[1] for r in _conn.execute("PRAGMA table_info(analyses)")}
-        # Migrations for databases created before Quick/Deep modes and search grouping.
-        for col, ddl in (("mode", "TEXT NOT NULL DEFAULT 'deep'"), ("search_id", "TEXT"), ("base_query", "TEXT"), ("extra_requirements", "TEXT")):
+        # Migrations for databases created before Quick/Deep modes, search grouping and stored conversations.
+        for col, ddl in (("mode", "TEXT NOT NULL DEFAULT 'deep'"), ("search_id", "TEXT"), ("base_query", "TEXT"), ("extra_requirements", "TEXT"),
+                         ("conversation_history", "TEXT NOT NULL DEFAULT '[]'")):
             if col not in cols:
                 _conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {ddl}")
         # Per-search match scores (the shared properties row is overwritten by every search of the same area).
@@ -127,11 +129,13 @@ def set_matterport_model(prop_id: str, model_id: str | None) -> tuple[dict, dict
 # ---------------------------------------------------------------- analyses
 
 def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int, mode: str = "deep",
-                    search_id: str | None = None, extra_requirements: str | None = None) -> None:
+                    search_id: str | None = None, extra_requirements: str | None = None,
+                    conversation_history: list[dict] | None = None) -> None:
     _exec(
-        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, mode, search_id, base_query, extra_requirements) "
-        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, mode, search_id, query, extra_requirements),
+        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, mode, search_id, base_query, extra_requirements, conversation_history) "
+        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, mode, search_id, query, extra_requirements,
+         json.dumps(conversation_history or [])),
     )
 
 
@@ -173,6 +177,7 @@ def _row_to_analysis(row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "query": row["query"],
         "intent": json.loads(row["intent"]),
+        "conversation_history": json.loads(row["conversation_history"]),
         "property": json.loads(row["property"]),
         "radius_m": row["radius_m"],
         "mode": row["mode"] if "mode" in row.keys() else "deep",

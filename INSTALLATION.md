@@ -1,6 +1,6 @@
 # Installation
 
-Turnkey Matchmaker has two parts:
+EagleEye has two parts:
 
 | Part | Tech | Port |
 |---|---|---|

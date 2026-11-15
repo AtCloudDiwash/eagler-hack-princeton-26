@@ -165,7 +165,7 @@ export default function PropertySheet(p: Props) {
           </Collapsible>
         </div>
 
-        {p.detail?.costar && <CostarPanel costar={p.detail.costar} program={p.program} />}
+        {p.detail?.costar && <CostarPanel costar={p.detail.costar} program={p.program} selectedSpace={c.best_space} />}
 
         {p.detail && <MatterportLinker property={p.detail} onChange={p.onDetailChange} />}
 

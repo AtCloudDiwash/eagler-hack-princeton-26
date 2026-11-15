@@ -1,4 +1,4 @@
-# Turnkey Matchmaker frontend (Next.js, standalone output). Holds no secrets.
+# EagleEye frontend (Next.js, standalone output). Holds no secrets.
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./

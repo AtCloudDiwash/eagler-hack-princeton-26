@@ -8,6 +8,7 @@ import type { GeoJSONGeometry, Place } from "@/lib/api-types";
 import { TILE_URL } from "@/lib/api";
 import { asGeometry, boundsOf, circlePolygon, EMPTY_FC, type FC, type LngLat } from "@/lib/geo";
 import { PLACE_GROUPS, placeMeta } from "@/lib/places";
+import ActiveBuildingPin from "@/components/map/ActiveBuildingPin";
 
 export type BaseLayer = "aerial" | "map";
 
@@ -28,6 +29,9 @@ type Props = {
   layer: BaseLayer;
   buildings?: MapBuilding[];
   places?: Place[];
+  searchAreas?: FC;
+  zoomCommand?: { delta: number; key: string } | null;
+  onViewChange?: (view: { lat: number; lon: number; zoom: number }) => void;
   visibleGroups?: Set<string> | null; // null = all
   highlightGroups?: string[]; // glowing groups (agent is looking at them)
   ring?: MapRing | null;
@@ -41,6 +45,9 @@ type Props = {
   selectedId?: string | null;
   onHover?: (id: string | null) => void;
   onSelect?: (id: string) => void;
+  /** A place dot was clicked (it becomes what follow-up questions refer to). */
+  onPlaceSelect?: (id: string) => void;
+  activePlaceId?: string | null;
   focus?: { lon: number; lat: number; zoom?: number; pitch?: number; bearing?: number; key: string | number } | null;
   fit?: { points: LngLat[]; key: string | number } | null;
   padding?: { top: number; bottom: number; left: number; right: number };
@@ -50,6 +57,8 @@ type Props = {
   tilt?: boolean;
   /** HTML overlays anchored to coordinates (hover cards, labels). */
   markers?: { id: string; lon: number; lat: number; node: ReactNode; anchor?: "bottom" | "center" | "top" }[];
+  /** Show a rotating 3D pin on the selected/subject building under investigation. Default true. */
+  activePin?: boolean;
   children?: ReactNode;
 };
 
@@ -99,17 +108,31 @@ export default function TurnkeyMap(p: Props) {
         .map((pl) => ({
           type: "Feature",
           id: pl.id,
-          properties: { group: pl.group, name: pl.name ?? placeMeta(pl.group).label, hl: (p.highlightGroups ?? []).includes(pl.group) ? 1 : 0 },
+          properties: { pid: pl.id, group: pl.group, name: pl.name ?? placeMeta(pl.group).label, hl: (p.highlightGroups ?? []).includes(pl.group) ? 1 : 0, active: pl.id === p.activePlaceId ? 1 : 0 },
           geometry: { type: "Point", coordinates: [pl.lon, pl.lat] },
         })),
     };
-  }, [p.places, p.visibleGroups, p.highlightGroups]);
+  }, [p.places, p.visibleGroups, p.highlightGroups, p.activePlaceId]);
   const parcel = useMemo<FC>(() => {
     const g = asGeometry(p.parcel ?? null);
     return g ? { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: g }] } : EMPTY_FC;
   }, [p.parcel]);
 
+  const activeBuilding = useMemo(() => {
+    if (p.activePin === false) return null;
+    const list = p.buildings ?? [];
+    if (p.selectedId) {
+      const selected = list.find((b) => b.id === p.selectedId);
+      if (selected) return selected;
+    }
+    return list.find((b) => b.kind === "subject") ?? null;
+  }, [p.activePin, p.buildings, p.selectedId]);
+
   // ---------- camera
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && loaded && p.zoomCommand) map.easeTo({ zoom: Math.max(2, Math.min(21, map.getZoom() + p.zoomCommand.delta)), duration: 600 });
+  }, [p.zoomCommand, loaded]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded || !p.focus) return;
@@ -206,13 +229,19 @@ export default function TurnkeyMap(p: Props) {
   // ---------- interaction
   const onMove = useCallback((e: MapLayerMouseEvent) => {
     const f = e.features?.[0];
-    const id = (f?.properties?.id as string | undefined) ?? null;
+    const id = f?.layer.id === "tk-cand-ext" ? ((f.properties?.id as string | undefined) ?? null) : null;
     live.current.onHover?.(id);
     const canvas = mapRef.current?.getCanvas();
-    if (canvas) canvas.style.cursor = id ? "pointer" : "";
+    if (canvas) canvas.style.cursor = f ? "pointer" : "";
   }, []);
   const onClick = useCallback((e: MapLayerMouseEvent) => {
-    const id = e.features?.[0]?.properties?.id as string | undefined;
+    const f = e.features?.[0];
+    if (f?.layer.id === "tk-places-dot") {
+      const pid = f.properties?.pid as string | undefined;
+      if (pid) live.current.onPlaceSelect?.(pid);
+      return;
+    }
+    const id = f?.properties?.id as string | undefined;
     if (id) live.current.onSelect?.(id);
   }, []);
 
@@ -226,8 +255,9 @@ export default function TurnkeyMap(p: Props) {
       mapStyle={STYLE_URL}
       maxPitch={75}
       style={{ position: "absolute", inset: 0 }}
-      interactiveLayerIds={p.onSelect ? ["tk-cand-ext"] : []}
-      onMouseMove={p.onHover ? onMove : undefined}
+      interactiveLayerIds={[...(p.onPlaceSelect ? ["tk-places-dot"] : []), ...(p.onSelect ? ["tk-cand-ext"] : [])]}
+      onMove={(e) => p.onViewChange?.({ lat: e.viewState.latitude, lon: e.viewState.longitude, zoom: e.viewState.zoom })}
+      onMouseMove={p.onHover || p.onPlaceSelect ? onMove : undefined}
       onMouseLeave={() => p.onHover?.(null)}
       onClick={onClick}
       attributionControl={{ compact: true }}
@@ -275,6 +305,10 @@ export default function TurnkeyMap(p: Props) {
         <Layer id="tk-nb-ext" type="fill-extrusion" paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-height": ["get", "h"], "fill-extrusion-opacity": 0.28 }} />
       </Source>
 
+      <Source id="tk-search-areas" type="geojson" data={p.searchAreas ?? EMPTY_FC}>
+        <Layer id="tk-search-areas-fill" type="fill" paint={{ "fill-color": "#fbbf24", "fill-opacity": 0.2 }} />
+        <Layer id="tk-search-areas-line" type="line" paint={{ "line-color": "#fbbf24", "line-width": 2 }} />
+      </Source>
       <Source id="tk-places" type="geojson" data={places}>
         <Layer id="tk-places-glow" type="circle" filter={["==", ["get", "hl"], 1]} paint={{ "circle-color": PLACE_COLOR, "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 7, 18, 16], "circle-blur": 0.9, "circle-opacity": 0.5 }} />
         <Layer
@@ -283,8 +317,8 @@ export default function TurnkeyMap(p: Props) {
           paint={{
             "circle-color": PLACE_COLOR,
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 18, 6],
-            "circle-stroke-color": "#0a0a0c",
-            "circle-stroke-width": 1,
+            "circle-stroke-color": ["case", ["==", ["get", "active"], 1], "#ffffff", "#0a0a0c"],
+            "circle-stroke-width": ["case", ["==", ["get", "active"], 1], 2.5, 1],
             "circle-opacity": ["case", ["==", ["get", "hl"], 1], 1, 0.75],
           }}
         />
@@ -317,6 +351,11 @@ export default function TurnkeyMap(p: Props) {
         <Layer id="tk-scan-line" type="line" paint={{ "line-color": "#ecff8f", "line-width": 2.5, "line-opacity": 0 }} />
       </Source>
 
+      {activeBuilding && (
+        <Marker key={`active-pin-${activeBuilding.id}`} longitude={activeBuilding.lon} latitude={activeBuilding.lat} anchor="bottom" style={{ pointerEvents: "none", zIndex: 2 }}>
+          <ActiveBuildingPin />
+        </Marker>
+      )}
       {(p.markers ?? []).map((m) => (
         <Marker key={m.id} longitude={m.lon} latitude={m.lat} anchor={m.anchor ?? "bottom"} style={{ pointerEvents: "none" }}>
           {m.node}

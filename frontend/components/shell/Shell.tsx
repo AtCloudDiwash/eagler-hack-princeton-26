@@ -9,16 +9,10 @@ import type { Health } from "@/lib/api-types";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <span className="relative grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-teal-300 via-cyan-400 to-violet-400 text-sm font-black text-ink-950 shadow-lg shadow-cyan-500/20">
-        T
-      </span>
-      {!compact && (
-        <span className="leading-tight">
-          <span className="block text-sm font-semibold tracking-tight text-slate-50">Turnkey</span>
-          <span className="block text-[10px] text-slate-400">Matchmaker</span>
-        </span>
-      )}
+    <Link href="/" className="flex items-center gap-2.5" aria-label="EagleEye home">
+      {/* eslint-disable-next-line @next/next/no-img-element -- small static mark; no optimization needed */}
+      <img src="/brand/eagleeye-mark.png" alt="" width={40} height={20} className="h-5 w-10 object-contain" />
+      {!compact && <span className="text-sm font-semibold tracking-tight text-slate-50">EagleEye</span>}
     </Link>
   );
 }

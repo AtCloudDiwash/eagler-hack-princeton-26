@@ -83,3 +83,45 @@ def test_free_text_that_restates_a_need_is_dropped(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(refine, "chat_model", lambda *a, **k: _Fake(_refined(must_have=["parking", "ground_floor"], requirements=["ground floor spaces only", "outdoor music allowed"])))
     new = asyncio.run(refine.refine(_prev(), "only ground floor"))["intent"]
     assert "ground floor spaces only" not in new.requirements and "outdoor music allowed" in new.requirements
+
+
+def test_budget_refine_preserves_concept_hint_and_bounds(monkeypatch):
+    from services.intent import parse_rules
+    from services import sizing
+    prev = parse_rules("small coffee shop, at least 1,200 sq ft")
+    monkeypatch.setattr(refine, "chat_model", lambda: _Fake(_refined(
+        seats=None, size_counts={}, budget_amount=8000, budget_period="monthly")))
+    result = asyncio.run(refine.refine(prev, "budget $8k"))
+    new = result["intent"]
+    assert new.budget.amount == 8000
+    assert (new.concept, new.size_hint, new.sqft_min, new.sqft_max) == (prev.concept, prev.size_hint, prev.sqft_min, prev.sqft_max)
+    assert sizing.estimate(new) == sizing.estimate(prev)
+
+
+def test_free_text_only_is_saved_and_reported_honestly(monkeypatch):
+    monkeypatch.setattr(refine, "chat_model", lambda: _Fake(_refined(requirements=["outdoor music allowed"])))
+    result = asyncio.run(refine.refine(_prev(), "outdoor music allowed"))
+    assert result["action"] == "refine"
+    assert "outdoor music allowed" in result["intent"].requirements
+    assert "do not affect discovery ranking" in result["reply"]
+    assert any("check during analysis" in c for c in result["changes"])
+
+
+def test_omitted_fields_survive_patch():
+    prev = _prev().model_copy(update={"budget": Budget(amount=6000, period="monthly"), "near": ["Rice"]})
+    out = refine._Refinement(business_type="restaurant", location="Houston", action="refine", reply="Done", budget_amount=8000, budget_period="monthly")
+    new = refine._intent_from(out, prev)
+    assert new.needs == prev.needs and new.occupancy == prev.occupancy
+    assert new.near == ["Rice"] and new.budget.amount == 8000
+
+
+def test_null_optional_size_fields_do_not_erase_request(monkeypatch):
+    from services.intent import parse_rules
+    prev = parse_rules("small coffee shop, at least 1,200 sq ft")
+    monkeypatch.setattr(refine, "chat_model", lambda: _Fake(_refined(
+        concept=None, size_hint=None, sqft_min=None, sqft_max=None,
+        budget_amount=8000, budget_period="monthly", seats=None, size_counts={})))
+    new = asyncio.run(refine.refine(prev, "budget $8k"))["intent"]
+    assert (new.concept, new.size_hint, new.sqft_min) == (prev.concept, prev.size_hint, 1200)
+    new = asyncio.run(refine.refine(prev, "instead 900 sq ft"))["intent"]
+    assert new.sqft == 900 and new.sqft_min is None and new.sqft_max is None
