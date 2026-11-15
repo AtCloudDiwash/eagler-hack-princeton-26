@@ -1,33 +1,31 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { SiteFooter, SiteHeader } from "@/components/SiteHeader";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
+const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "Turnkey Matchmaker",
-  description: "Compare the total cost to open a business in each commercial space.",
+  description: "Find a building for your business and get an evidence-backed, multi-agent suitability analysis.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
-        <SiteFooter />
+    // suppressHydrationWarning: browser extensions (Grammarly, ColorZilla, password managers, translators)
+    // add attributes to <html>/<body> before React hydrates. This only ignores attribute mismatches on
+    // these two tags; real mismatches inside the app are still reported.
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}
+        suppressHydrationWarning
+      >
+        {children}
       </body>
     </html>
   );

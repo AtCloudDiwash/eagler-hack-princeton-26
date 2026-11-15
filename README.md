@@ -1,210 +1,187 @@
 # Turnkey Matchmaker
 
-> **Turnkey Matchmaker v2** (map-first discovery + LangChain Deep Agents on the local Codex CLI, Docker Compose) lives in
-> [`newproj/`](newproj/README.md). Setup: [`newproj/INSTALLATION.md`](newproj/INSTALLATION.md). The rest of this
-> README describes the original v1 prototype in `backend/` and `frontend/`.
+Find and vet a commercial building for a specific business. Describe what you want to open, pick a
+building on a live Vexcel aerial map, and a team of local AI agents investigates whether that building
+suits *your* purpose, with every finding tied to evidence.
 
-**HackPrinceton Fall 2026.** Turnkey Matchmaker helps small business owners pick a commercial space by
-comparing the **total cost to open** (fit-out + rent during build-out + first-year rent) instead of
-the asking rent alone. It combines listing data (CoStar), interior scans (Matterport) and **live
-Vexcel aerial imagery and AI property facts**, runs a config-driven compliance/criteria agent (zoning
-and deed restrictions, the city's parking code, ADA, kitchen, grease interceptor, restrooms, HVAC,
-electrical, sprinklers, storefront visibility, roof condition) and returns a ranked comparison with
-cost ranges, citations, evidence overlays and a drafted landlord letter. A **local LLM** (qwen3:8b via
-Ollama) reads the plain-English requirements and writes a short, grounded summary of the finished
-ranking; every cost, score, status and rank stays rule-based.
-
-The demo city is **Houston, TX** (the sponsor's Vexcel key is geofenced to Los Angeles and Houston);
-the original Austin, TX listings remain as an offline dataset. Everything runs offline in **mock mode**
-by default with no API keys; mock mode replays snapshots of the real Vexcel facts, so it ranks exactly
-like live mode.
-
-## Features (as built)
-
-- **Business profile form**: business type (from `backend/config/business_types.yaml`), plain-English
-  requirements ("40 seats, kitchen needed, 2 bathrooms, 20 parking spaces"), city/ZIP and state.
-- **Requirements parser agent**: a local LLM (`LLM_PROVIDER=ollama`, default model `qwen3:8b`)
-  extracts the fields as schema-constrained JSON; the deterministic regex parser runs underneath and
-  takes over on any LLM error, timeout or when Ollama isn't running. Unstated needs are filled from the
-  business profile and listed as assumptions. Claude is an alternative provider (`LLM_PROVIDER=anthropic`).
-- **Grounded AI summary**: after the deterministic ranking, one LLM call explains it in 2-4 sentences plus
-  one "why" sentence per property. A guardrail rejects any dollar figure, fit score or property id that is
-  not in the ranking's own numbers; then `ai_summary` is `null` and the UI hides the panel. The LLM never
-  computes costs, scores, statuses or ranks.
-- **Candidate spaces**: 5 Houston **sample listings** at real buildings (rent/size illustrative,
-  "Sample listing" badge, disclosed use restrictions) plus 4 Austin listings, in CoStar's shape.
-- **Live Vexcel integration** (`USE_MOCK_DATA=false` + `VEXCEL_API_KEY`): top-down and angled (oblique)
-  imagery plus `/property/extract` AI facts (rooftop AC units, roof condition/material/defects, building
-  footprint, paved area, vehicles). Cached server-side; the key never reaches the browser.
-- **Compliance / criteria agent**: every criterion in `backend/criteria.yaml` returns
-  PASS / RISK / UNKNOWN with notes, a source citation and evidence. Houston rules are config-driven: no
-  zoning (deed restrictions instead), §26-492 parking ratios, no minimum in market-based areas. A
-  disclosed use restriction or a prohibiting zoning district disqualifies a space. Building-level HVAC is
-  prorated to the suite; a short share is "verify with landlord" (not scored, not priced).
-- **Deterministic cost engine**: cost bands from `backend/config/costs.yaml`, ranges only (no ML),
-  with general conditions, contingency, permits, TI allowance and build-out months.
-- **Ranking**: spaces that clear the minimum fit score (`ranking.min_score`, 55) rank by
-  first-year cost, then "weak fit" spaces, then disqualified ones. Ties are broken by score.
-- **Analysis report**: AI summary panel ("Local AI · qwen3:8b" badge + caveat), side-by-side table
-  (with a "Why (AI)" row), per-property cost breakdown, criteria grouped by domain,
-  Vexcel aerial ("Live · Vexcel" badge, Top-down / Angled tabs, building footprint box) and floor-plan
-  overlays, observations with confidence and live markers, assumptions, landlord questions, and a
-  copyable landlord request letter.
-- **Run history**: every analysis is stored in SQLite and has a shareable URL `/analysis/{id}`;
-  recent runs are listed on the home page.
-- **Config-only scaling**: add or re-weight criteria in `criteria.yaml`. The backend reloads it on
-  the next request and the UI renders any number of criteria.
-
-## Tech stack
-
-| Layer | Stack |
-|---|---|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 (`@theme` tokens in `app/globals.css`), Heroicons, hand-rolled UI components |
-| Backend | Python 3.12, FastAPI, Pydantic v2, SQLModel/SQLite, PyYAML, httpx, optional `anthropic` SDK |
-| Local LLM | [Ollama](https://ollama.com) serving `qwen3:8b` (called over HTTP with httpx; optional, regex fallback) |
-| Tests | pytest (backend), Vitest + React Testing Library (frontend), Playwright E2E (`npm run e2e`) |
-
-## Quickstart
-
-Prerequisites: Python 3.10+ (built with 3.12) and Node 20+ (built with 24). Optional: Ollama for the
-local LLM (without it the app uses the regex parser and shows no AI summary).
-
-**Local LLM** (optional, recommended for the demo), start it before the backend:
-
-```bash
-ollama pull qwen3:8b             # ~5.2 GB, once
-ollama serve                     # or just open the Ollama app
+```
+User query ─▶ Vexcel discovery ─▶ map ─▶ select building ─▶ Vexcel JSON + neighborhood
+          ─▶ multi-agent investigation (local Codex CLI) ─▶ Python scoring ─▶ dynamic dashboard ─▶ compare
 ```
 
-Defaults need no config (`LLM_PROVIDER=ollama`, `OLLAMA_MODEL=qwen3:8b`). On startup the backend loads
-the model in the background, so start it ~10 s before the first analysis. Measured on an M4 Pro with the
-model warm: parsing 1.4-1.7 s, summary 5.6-6.1 s, a whole 5-property analysis about 7 s (about 14 s cold).
-`OLLAMA_MODEL=qwen3:14b` also works but is about 2x slower (about 13 s warm). `LLM_PROVIDER=none` turns
-the LLM off.
+## Run it
 
-**Backend** (http://localhost:8000, interactive docs at `/docs`):
+Full instructions, including **Docker Compose** (`docker compose up --build`), are in [INSTALLATION.md](INSTALLATION.md).
+
+Prerequisites: Python 3.12, Node 20+, and at least one LLM provider on this machine. The fallback chain
+tries them in order: the **Codex CLI** (`codex login`; the ChatGPT desktop app's bundled CLI is
+auto-detected), the **Claude Code CLI** (`claude auth login`), then **Ollama** (`ollama pull qwen3:8b`).
 
 ```bash
+codex login status                # Codex (first choice)
+claude auth status                # Claude Code (fallback #1)
+ollama list                       # Ollama (fallback #2)
+
+# backend (FastAPI, port 8000)
 cd backend
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-cp ../.env.example .env          # optional; placeholders mean mock mode
-# live Vexcel: set USE_MOCK_DATA=false and VEXCEL_API_KEY in backend/.env (see docs/DEMO_RUNBOOK.md)
-venv/bin/uvicorn app.main:app --reload
-```
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env            # put VEXCEL_API_KEY here (all keys live in the backend)
+.venv/bin/uvicorn main:app --port 8000
 
-**Frontend** (http://localhost:3000), in a second terminal:
-
-```bash
+# frontend (Next.js) in another terminal
 cd frontend
 npm install
-npm run dev
+cp .env.example .env.local      # NEXT_PUBLIC_API_URL=http://localhost:8000 (no secrets)
+npm run dev -- -p 3001          # http://localhost:3001
 ```
 
-The frontend calls relative URLs; `next.config.ts` proxies `/api/v1`, `/static` and `/health` to
-`API_ORIGIN` (default `http://localhost:8000`). To point it elsewhere, set `API_ORIGIN` in
-`frontend/.env.local`.
+Tests: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --noEmit && npm run lint && npm run build`.
 
-**Try it:** choose *Restaurant*, type "40 seats, kitchen needed, 2 bathrooms", keep *Houston, TX*,
-click **Find spaces**, then **Select all** and **Compare 5 selected**. Expected result: 1903 Yale Street
-ranks #1 (score 100, first-year $93.2k-$104.5k), 801 St Emanuel Street #2, 3701 Kirby Drive and 240 W
-19th Street are weak fits, and 4720 Washington Avenue is disqualified by its "no food service" deed
-restriction. Offline dataset: city *Austin*, **Use example**, Compare 4 → 456 Oak Avenue #1, 789 Congress
-Avenue disqualified on zoning. The full script is in [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md).
+**Credentials:** `backend/.env` only (see `backend/.env.example`). The frontend never sees an API key;
+map tiles are proxied through `GET /api/tiles/{z}/{x}/{y}`.
 
-Check `curl localhost:8000/health`: `"parser": "ollama", "llm": "ollama:qwen3:8b"` means the local
-model is reachable (`"regex"` / `"none"` otherwise). The header pill then shows **Local AI ready**.
+**LLM fallback chain:** `backend/services/llm.py` returns a `FallbackChat` that tries **Codex CLI →
+Claude Code CLI → Ollama** (`LLM_PROVIDERS`). The CLI adapters (`codex_chat.py`, `claude_chat.py`, shared
+`cli_chat.py`) run one-shot, tool-less, schema-constrained calls in an empty temp folder; Deep Agents' tools
+are described in the prompt and the CLI answers with schema-validated tool calls, which LangGraph executes
+as with any provider. A provider that hits a usage limit is skipped for a cooldown, every analysis records
+which provider served how many calls, and switches appear in the live log. Usage counts against your plans.
 
-Quick API check:
+## The flow
 
-```bash
-curl localhost:8000/health
-curl -X POST localhost:8000/api/v1/analyze -H 'Content-Type: application/json' -d '{
-  "business_profile": {"type": "restaurant", "details": "40 seats, kitchen needed, 2 bathrooms", "city": "Houston", "state": "TX"},
-  "property_ids": ["property-hou-01", "property-hou-02", "property-hou-03", "property-hou-04", "property-hou-05"]}'
-```
+1. **Query → intent.** `services/intent.py`: rules plus Codex (schema-constrained JSON) extract business type,
+   seats/sq ft, location and requirements.
+2. **Discovery (no agents).** `services/discovery.py`: Vexcel has no listings or text search (checked
+   against its OpenAPI spec), so discovery geocodes the place, pulls Vexcel parcels around it
+   (`/property/extract`, `include=calculated` for roof height), keeps building types that suit the
+   business and pre-screens them deterministically (type, size, roof, data). Outside the key's geofence
+   (LA + Houston) it falls back to OpenStreetMap footprints and says so. No key → labelled demo mode
+   from a recorded Houston sample (licensed data, gitignored; record it once with
+   `backend/scripts/record_demo_fixture.py`).
+3. **Refine in conversation.** Once there are results, the search bar talks to the agent (`POST /api/search/refine`,
+   `services/refine.py`): "make it 60 seats", "only ground floor", "budget $8k a month", "drop parking", "near Rice"
+   change the current search (everything else is kept, the results re-run, and the changes show as chips), while
+   questions about the matches ("which two would you shortlist?") are answered from the current results without a new
+   search. Keep going until the matches look right; the analysis then receives the whole conversation.
+4. **Select a building.** Readable key facts plus the complete Vexcel JSON, and a neighborhood view:
+   Vexcel neighbor parcels plus OpenStreetMap places within an adjustable radius. The slow Overpass
+   fetch is started for the whole search area at search time and cached in SQLite.
+5. **Analyze.** `POST /api/analyses` stores a job in SQLite and runs `multi_agent_engine.py` in the
+   background; the UI polls the live event log.
+6. **Dashboard.** Verdict, score, confidence, business-specific metrics, agent reports, evidence and
+   costs, plus a comparison view across analyses.
 
-## Tests
+## Agents (`backend/agents/`, LangChain Deep Agents on the Codex CLI)
 
-```bash
-cd backend && venv/bin/pytest -q     # 178 tests (no network; the LLM is faked)
-cd frontend && npm test              # Vitest, 64 tests
-cd frontend && npm run lint          # ESLint
-cd frontend && npm run e2e           # Playwright, 6 tests: Austin + Houston flows and error state, desktop and 375px mobile
-```
+| Agent | Investigates | Tools (each result becomes evidence `E#`) |
+|---|---|---|
+| `vexcel_agent.py` | Building fit from aerial AI data; what imagery can't tell | overview, size fit, roof condition/defects/equipment, site paving, neighbor comparison, imagery date, raw field lookup, recorded CoStar building facts |
+| `neighborhood_agent.py` | Demand, competition, access, area fit, at radii chosen for the business | place counts by group/radius (OSM), Vexcel building mix, transit & parking, Census demographics |
+| `compliance_agent.py` | Permitted use, parking minimums, health/medical rules, ADA, CO | jurisdiction, permitted use, parking computation (CoStar parking count when recorded), use requirements, accessibility signals (stories, elevators, year built, suite floor), space program, recorded building facts (verified rule set only) |
+| `cost_agent.py` | Feasibility; which conversion items the evidence triggers | rent band, cost items, deterministic `estimate_costs`, recorded facts (prior same-use build-out, CAM) |
+| `matterport_agent.py` | Interior from a linked 3D scan: room mix, restrooms, ceiling heights, doors and windows, measured area | scan identity (is this scan the space? distance, suite, amenity check — `services/scan_identity.py`), overview, list rooms, rooms of a type, keyword search (rooms, tags, labels, notes), ceiling heights with measured coverage, doorways (ADA 32" clear, wide/dock doors), windows, area vs. need. Tools are offered only when the scan has that data. Skipped with open interior questions (including the user's interior needs) when there is no tour, no interior data, or the linked scan shows another building |
 
-See [docs/TEST_PLAN.md](docs/TEST_PLAN.md) for what each suite covers and the manual checks.
+`agents/base.py` is the shared harness. It:
+- removes Deep Agents' file, shell and sub-agent tools so each agent only sees its domain tools;
+- registers every tool result as evidence, and trims oversized tool output for the model (the evidence keeps everything);
+- refuses repeated calls (atomically, even for parallel tool calls) and enforces a per-agent tool budget, with a model-call cap and a timeout that fits the analysis deadline;
+- requests structured output, accepts a JSON-text report, and falls back to a schema-constrained extraction that gets the same metric definitions; a timed-out agent keeps its conversation and evidence, and its rescued report is marked `partial`;
+- validates every report: a citation counts only if that agent saw the evidence (its own results, the engine's verified context, or ids the engine shared with it), a non-unknown status only counts evidence that carries data, and every assigned metric and owned need gets an entry (`unknown` when not reported);
+- takes the LLM as a parameter (`run_agent(..., model=...)`), so `tests/test_reliability.py` drives agents with a scripted fake model;
+- streams progress events to the UI.
 
-## Configuration
+A scan only counts as showing the listed space ("verified") when it is near the building, names the building or
+suite, was captured within 3 years (`processing.processingCompletedAt`; `created` is when the model joined the
+account) and, when both are known, is on the listed suite's floor. Older, other-floor and whole-building scans are
+"likely": building-level context, never inputs to size, interior or accessibility verdicts. Before a demo, run
+`scripts/record_matterport_fixture.py --fallback --linked` to keep safety-net copies of the scans your saved buildings
+use; they are served only when the live API fails, so the UI keeps showing live data.
 
-| File | What it controls |
+`services/building_facts.py` merges the CoStar building record and Vexcel attributes into named facts with a
+source and confidence (year built, class, condition, stories, ceiling height, elevators, sprinklers, zoning,
+parking spaces, prior build-out, CAM…). Recorded CoStar values win over aerial estimates.
+
+What makes the agents reason rather than summarize:
+- **Purpose-specific metric briefs.** Each agent gets its metrics for this business, each with a "why it matters for you" note and a status guide.
+- **Interpreted tool results.** Tools return evidence with notes on scales and detection limits, e.g. that "0 AC units detected" is not "no HVAC".
+- **Explicit rules.** Agents must cite evidence, separate facts from inferences and assumptions, use "unknown" when evidence is insufficient, and suggest follow-ups.
+
+## Orchestration (`backend/multi_agent_engine.py`)
+
+1. **Context.** Gather property, neighborhood, census and jurisdiction concurrently.
+2. **Plan.** Decide which agents run and why; Vexcel is skipped without data, Matterport without a tour.
+3. **Phase 1.** Vexcel, Neighborhood, Compliance (+ Matterport) run concurrently. **Phase 2:** the Cost Agent receives their findings, because its costs depend on them.
+4. **Validation.**
+   - Citations an agent never saw are stripped and flagged.
+   - **Data-settled verdicts take precedence over agent opinions** (`services/verdicts.py`). A metric may name a
+     `resolver` in `metrics.yaml`; resolvers compute the status once per analysis from verified rules, the cost
+     engine, the CoStar record, aerial and interior data, at the user's program size (never at a size an agent
+     chose). An agent may be *more* cautious than a verdict, never less; on an override the rule's reason becomes
+     the rationale and the agent's view is kept as a note, and findings that argue the opposite are dropped.
+     Resolvers today: permitted use, parking requirement, size fit, occupancy/code fit, roof condition, rooftop
+     HVAC, occupancy cost, conversion risk, competition without place data, accessibility, and a cap for interior
+     layout.
+   - **Accessibility uses verified data only**: the CoStar record (listed suite's floor, stories, elevators, year
+     built) and door widths measured in a Matterport scan verified to show the listed suite. Aerial estimates and
+     agent judgment never set it; without verified data it is `unknown`.
+   - The merge is a pure function of (agent assessments, verdicts), so re-merging after follow-ups is consistent.
+   - A blocker without evidence is downgraded, so "not detected" never blocks.
+   - A must-have need the evidence shows is unmet caps the verdict at "Recommended with conditions".
+5. **Conflicts.** Cross-agent contradictions are recorded with a resolution.
+6. **Follow-ups.** For unknown or unevidenced high-weight metrics that no verdict settles, the engine simulates whether resolving them would flip the verdict. If so, it sends the owning agent a follow-up about that one metric (max 2, budget 3 tools, earlier tool results reused; skipped near the deadline).
+7. **Scoring (Python only).** Status → points, weighted by business. Confidence is the share of weight with verified evidence. Verdict thresholds live in `services/scoring.py`.
+8. **Narrative.** A Codex-written summary grounded on the scored result; if that fails, a deterministic template is used.
+
+An agent that fails or times out never sinks the analysis: its metrics become `unknown` and confidence drops.
+Only when every LLM provider is exhausted (usage limit, not installed, not logged in) does the analysis stop;
+a call that fails on every provider for another reason (bad JSON, a timeout) fails just that agent. The whole
+analysis runs inside `ANALYSIS_TIMEOUT_S`, and cancelled CLI calls are killed.
+
+## Space program: what the request implies (`services/program.py`)
+
+The query is turned into a deterministic **space program** before any building is chosen, so the user's
+size, headcount and stated needs drive the whole analysis:
+
+| From the request | Becomes |
 |---|---|
-| `backend/criteria.yaml` | Criteria registry: weights, hard blocks, evaluators, missing-data policies, citations |
-| `backend/config/costs.yaml` | Cost bands, soft costs, ranking horizon and minimum fit score |
-| `backend/config/business_types.yaml` | Business profiles (capacity unit, occupant load, parking guideline, HVAC, electrical, sprinkler trigger) |
-| `backend/config/jurisdictions.yaml` | Local rules: Houston (no zoning + deed restrictions, parking ratios, market-based areas, plumbing code), Austin (zoning use table, parking note), generic default |
-| `backend/fixtures/` | Listings and Matterport / Vexcel facts for mock mode (Houston aerial facts are Vexcel snapshots) |
-| `.env.example` → `backend/.env` | API keys, mock mode, LLM provider / Ollama model, DB path, CORS. See [docs/SECURITY_AND_ENV.md](docs/SECURITY_AND_ENV.md) |
+| Business-specific counts: seats (restaurant), operatories (dental), class size or members (gym), people (office), staff | Target / min / max sq ft (`program.drivers` in `business_types.yaml`) |
+| Size + headcount | Occupant load (IBC Table 1004.5 factors, never below the people stated) → occupancy group (A-2 / A-3 / B / M; assembly under 50 people is Group B) → exits, restrooms (IPC Table 2902.1), sprinkler triggers (IBC §903.2) |
+| Business type | Suitable building types, ground floor required/preferred, minimum ceiling height, typical build-out months |
+| Needs (`config/needs.yaml`): parking, ADA, drive-thru, patio, alcohol, late hours, loading, kitchen, showers, X-ray, high ceilings… | Must-have or nice-to-have, each routed to the agent that checks it |
+| Timeline, buy vs. lease, places to be near / avoid | Timeline vs. build-out check; context for every agent |
 
-All YAML files are re-read when they change on disk, so no restart is needed.
+The search response returns the program (shown as "What you need"), the pre-screen ranks candidates
+against it, every agent's prompt includes it (with the needs it owns), the Compliance Agent's
+`check_space_program` tool compares it with the building, and the dashboard's **Your needs** tab shows
+what was asked for next to how the building measures up. Code values are 2021 IBC/IPC model-code
+planning checks with citations (`config/occupancy_codes.yaml`); local amendments decide.
 
-## Repository layout
+## Configuration-driven evaluation (`backend/config/`)
 
-```
-.
-├── .env.example               # every env var the code reads (placeholders)
-├── CLAUDE.md                  # project rules for Claude Code
-├── prompts/                   # phase prompts 00-05 + scale-criteria
-├── docs/                      # design docs (index below)
-├── backend/
-│   ├── requirements.txt  pytest.ini
-│   ├── criteria.yaml          # criteria registry
-│   ├── config/                # business_types.yaml, costs.yaml, jurisdictions.yaml
-│   ├── fixtures/              # properties.json (CoStar-shaped), observations.json (Matterport/Vexcel facts)
-│   ├── scripts/               # snapshot_vexcel.py (live Vexcel facts → fixtures, cache pre-warm),
-│   │                          # llm_live_check.py (demo analysis against a running Ollama, with timings)
-│   ├── static/                # placeholder SVGs (aerials/, floorplans/, properties/) + vexcel-cache/ (gitignored)
-│   ├── app/
-│   │   ├── main.py            # FastAPI app, CORS, routers, /static mount
-│   │   ├── config.py          # env settings + hot-reloading YAML loader
-│   │   ├── db.py              # SQLModel run history (analysis_runs)
-│   │   ├── models/            # analysis_result, business_profile, criterion, property
-│   │   ├── providers/         # costar_provider, matterport_provider, vexcel_provider, _fixtures
-│   │   ├── routers/           # health, business_types, criteria, properties, analyze, analyses
-│   │   └── services/          # requirements_parser, llm, ranking_summary, criteria_manager,
-│   │                          # evaluators, compliance_engine, cost_engine, scoring, agent_orchestrator
-│   └── tests/                 # pytest suites + conftest.py
-└── frontend/
-    ├── next.config.ts         # rewrites to API_ORIGIN
-    ├── vitest.config.mts
-    ├── app/                   # layout, page (home), properties/, analysis/[id]/
-    ├── components/            # form, cards, tables, analysis/*, ui/*
-    ├── lib/                   # api.ts, types.ts, format.ts, overlay.ts, useAsync.ts
-    └── test/                  # Vitest specs + fixtures
-```
+- `metrics.yaml`: the metric registry. Each entry has a name, group, common/dynamic category, owner agent, evidence hint and status guide, plus `hard_block`, an optional deterministic `resolver` and the `evidence_tools` that support it.
+- `business_types.yaml`: per business, the metrics with weights and reasons, sizing, catchment radius, place roles and keywords. Restaurant, dental clinic, gym, office and retail are included.
+- `place_groups.yaml`: OSM tag → place group mapping.
+- `jurisdictions.yaml`: verified rules with citations (Houston researched; LA/unknown cities → `unknown` with where to check).
+- `costs.yaml`: rent bands, base fit-out, adders and soft costs. All are documented planning assumptions.
+- `needs.yaml`: needs a user can state (keywords, owner agent, what each triggers, and an optional deterministic `check`, e.g. `paved_area` with `min_paved_sqft`).
+- `occupancy_codes.yaml`: exits, restroom fixtures and sprinkler triggers per occupancy group, with citations.
 
-## Documentation
+**Adding a metric or business type is a YAML edit.** Agents pick up their metrics from the registry and the dashboard renders whatever metrics a result contains, so neither needs code changes.
 
-| Doc | Topic |
+## Data sources & honesty
+
+| Source | Status |
 |---|---|
-| [PROJECT_BRIEF](docs/PROJECT_BRIEF.md), [PRD](docs/PRD.md) | Problem, users, requirements |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Modules and data flow |
-| [API_CONTRACT](docs/API_CONTRACT.md) | REST endpoints and shapes (source of truth) |
-| [BACKEND](docs/BACKEND.md), [DATA_MODELS](docs/DATA_MODELS.md) | Backend files and schemas |
-| [AGENT_ORCHESTRATION](docs/AGENT_ORCHESTRATION.md) | The analysis pipeline (five deterministic steps + the AI summary) |
-| [COMPLIANCE_AGENT](docs/COMPLIANCE_AGENT.md), [COMPLIANCE_RULE_SOURCES](docs/COMPLIANCE_RULE_SOURCES.md) | Evaluators, statuses, citations |
-| [COST_ENGINE](docs/COST_ENGINE.md) | Cost formula and worked example |
-| [CRITERIA_REGISTRY](docs/CRITERIA_REGISTRY.md) | Registry fields, adding criteria and evaluators |
-| [FRONTEND_DESIGN](docs/FRONTEND_DESIGN.md), [VISION_OVERLAYS](docs/VISION_OVERLAYS.md) | Routes, components, theme, overlays |
-| [INTEGRATIONS](docs/INTEGRATIONS.md), [SECURITY_AND_ENV](docs/SECURITY_AND_ENV.md) | Live Vexcel, mock CoStar / Matterport, local Ollama LLM, env vars, key handling |
-| [TEST_PLAN](docs/TEST_PLAN.md), [DEMO_RUNBOOK](docs/DEMO_RUNBOOK.md) | Testing and the live demo |
-| [BUILD_PLAN](docs/BUILD_PLAN.md), [DECISIONS_AND_RISKS](docs/DECISIONS_AND_RISKS.md), [SPONSOR_STRATEGY](docs/SPONSOR_STRATEGY.md) | Status, trade-offs, sponsors |
+| Vexcel `/ortho/tile`, `/property/extract` | Live (key geofenced to Los Angeles + Houston) or labelled demo sample |
+| OpenStreetMap Nominatim / Overpass | Geocoding, places (volunteer-mapped; counts are lower bounds) |
+| US Census geocoder + ACS | Tract always; demographics with a free `CENSUS_API_KEY` |
+| US Census LEHD LODES 2023 | Daytime workers and employed residents near the site (public download, ~27 MB per state, cached in `backend/data/`) |
+| OSRM foot routing (routing.openstreetmap.de) | Walking reach, so highways and bayous inside a radius aren't counted as walkable |
+| FEMA National Flood Hazard Layer | Flood zone at the address (Compliance agent), cached per location |
+| Verified rule set | Houston (no zoning, §26-492 parking, health/grease/ADA); others report `unknown` |
+| CoStar (sponsor kit) | Rentable Building Area (RBA; GLA for retail), spaces on the market with each suite's rentable sq ft, floor and asking rent, and CoStar's Matterport scans. Matched to buildings by location; listed properties near the search are added as candidates; a net asking rent replaces the planning rent band in the cost engine. Build the index once: `python scripts/build_costar_index.py [kit path]` (licensed, gitignored). Kit snapshot, not live availability. |
+| Building size fields | `area_sqft` = Vexcel **building footprint** (outline from above, ~one floor), `floor_area_est_sqft` = footprint × stories, `parcel_sqft` = the lot, `rentable_sqft` = CoStar RBA/GLA, `best_space.sqft` = the listed suite that fits |
+| Matterport Model API (GraphQL) | Paste a tour URL on the building panel. The 3D tour always embeds; interior data needs a token with access to the model, or a scan recorded with `scripts/record_matterport_fixture.py` (offline). Dimensions/objects are Property Intelligence (Enterprise) fields and degrade gracefully |
 
-## Disclaimer
-
-Cost figures are preliminary planning ranges from fixed bands, not contractor quotes. The AI summary is
-written by a local language model from the computed numbers and can still word things imperfectly;
-the numbers themselves are rule-based. Compliance
-results are decision support only; verify with the city and a licensed professional. Houston listings
-are samples at real buildings: rent, size and interior details are illustrative. Aerial imagery
-© Vexcel Imaging US, Inc.; cached imagery is licensed and not part of this repository.
+Cost figures are ranges from documented bands, not quotes. Compliance output is decision support, not
+legal advice; verify with the city.

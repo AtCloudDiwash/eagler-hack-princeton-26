@@ -1,0 +1,33 @@
+# Benchmark buildings for the Neighborhood agent (all inside the Vexcel key's Houston coverage).
+# Each case runs ONLY the Neighborhood agent, so a full set is cheap compared with full analyses.
+# Expectations are what a sensible analyst would conclude; the harness reports them next to the result.
+- name: restaurant_downtown
+  query: I want to open a 40-seat Mexican restaurant in Houston
+  lat: 29.7580
+  lon: -95.3650
+  expect: {customer_demand: [strong, adequate]}
+  why: Downtown core - very high daytime worker density, dense food cluster.
+- name: restaurant_eado_edge
+  query: I want to open a 40-seat Mexican restaurant in Houston
+  lat: 29.7627
+  lon: -95.3525
+  expect: {customer_demand: [weak, adequate]}
+  why: Edge of East Downtown by the bayou/freeways - few workers, barriers to walking.
+- name: restaurant_midtown
+  query: I want to open a 40-seat Mexican restaurant in Houston
+  lat: 29.7505
+  lon: -95.3708
+  expect: {customer_demand: [adequate, strong]}
+  why: Midtown - mixed office/residential, moderate density.
+- name: dental_montrose
+  query: I need a commercial property for a dental clinic in Houston with parking
+  lat: 29.7420
+  lon: -95.3900
+  expect: {customer_demand: [adequate, strong]}
+  why: Montrose - residential neighborhood with daily-needs retail; residents matter more than workers.
+- name: gym_heights
+  query: Gym around 5,000 sq ft in Houston Heights, close to where people live
+  lat: 29.7900
+  lon: -95.3980
+  expect: {customer_demand: [adequate, strong]}
+  why: Houston Heights - dense residential; residents drive gym demand.

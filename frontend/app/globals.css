@@ -1,26 +1,98 @@
 @import "tailwindcss";
 
-/* Turnkey Matchmaker theme: dark navy/charcoal surfaces, teal/cyan accent.
-   Tailwind v4 reads theme tokens from @theme (there is no tailwind.config.js). Use them as
-   bg-navy-950, bg-surface, text-accent, border-line, etc. Status colors map to PASS/RISK/UNKNOWN. */
+@theme inline {
+  /* Graphite base */
+  --color-ink-950: #0a0a0c;
+  --color-ink-900: #141418;
+  --color-ink-850: #18181d;
+  --color-ink-800: #1d1d23;
+  --color-ink-700: #2b2b34;
+  --color-line: #27272f;
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+/* Accent: electric lime on graphite. The app's accent utilities (teal/cyan/sky) are remapped here so
+   every component picks up the palette without per-file changes. */
 @theme {
-  --color-navy-950: #0b1220;
-  --color-navy-900: #0f172a;
-  --color-surface: #131c2e;
-  --color-surface-raised: #1a2540;
-  --color-line: #26324d;
-  --color-ink: #e6edf7;
-  --color-ink-muted: #94a3b8;
-  --color-accent: #22d3ee;
-  --color-accent-strong: #06b6d4;
-  --color-pass: #34d399;
-  --color-risk: #fb923c;
-  --color-unknown: #94a3b8;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-teal-50: #fbffe6;
+  --color-teal-100: #f4ffc2;
+  --color-teal-200: #ecff8f;
+  --color-teal-300: #e2fb5c;
+  --color-teal-400: #d4f53a;
+  --color-teal-500: #b9dc1a;
+  --color-teal-600: #93b10f;
+  --color-teal-700: #6f8610;
+  --color-teal-800: #586a12;
+  --color-teal-900: #4a5914;
+  --color-teal-950: #273205;
+  --color-cyan-200: #f7ffd6;
+  --color-cyan-300: #f0ffad;
+  --color-cyan-400: #e6fd74;
+  --color-cyan-500: #d4f53a;
+  --color-sky-300: #fbffe0;
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--color-navy-950);
-  color: var(--color-ink);
+  background: #0a0a0c;
+  color: #e4e4e7;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Display face for headings and big numbers. */
+h1, h2, h3, .font-display { font-family: var(--font-space-grotesk), var(--font-inter), system-ui, sans-serif; letter-spacing: -0.01em; }
+
+* { scrollbar-width: thin; scrollbar-color: #2b3b5e transparent; }
+
+/* Frosted glass panel used across the app. */
+.glass {
+  background: linear-gradient(180deg, rgba(26, 26, 32, 0.78), rgba(13, 13, 16, 0.82));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.glass-strong {
+  background: rgba(13, 13, 16, 0.92);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.text-gradient {
+  background: linear-gradient(90deg, #f7ffd6, #d4f53a 55%, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* MapLibre chrome in the app's dark theme. */
+.maplibregl-map { font-family: inherit; background: #0a0a0c; }
+.maplibregl-ctrl-attrib { background: rgba(10, 10, 12, 0.7) !important; color: #64748b !important; font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: #e2fb5c !important; }
+.maplibregl-ctrl-group { background: rgba(20, 20, 24, 0.85) !important; border: 1px solid rgba(148, 163, 184, 0.14); box-shadow: none !important; }
+.maplibregl-ctrl-group button + button { border-top: 1px solid rgba(148, 163, 184, 0.14) !important; }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.85); }
+.maplibregl-popup-content { background: #141418; color: #e2e8f0; border: 1px solid #2b3b5e; border-radius: 10px; padding: 6px 10px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.maplibregl-popup-tip { display: none; }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.skeleton { background: linear-gradient(90deg, #152038 0px, #1f2d4d 120px, #152038 240px); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }
+
+/* Radar sweep used while searching. */
+@keyframes radar-spin { to { transform: rotate(360deg); } }
+@keyframes radar-ping { 0% { transform: scale(0.15); opacity: 0.9; } 100% { transform: scale(1); opacity: 0; } }
+.radar-sweep { background: conic-gradient(from 0deg, rgba(212, 245, 58, 0) 0deg, rgba(212, 245, 58, 0) 280deg, rgba(212, 245, 58, 0.45) 360deg); animation: radar-spin 2.2s linear infinite; }
+.radar-ping { animation: radar-ping 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite; }
+
+input[type="range"].teal-range { accent-color: #d4f53a; }
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-sweep, .radar-ping, .skeleton { animation: none; }
 }

@@ -1,0 +1,292 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1220" viewBox="0 0 1600 1220">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2dd4bf"/>
+    </marker>
+    <marker id="arrV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a78bfa"/>
+    </marker>
+    <style>
+      text { font-family: Inter, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #e2e8f0; }
+      .h1 { font-size: 30px; font-weight: 700; }
+      .sub { font-size: 15px; fill: #94a3b8; }
+      .kick { font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .kickS { font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; fill: #64748b; }
+      .bh { font-size: 14.5px; font-weight: 650; }
+      .nm { font-size: 16px; font-weight: 700; }
+      .tx { font-size: 12.5px; fill: #cbd5e1; }
+      .mu { font-size: 12px; fill: #94a3b8; }
+      .file { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; fill: #64748b; }
+      .tool { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; fill: #a5f3fc; }
+      .monoS { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; fill: #cbd5e1; }
+      .panel { fill: #0f172a; stroke-width: 1.5; }
+      .box { fill: #15203a; stroke: #2a3a5c; stroke-width: 1; }
+      .card { fill: #131d35; stroke: #2a3a5c; stroke-width: 1; }
+      .chip { fill: #1b2a4a; stroke: #33507a; stroke-width: 1; }
+      .flow { stroke: #2dd4bf; stroke-width: 2; fill: none; }
+      .num { font-size: 13px; font-weight: 700; fill: #0b1220; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1220" fill="#0b1220"/>
+
+  <text x="40" y="58" class="h1">Turnkey Matchmaker — Agent Architecture</text>
+  <text x="40" y="86" class="sub">multi_agent_engine.py orchestrates domain agents (LangChain Deep Agents) that gather cited evidence; deterministic Python validates, scores and decides</text>
+
+  <!-- ============ ROW 1: KICKOFF ============ -->
+  <rect x="40" y="110" width="356" height="96" rx="10" class="box"/>
+  <text x="56" y="134" class="bh">Analysis request</text>
+  <text x="56" y="156" class="monoS" style="fill:#a5f3fc">POST /api/analyses  mode: quick | deep</text>
+  <text x="56" y="176" class="tx">Job stored in SQLite, run as a</text>
+  <text x="56" y="194" class="tx">background task; the UI polls events</text>
+
+  <line x1="398" y1="158" x2="426" y2="158" class="flow" marker-end="url(#arr)"/>
+  <rect x="428" y="110" width="356" height="96" rx="10" class="box"/>
+  <circle cx="452" cy="130" r="11" fill="#2dd4bf"/><text x="452" y="135" class="num" text-anchor="middle">1</text>
+  <text x="470" y="135" class="bh">Build context</text>
+  <text x="444" y="158" class="tx">Property, neighborhood, Census and</text>
+  <text x="444" y="176" class="tx">jurisdiction gathered concurrently</text>
+  <text x="444" y="194" class="tx">→ <tspan class="monoS">RunContext</tspan> + shared <tspan class="monoS">EvidenceStore</tspan></text>
+
+  <line x1="786" y1="158" x2="814" y2="158" class="flow" marker-end="url(#arr)"/>
+  <rect x="816" y="110" width="356" height="96" rx="10" class="box"/>
+  <circle cx="840" cy="130" r="11" fill="#2dd4bf"/><text x="840" y="135" class="num" text-anchor="middle">2</text>
+  <text x="858" y="135" class="bh">Plan</text>
+  <text x="832" y="158" class="tx">Decide which agents run and why:</text>
+  <text x="832" y="176" class="tx">Vexcel is skipped without parcel data,</text>
+  <text x="832" y="194" class="tx">Matterport without a linked tour</text>
+
+  <line x1="1174" y1="158" x2="1202" y2="158" class="flow" marker-end="url(#arr)"/>
+  <rect x="1204" y="110" width="356" height="96" rx="10" class="box"/>
+  <text x="1220" y="134" class="bh">Purpose-specific metric briefs</text>
+  <text x="1220" y="156" class="monoS">metrics.yaml + business_types.yaml</text>
+  <text x="1220" y="176" class="tx">Each agent gets its metrics, weights,</text>
+  <text x="1220" y="194" class="tx">“why it matters for you” and a status guide</text>
+
+  <line x1="800" y1="208" x2="800" y2="232" class="flow" marker-end="url(#arr)"/>
+
+  <!-- ============ ROW 2: INVESTIGATION ============ -->
+  <rect x="40" y="234" width="1520" height="506" rx="14" class="panel" stroke="#6d5bd0"/>
+  <circle cx="68" cy="262" r="12" fill="#a78bfa"/><text x="68" y="267" class="num" text-anchor="middle">3</text>
+  <text x="90" y="267" class="kick" style="fill:#c4b5fd">INVESTIGATION</text>
+  <text x="1540" y="267" class="mu" text-anchor="end">every agent is a Deep Agent on the shared harness, calling the LLM fallback chain (bottom)</text>
+
+  <text x="60" y="292" class="kickS">PHASE 1 · CONCURRENT</text>
+  <line x1="220" y1="288" x2="1145" y2="288" stroke="#2a3a5c"/>
+  <text x="1215" y="292" class="kickS">PHASE 2 · DEPENDS ON PHASE 1</text>
+
+  <!-- Vexcel card -->
+  <rect x="60" y="302" width="260" height="338" rx="10" class="card"/>
+  <rect x="60" y="302" width="260" height="5" rx="2" fill="#38bdf8"/>
+  <text x="76" y="330" class="nm">Vexcel Agent</text>
+  <text x="76" y="348" class="file">agents/vexcel_agent.py</text>
+  <text x="76" y="372" class="tx">Building fit from aerial AI data,</text>
+  <text x="76" y="390" class="tx">and what imagery can't tell</text>
+  <text x="76" y="416" class="kickS">TOOLS</text>
+  <text x="76" y="437" class="tool">get_building_overview</text>
+  <text x="76" y="456" class="tool">check_size_fit</text>
+  <text x="76" y="475" class="tool">inspect_roof</text>
+  <text x="76" y="494" class="tool">inspect_site_paving</text>
+  <text x="76" y="513" class="tool">compare_with_neighbors</text>
+  <text x="76" y="532" class="tool">get_imagery_metadata</text>
+  <text x="76" y="551" class="tool">lookup_vexcel_field</text>
+  <rect x="76" y="570" width="228" height="26" rx="13" class="chip"/>
+  <text x="190" y="587" class="mu" text-anchor="middle">Vexcel /property/extract</text>
+  <text x="76" y="622" class="mu">Budget ≤ 7 tool calls</text>
+
+  <!-- Neighborhood card -->
+  <rect x="335" y="302" width="260" height="338" rx="10" class="card"/>
+  <rect x="335" y="302" width="260" height="5" rx="2" fill="#2dd4bf"/>
+  <text x="351" y="330" class="nm">Neighborhood Agent</text>
+  <text x="351" y="348" class="file">agents/neighborhood_agent.py</text>
+  <text x="351" y="372" class="tx">Demand, competition, access and</text>
+  <text x="351" y="390" class="tx">area fit at business-chosen radii</text>
+  <text x="351" y="416" class="kickS">TOOLS</text>
+  <text x="351" y="437" class="tool">count_places</text>
+  <text x="351" y="456" class="tool">get_building_mix</text>
+  <text x="351" y="475" class="tool">get_access_options</text>
+  <text x="351" y="494" class="tool">get_demographics</text>
+  <text x="351" y="524" class="mu">Place groups by radius (OSM),</text>
+  <text x="351" y="542" class="mu">Vexcel building mix, transit,</text>
+  <text x="351" y="560" class="mu">parking, Census demographics</text>
+  <rect x="351" y="570" width="228" height="26" rx="13" class="chip"/>
+  <text x="465" y="587" class="mu" text-anchor="middle">OSM Overpass · Census ACS</text>
+  <text x="351" y="622" class="mu">Budget ≤ 7 tool calls</text>
+
+  <!-- Compliance card -->
+  <rect x="610" y="302" width="260" height="338" rx="10" class="card"/>
+  <rect x="610" y="302" width="260" height="5" rx="2" fill="#f472b6"/>
+  <text x="626" y="330" class="nm">Compliance Agent</text>
+  <text x="626" y="348" class="file">agents/compliance_agent.py</text>
+  <text x="626" y="372" class="tx">Permitted use, parking minimums,</text>
+  <text x="626" y="390" class="tx">health rules, ADA, certificate of occ.</text>
+  <text x="626" y="416" class="kickS">TOOLS</text>
+  <text x="626" y="437" class="tool">identify_jurisdiction</text>
+  <text x="626" y="456" class="tool">check_permitted_use</text>
+  <text x="626" y="475" class="tool">compute_parking_requirement</text>
+  <text x="626" y="494" class="tool">list_use_requirements</text>
+  <text x="626" y="513" class="tool">check_accessibility_signals</text>
+  <text x="626" y="542" class="mu">Verified rule set only →</text>
+  <text x="626" y="560" class="mu">PASS / RISK / UNKNOWN + citation</text>
+  <rect x="626" y="570" width="228" height="26" rx="13" class="chip"/>
+  <text x="740" y="587" class="mu" text-anchor="middle">jurisdictions.yaml · rules.py</text>
+  <text x="626" y="622" class="mu">Budget ≤ 6 tool calls</text>
+
+  <!-- Matterport card -->
+  <rect x="885" y="302" width="260" height="338" rx="10" fill="#111a2e" stroke="#4b5563" stroke-dasharray="6 4"/>
+  <rect x="885" y="302" width="260" height="5" rx="2" fill="#fbbf24"/>
+  <text x="901" y="330" class="nm">Matterport Agent</text>
+  <text x="901" y="348" class="file">agents/matterport_agent.py</text>
+  <text x="901" y="372" class="tx">Interior layout and condition</text>
+  <text x="901" y="390" class="tx">from a 3D tour (optional)</text>
+  <text x="901" y="416" class="kickS">BEHAVIOR</text>
+  <text x="901" y="437" class="tx">Runs only with credentials and</text>
+  <text x="901" y="455" class="tx">a linked tour</text>
+  <text x="901" y="481" class="tx">Otherwise: deterministic report,</text>
+  <text x="901" y="499" class="tx">metrics marked unknown and</text>
+  <text x="901" y="517" class="tx">interior questions listed as</text>
+  <text x="901" y="535" class="tx">open follow-ups</text>
+  <rect x="901" y="570" width="228" height="26" rx="13" class="chip" stroke-dasharray="4 3"/>
+  <text x="1015" y="587" class="mu" text-anchor="middle">Matterport API (no tours yet)</text>
+  <text x="901" y="622" class="mu">No LLM calls when skipped</text>
+
+  <!-- upstream arrow -->
+  <line x1="1149" y1="470" x2="1211" y2="470" class="flow" marker-end="url(#arr)"/>
+  <text x="1180" y="448" class="mu" text-anchor="middle" style="fill:#5eead4">upstream</text>
+  <text x="1180" y="494" class="mu" text-anchor="middle" style="fill:#5eead4">findings</text>
+
+  <!-- Cost card -->
+  <rect x="1215" y="302" width="325" height="338" rx="10" class="card"/>
+  <rect x="1215" y="302" width="325" height="5" rx="2" fill="#34d399"/>
+  <text x="1231" y="330" class="nm">Cost Agent</text>
+  <text x="1231" y="348" class="file">agents/cost_agent.py</text>
+  <text x="1231" y="372" class="tx">Feasibility: which conversion items the</text>
+  <text x="1231" y="390" class="tx">other agents' evidence triggers</text>
+  <text x="1231" y="416" class="kickS">TOOLS</text>
+  <text x="1231" y="437" class="tool">get_rent_assumption</text>
+  <text x="1231" y="456" class="tool">list_cost_items</text>
+  <text x="1231" y="475" class="tool">estimate_costs<tspan class="mu">  → deterministic costs.py</tspan></text>
+  <text x="1231" y="504" class="mu">Receives negative / high-severity findings</text>
+  <text x="1231" y="522" class="mu">and UNKNOWNs from Phase 1; each cost item</text>
+  <text x="1231" y="540" class="mu">cites the evidence that triggered it.</text>
+  <text x="1231" y="558" class="mu">Output is a range, never a quote.</text>
+  <rect x="1231" y="570" width="293" height="26" rx="13" class="chip"/>
+  <text x="1377" y="587" class="mu" text-anchor="middle">costs.yaml · rent bands, fit-out, adders</text>
+  <text x="1231" y="622" class="mu">Budget ≤ 5 tool calls</text>
+
+  <!-- mode strip -->
+  <rect x="60" y="656" width="730" height="68" rx="10" class="box"/>
+  <text x="76" y="678" class="bh" style="fill:#c4b5fd">Deep mode <tspan class="mu">(default · measured 139 s, 15 LLM calls)</tspan></text>
+  <text x="76" y="698" class="tx">All four Phase 1 agents run in parallel; Cost starts once all have reported,</text>
+  <text x="76" y="715" class="tx">then targeted follow-ups (step 6) can re-question an agent.</text>
+
+  <rect x="810" y="656" width="730" height="68" rx="10" class="box"/>
+  <text x="826" y="678" class="bh" style="fill:#5eead4">Quick mode <tspan class="mu">(measured 52 s, 10 LLM calls)</tspan></text>
+  <text x="826" y="698" class="tx">Key tools prefetched into the first prompt (still cited evidence) · +1–2 tool calls · ≤ 3 LLM calls</text>
+  <text x="826" y="715" class="tx">· ≤ 3 findings · Python pre-picks cost items · Cost starts after Vexcel + Compliance · no follow-ups</text>
+
+  <!-- ============ ROW 3: POST-PROCESSING ============ -->
+  <text x="150" y="770" class="kick" style="fill:#2dd4bf">AFTER THE AGENTS — PYTHON HAS THE FINAL WORD</text>
+  <line x1="120" y1="742" x2="120" y2="782" class="flow" marker-end="url(#arr)"/>
+
+  <rect x="40" y="784" width="232" height="128" rx="10" class="box"/>
+  <circle cx="62" cy="806" r="11" fill="#2dd4bf"/><text x="62" y="811" class="num" text-anchor="middle">4</text>
+  <text x="80" y="811" class="bh">Validate</text>
+  <text x="56" y="834" class="tx">Citations to missing</text>
+  <text x="56" y="851" class="tx">evidence stripped + flagged</text>
+  <text x="56" y="872" class="tx">Verified rules and cost engine</text>
+  <text x="56" y="889" class="tx">override agent opinions</text>
+  <text x="56" y="906" class="mu">Unevidenced blockers downgraded</text>
+
+  <line x1="274" y1="848" x2="295" y2="848" class="flow" marker-end="url(#arr)"/>
+  <rect x="297" y="784" width="232" height="128" rx="10" class="box"/>
+  <circle cx="319" cy="806" r="11" fill="#2dd4bf"/><text x="319" y="811" class="num" text-anchor="middle">5</text>
+  <text x="337" y="811" class="bh">Conflicts</text>
+  <text x="313" y="834" class="tx">Cross-agent contradictions</text>
+  <text x="313" y="851" class="tx">are recorded together with</text>
+  <text x="313" y="868" class="tx">their resolution</text>
+  <text x="313" y="894" class="mu">“not detected” never blocks</text>
+
+  <line x1="531" y1="848" x2="552" y2="848" class="flow" marker-end="url(#arr)"/>
+  <rect x="554" y="784" width="232" height="128" rx="10" fill="#1d1a3a" stroke="#6d5bd0"/>
+  <circle cx="576" cy="806" r="11" fill="#a78bfa"/><text x="576" y="811" class="num" text-anchor="middle">6</text>
+  <text x="594" y="811" class="bh">Follow-ups <tspan class="mu">(Deep)</tspan></text>
+  <text x="570" y="834" class="tx">Would resolving an unknown,</text>
+  <text x="570" y="851" class="tx">high-weight metric flip the</text>
+  <text x="570" y="868" class="tx">verdict? → ask the owning agent</text>
+  <text x="570" y="894" class="mu">max 2 · 3-tool budget each</text>
+  <!-- loop back up to agents -->
+  <path d="M670 784 V742" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#arrV)"/>
+  <text x="680" y="768" class="mu" style="fill:#c4b5fd">targeted follow-up</text>
+
+  <line x1="788" y1="848" x2="809" y2="848" class="flow" marker-end="url(#arr)"/>
+  <rect x="811" y="784" width="232" height="128" rx="10" class="box"/>
+  <circle cx="833" cy="806" r="11" fill="#2dd4bf"/><text x="833" y="811" class="num" text-anchor="middle">7</text>
+  <text x="851" y="811" class="bh">Score <tspan class="mu">(Python only)</tspan></text>
+  <text x="827" y="834" class="tx">Status → points × business</text>
+  <text x="827" y="851" class="tx">weights → verdict thresholds</text>
+  <text x="827" y="872" class="tx">Confidence = share of weight</text>
+  <text x="827" y="889" class="tx">with verified evidence</text>
+  <text x="827" y="906" class="file">services/scoring.py</text>
+
+  <line x1="1045" y1="848" x2="1066" y2="848" class="flow" marker-end="url(#arr)"/>
+  <rect x="1068" y="784" width="232" height="128" rx="10" class="box"/>
+  <circle cx="1090" cy="806" r="11" fill="#2dd4bf"/><text x="1090" y="811" class="num" text-anchor="middle">8</text>
+  <text x="1108" y="811" class="bh">Narrative</text>
+  <text x="1084" y="834" class="tx">LLM summary grounded on</text>
+  <text x="1084" y="851" class="tx">the already-scored result</text>
+  <text x="1084" y="872" class="tx">Deterministic template if</text>
+  <text x="1084" y="889" class="tx">the LLM call fails</text>
+
+  <line x1="1302" y1="848" x2="1323" y2="848" class="flow" marker-end="url(#arr)"/>
+  <rect x="1325" y="784" width="235" height="128" rx="10" fill="#0f2a2c" stroke="#1f5f5a"/>
+  <text x="1341" y="811" class="bh" style="fill:#5eead4">Result → Dashboard</text>
+  <text x="1341" y="834" class="tx">Verdict · score · confidence</text>
+  <text x="1341" y="851" class="tx">Metrics · agent reports</text>
+  <text x="1341" y="868" class="tx">Evidence E# · costs · rules</text>
+  <text x="1341" y="885" class="tx">Conflicts · open questions</text>
+  <text x="1341" y="906" class="mu">LLM providers used, per call</text>
+
+  <!-- ============ ROW 4: FOUNDATION ============ -->
+  <rect x="40" y="940" width="1010" height="222" rx="14" class="panel" stroke="#38bdf8"/>
+  <text x="60" y="968" class="kick" style="fill:#38bdf8">SHARED AGENT HARNESS</text>
+  <text x="282" y="968" class="file">agents/base.py · run_agent()</text>
+
+  <rect x="60" y="984" width="480" height="50" rx="8" class="chip"/>
+  <text x="76" y="1004" class="bh">Deep Agents (LangGraph) graph</text>
+  <text x="76" y="1023" class="mu">File, shell and sub-agent tools removed → only domain tools</text>
+  <rect x="550" y="984" width="480" height="50" rx="8" class="chip"/>
+  <text x="566" y="1004" class="bh">tracked_tool → EvidenceStore</text>
+  <text x="566" y="1023" class="mu">Every tool result is registered as citable evidence E1, E2, …</text>
+
+  <rect x="60" y="1042" width="480" height="50" rx="8" class="chip"/>
+  <text x="76" y="1062" class="bh">Tool budget</text>
+  <text x="76" y="1081" class="mu">Repeated calls refused; when the cap is hit: “return your report now”</text>
+  <rect x="550" y="1042" width="480" height="50" rx="8" class="chip"/>
+  <text x="566" y="1062" class="bh">Model-call cap + timeout</text>
+  <text x="566" y="1081" class="mu">≤ 8 LLM calls, 240 s per agent; failure → its metrics become unknown</text>
+
+  <rect x="60" y="1100" width="480" height="50" rx="8" class="chip"/>
+  <text x="76" y="1120" class="bh">Structured report, three ways</text>
+  <text x="76" y="1139" class="mu">Structured output → JSON-text report → schema-constrained extraction</text>
+  <rect x="550" y="1100" width="480" height="50" rx="8" class="chip"/>
+  <text x="566" y="1120" class="bh">Rules in every system prompt</text>
+  <text x="566" y="1139" class="mu">Cite evidence · fact vs inference · say “unknown” · suggest follow-ups</text>
+
+  <rect x="1070" y="940" width="490" height="222" rx="14" class="panel" stroke="#6d5bd0"/>
+  <text x="1090" y="968" class="kick" style="fill:#c4b5fd">LLM FALLBACK CHAIN</text>
+  <text x="1540" y="968" class="file" text-anchor="end">services/llm.py · FallbackChat</text>
+  <rect x="1090" y="984" width="130" height="36" rx="18" class="chip"/><text x="1155" y="1007" class="tx" text-anchor="middle">Codex CLI</text>
+  <text x="1229" y="1007" class="tx" style="fill:#a78bfa">→</text>
+  <rect x="1248" y="984" width="146" height="36" rx="18" class="chip"/><text x="1321" y="1007" class="tx" text-anchor="middle">Claude Code CLI</text>
+  <text x="1403" y="1007" class="tx" style="fill:#a78bfa">→</text>
+  <rect x="1422" y="984" width="122" height="36" rx="18" class="chip"/><text x="1483" y="1007" class="tx" text-anchor="middle">Ollama</text>
+  <text x="1090" y="1046" class="tx">CLIs run one-shot, tool-less, schema-constrained</text>
+  <text x="1090" y="1064" class="tx">calls in an empty temp folder</text>
+  <text x="1090" y="1088" class="tx">Tools are described in the prompt; the model returns</text>
+  <text x="1090" y="1106" class="tx">validated tool calls that LangGraph executes</text>
+  <text x="1090" y="1130" class="tx">A provider at its usage limit is skipped for a cooldown;</text>
+  <text x="1090" y="1148" class="tx">switches show up in the live log</text>
+
+  <text x="40" y="1196" class="mu">An agent that fails or times out never sinks the analysis: its metrics become “unknown” and confidence drops. Compliance output is decision support, not legal advice.</text>
+</svg>
