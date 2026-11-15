@@ -6,4 +6,4 @@
 | **Devpost / social thumbnail** (3:2) | `EagleEye-Thumbnail.png` (also `.pdf`, editable `.pptx`) |
 | Wide banners only, never as the logo | `banner-only/wide-wings-BANNER-ONLY-not-logo.png` |
 
-Brand green: `#A6E8B0` · background: `#101513` · font: Bahnschrift.
+Accent (lime, matches the app theme): `#D4F53A` · background (graphite): `#0A0A0C` · font: Bahnschrift.
