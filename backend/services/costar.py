@@ -77,12 +77,12 @@ def is_ground_floor(floor: str | None) -> bool | None:
 
 def candidate_fields(p: dict, need_min: int, need_max: int, target: int, ground_floor: bool = False) -> dict:
     """The CoStar figures a discovery candidate carries (the full summary is served with the property detail).
+    The selected space is the closest actual vacancy, whether or not it fits the requested range.
     With ground_floor, street-level suites are preferred (then unknown floor, then upper floors)."""
     s = summarize(p, need_min, need_max)
     rank = lambda x: ({True: 0, None: 1, False: 2}[is_ground_floor(x.get("floor"))] if ground_floor else 0, abs((x["sqft"] or 0) - target))  # noqa: E731
-    best = min(s["fitting_spaces"], key=rank) if s["fitting_spaces"] else None
-    open_spaces = [sq for l in p["lease_listings"] for x in l["spaces"] if not x["lease_pending"] and (sq := x.get("sqft_max") or x.get("sqft_min"))]
-    closest = min(open_spaces, key=lambda sq: abs(math.log(sq / target))) if open_spaces and not best and target else None
+    open_spaces = _available_spaces(p)
+    best = min(s["fitting_spaces"] or open_spaces, key=rank) if s["fitting_spaces"] or open_spaces else None
     return {
         "costar_id": p["id"], "building_name": p.get("name"),
         "rentable_sqft": p.get("rentable_sqft"), "rentable_basis": p.get("rentable_basis"),
@@ -90,7 +90,7 @@ def candidate_fields(p: dict, need_min: int, need_max: int, target: int, ground_
         "best_space": {**{k: best.get(k) for k in ("suite", "floor", "sqft", "rent_per_sqft_yr", "service", "use", "available_on")},
                        "sqft_min": best.get("sqft_min") if (best.get("sqft_min") or 0) < (best.get("sqft") or 0) else None,
                        "ground_floor": is_ground_floor(best.get("floor"))} if best else None,
-        "closest_space_sqft": closest,
+        "closest_space_sqft": None,
         "asking_rent_per_sqft_yr": s["asking_rent_per_sqft_yr"],
         "costar_type": p.get("type"),  # Office / Retail / Multifamily ... (used for match reasons)
         # building figures for the agents (see services/building_facts.py for the sourced, typed view)
@@ -129,6 +129,17 @@ def _yearly_rate(s: dict) -> float | None:
     if not rate:
         return None
     return round(rate * 12, 2) if s.get("rate_basis") == "monthly" else round(rate, 2)
+
+
+def _available_spaces(p: dict) -> list[dict]:
+    """Normalized, non-pending rentable suites for selection and display."""
+    return [
+        {**space, "sqft": space.get("sqft_max") or space.get("sqft_min"),
+         "rent_per_sqft_yr": _yearly_rate(space), "listing_id": listing["listing_id"]}
+        for listing in p["lease_listings"]
+        for space in listing["spaces"]
+        if not space["lease_pending"] and (space.get("sqft_max") or space.get("sqft_min"))
+    ]
 
 
 def summarize(p: dict, need_min: int | None = None, need_max: int | None = None) -> dict:

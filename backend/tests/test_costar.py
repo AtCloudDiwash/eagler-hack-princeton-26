@@ -62,6 +62,18 @@ def test_listed_spaces_drive_size_check_and_rent():
     assert any("CoStar" in a for a in est["assumptions"])
 
 
+def test_closest_listed_suite_drives_size_when_none_fit():
+    """A real vacancy remains the size basis even when it is too large for the program."""
+    fields = costar.candidate_fields(costar.match(29.76, -95.37), 1000, 1200, 1100)
+    assert fields["best_space"]["suite"] == "105"
+    assert fields["best_space"]["sqft"] == 1800
+
+    p = program.build(parse_rules("restaurant between 1000 and 1200 sq ft in Houston"))
+    check = next(c for c in program.site_checks(p, program.facts_from(fields, None)) if c["id"] == "size")
+    assert check["status"] == "risk"
+    assert "Suite 105" in check["detail"] and "1,800 rentable sq ft" in check["detail"]
+
+
 def test_listed_near_filters_by_type_and_listing():
     assert [p["id"] for p in costar.listed_near(29.76, -95.37, 800, ["GeneralRetail"])] == [1]
     assert costar.listed_near(29.76, -95.37, 800, ["Office"]) == []  # the office tower has no spaces listed

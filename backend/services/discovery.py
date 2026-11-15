@@ -62,7 +62,7 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
         reasons.append(f"{btype.replace('_', ' ')} building is an unusual fit")
 
     best = c.get("best_space")
-    if best:  # CoStar lists a suite in the user's size range: the strongest size evidence there is
+    if best:  # A specific CoStar vacancy is stronger size evidence than the whole-building area
         rent = f" at ${best['rent_per_sqft_yr']:.2f}/sq ft/yr" if best.get("rent_per_sqft_yr") else ""
         floor = f", {best['floor'].lower()}" if best.get("floor") else ""
         sq = f"{best['sqft_min']:,.0f}-{best['sqft']:,.0f}" if best.get("sqft_min") else f"{best['sqft']:,.0f}"
