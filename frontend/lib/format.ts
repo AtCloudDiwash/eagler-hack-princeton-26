@@ -1,143 +1,86 @@
-// Display formatters. Costs are always shown as ranges ("$84k – $132k"), never as false precision.
+/** Formatting + color helpers shared by discovery and dashboard. */
+import type { AgentName, MetricStatus, Verdict } from "./api-types";
 
-import type { CostRange } from "./types";
-
-export const NA = "N/A";
-
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-
-function isNum(value: number | null | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-/** Full currency: 4000 -> "$4,000". */
-export function formatCurrency(value: number | null | undefined): string {
-  return isNum(value) ? usd.format(value) : NA;
-}
-
-/** Compact currency: 950 -> "$950", 84200 -> "$84k", 1250000 -> "$1.3M". */
-export function formatCompactCurrency(value: number | null | undefined): string {
-  if (!isNum(value)) return NA;
-  const sign = value < 0 ? "-" : "";
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `${sign}$${trimZero((abs / 1_000_000).toFixed(1))}M`;
-  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}k`;
-  return `${sign}$${Math.round(abs)}`;
-}
-
-function trimZero(text: string): string {
-  return text.endsWith(".0") ? text.slice(0, -2) : text;
-}
-
-/** Cost range: {min: 84000, max: 132000} -> "$84k – $132k"; equal ends collapse to one value. */
-export function formatRange(range: CostRange | null | undefined): string {
-  if (!range || !isNum(range.min) || !isNum(range.max)) return NA;
-  const low = formatCompactCurrency(range.min);
-  const high = formatCompactCurrency(range.max);
-  return low === high ? low : `${low} – ${high}`;
-}
-
-/** Month range: {min: 2, max: 3} -> "2–3 mo"; {min: 1, max: 1} -> "1 mo". */
-export function formatMonths(range: CostRange | null | undefined): string {
-  if (!range || !isNum(range.min) || !isNum(range.max)) return NA;
-  const low = trimZero(range.min.toFixed(1));
-  const high = trimZero(range.max.toFixed(1));
-  return low === high ? `${low} mo` : `${low}–${high} mo`;
-}
-
-export function formatNumber(value: number | null | undefined, unit?: string): string {
-  if (!isNum(value)) return NA;
-  return unit ? `${integer.format(value)} ${unit}` : integer.format(value);
-}
-
-export function formatSqft(value: number | null | undefined): string {
-  return formatNumber(value, "sq ft");
-}
-
-/** Monthly rent: 4000 -> "$4,000/mo". */
-export function formatRent(value: number | null | undefined): string {
-  return isNum(value) ? `${usd.format(value)}/mo` : NA;
-}
-
-/** Confidence 0..1 -> "85%". */
-export function formatPercent(value: number | null | undefined): string {
-  return isNum(value) ? `${Math.round(value * 100)}%` : NA;
-}
-
-/** Text fallback: empty/blank -> "N/A". */
-export function orNA(value: string | null | undefined): string {
-  return value && value.trim() ? value : NA;
-}
-
-/** "door_width_inches" -> "Door width inches". */
-export function humanize(key: string): string {
-  const text = key.replace(/[_-]+/g, " ").trim();
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : key;
-}
-
-/** Arbitrary evidence value -> short display text. */
-export function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return NA;
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") return Number.isInteger(value) ? integer.format(value) : String(Number(value.toFixed(2)));
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.length ? value.map(formatValue).join(", ") : NA;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
+export const fmtMoney = (n: number | null | undefined, compact = true) => {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (compact && Math.abs(n) >= 1000) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(n);
   }
-}
-
-/** ISO timestamp -> "Nov 14, 2026, 3:30 PM" (or N/A if unparseable). */
-export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return NA;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return NA;
-  return date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
-}
-
-const PARKING_SOURCE_LABELS: Record<string, string> = {
-  user: "you said",
-  guideline: "guideline",
-  jurisdiction: "city code",
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 };
 
-/** Requirements.parking_source -> short label; unknown future sources fall back to humanized text. */
-export function parkingSourceLabel(source: string | null | undefined): string {
-  if (!source) return "guideline";
-  return PARKING_SOURCE_LABELS[source] ?? humanize(source).toLowerCase();
+export const fmtRange = (low: number | null | undefined, high: number | null | undefined) =>
+  low == null || high == null ? "—" : low === high ? fmtMoney(low) : `${fmtMoney(low)} – ${fmtMoney(high)}`;
+
+export const fmtNum = (n: number | null | undefined, digits = 0) =>
+  n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: digits });
+
+export const fmtSqft = (n: number | null | undefined) => (n == null ? "—" : `${fmtNum(n)} sq ft`);
+/** Vexcel/OSM `area_sqft` is the BUILDING footprint (outline from above, ~one floor), not the lot or a suite. */
+export const fmtFootprint = (n: number | null | undefined) => (n == null ? "size unknown" : `${fmtNum(n)} sq ft footprint`);
+
+export const fmtDistance = (m: number | null | undefined) =>
+  m == null ? "—" : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+
+export const titleCase = (s: string | null | undefined) =>
+  (s ?? "").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+export const VERDICT_STYLE: Record<Verdict, { label: string; text: string; bg: string; ring: string; color: string }> = {
+  recommended: { label: "Recommended", text: "text-emerald-300", bg: "bg-emerald-500/15", ring: "ring-emerald-400/40", color: "#34d399" },
+  conditional: { label: "Recommended with conditions", text: "text-amber-300", bg: "bg-amber-500/15", ring: "ring-amber-400/40", color: "#fbbf24" },
+  not_recommended: { label: "Not recommended", text: "text-rose-300", bg: "bg-rose-500/15", ring: "ring-rose-400/40", color: "#fb7185" },
+  insufficient_evidence: { label: "Insufficient evidence", text: "text-slate-300", bg: "bg-slate-500/15", ring: "ring-slate-400/40", color: "#94a3b8" },
+};
+
+export const STATUS_STYLE: Record<MetricStatus, { label: string; cls: string; color: string }> = {
+  strong: { label: "Strong", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30", color: "#34d399" },
+  adequate: { label: "Adequate", cls: "bg-teal-500/15 text-teal-300 ring-teal-400/30", color: "#c8e83a" },
+  weak: { label: "Weak", cls: "bg-amber-500/15 text-amber-300 ring-amber-400/30", color: "#fbbf24" },
+  blocker: { label: "Blocker", cls: "bg-rose-500/15 text-rose-300 ring-rose-400/30", color: "#fb7185" },
+  unknown: { label: "Unknown", cls: "bg-slate-500/15 text-slate-300 ring-slate-400/30", color: "#64748b" },
+};
+
+export const COMPLIANCE_STYLE: Record<string, { label: string; cls: string }> = {
+  pass: { label: "Pass", cls: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30" },
+  risk: { label: "Risk", cls: "bg-amber-500/15 text-amber-300 ring-amber-400/30" },
+  fail: { label: "Fail", cls: "bg-rose-500/15 text-rose-300 ring-rose-400/30" },
+  unknown: { label: "Unknown", cls: "bg-slate-500/15 text-slate-300 ring-slate-400/30" },
+};
+
+export const SEVERITY_STYLE: Record<string, string> = {
+  high: "bg-rose-500/15 text-rose-300 ring-rose-400/30",
+  medium: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+  low: "bg-slate-500/15 text-slate-300 ring-slate-400/30",
+};
+
+export const AGENT_META: Record<AgentName, { label: string; short: string; color: string; icon: string; role: string }> = {
+  vexcel: { label: "Vexcel Agent", short: "Vexcel", color: "#e2fb5c", icon: "🛰", role: "Building characteristics from aerial AI" },
+  neighborhood: { label: "Neighborhood Agent", short: "Neighborhood", color: "#a78bfa", icon: "🏙", role: "Surroundings, demand & competition" },
+  compliance: { label: "Compliance Agent", short: "Compliance", color: "#f472b6", icon: "⚖", role: "Permitted use, parking, codes" },
+  cost: { label: "Cost Agent", short: "Cost", color: "#fbbf24", icon: "＄", role: "Rent, fit-out & feasibility" },
+  matterport: { label: "Matterport Agent", short: "Matterport", color: "#60a5fa", icon: "◫", role: "Interior layout (optional)" },
+  engine: { label: "Orchestrator", short: "Engine", color: "#e4e4e7", icon: "◎", role: "Plans, validates, reconciles" },
+};
+
+const PALETTE = ["#e2fb5c", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#60a5fa", "#fb923c", "#e879f9", "#a3e635", "#f87171", "#38bdf8", "#facc15"];
+
+/** Stable color for an arbitrary label (place groups, building types from config). */
+export function colorFor(label: string | null | undefined): string {
+  const s = label ?? "unknown";
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
 }
 
-const PARSER_LABELS: Record<string, string> = { regex: "Regex", ollama: "Ollama", claude: "Claude" };
+const BUILDING_COLORS: Record<string, string> = {
+  commercial: "#8b9bb4",
+  single_family: "#fbbf24",
+  multiple_family: "#fb923c",
+  condo_apartment: "#f472b6",
+  mobile_home: "#a3e635",
+  industrial: "#60a5fa",
+};
+export const buildingColor = (t: string | null | undefined) => BUILDING_COLORS[t ?? ""] ?? colorFor(t);
 
-/** AnalysisMode.parser -> "Regex" / "Ollama" / "Claude"; unknown parsers fall back to humanized text. */
-export function parserLabel(parser: string | null | undefined): string {
-  if (!parser) return NA;
-  return PARSER_LABELS[parser] ?? humanize(parser);
-}
-
-/** True when `llm` names a real model ("none", empty or absent means no LLM). */
-export function hasLlm(llm: string | null | undefined): llm is string {
-  return !!llm && llm.trim() !== "" && llm !== "none";
-}
-
-/** True for a model served by the local Ollama runtime ("ollama:qwen3:8b"). */
-export function isLocalLlm(llm: string | null | undefined): boolean {
-  return !!llm && llm.startsWith("ollama:");
-}
-
-/**
- * Model id -> badge text: "ollama:qwen3:8b" -> "Local AI · qwen3:8b",
- * "anthropic:claude-haiku-5-5" -> "Claude · claude-haiku-5-5", anything else -> "AI · <model>".
- */
-export function llmLabel(model: string | null | undefined): string {
-  if (!hasLlm(model)) return "No AI";
-  const split = model.indexOf(":");
-  const provider = split > 0 ? model.slice(0, split) : "";
-  const name = split > 0 ? model.slice(split + 1) : model;
-  if (provider === "ollama") return `Local AI · ${name}`;
-  if (provider === "anthropic") return `Claude · ${name}`;
-  return `AI · ${model}`;
-}
+export const roofLabel = (c: number | null | undefined) =>
+  c == null ? null : ["", "Bad", "Poor", "Fair", "Good", "Great"][Math.max(1, Math.min(5, Math.round(c)))];

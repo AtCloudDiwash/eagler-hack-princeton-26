@@ -1,33 +1,11 @@
-# Node and Next.js
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/.env.local
-
-# Python and FastAPI
-backend/venv/
-backend/*.sqlite3
-backend/*.db
-backend/__pycache__/
-backend/**/*.pyc
-backend/.env
-backend/.env.local
-# Licensed Vexcel imagery / API responses cached by the backend: never commit
-backend/static/vexcel-cache/
-
-# General
-.DS_Store
-*.log
-backend/.pytest_cache/
-
-# ---- Repo-wide safety net (applies to v1 and newproj/) ----
-# Secrets: only *.env.example templates are committed
+# ---- Secrets: only *.env.example templates are committed ----
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-# Python
+
+# ---- Python ----
 **/.venv/
 **/venv/
 **/__pycache__/
@@ -37,7 +15,8 @@ backend/.pytest_cache/
 *.db-shm
 *.db-wal
 *.sqlite3
-# Node / Next.js
+
+# ---- Node / Next.js ----
 **/node_modules/
 **/.next/
 **/out/
@@ -45,11 +24,20 @@ backend/.pytest_cache/
 npm-debug.log*
 **/test-results/
 **/playwright-report/
-# Licensed Vexcel API responses (record locally, never commit)
-newproj/backend/fixtures/vexcel_*.json
-newproj/backend/fixtures/matterport/
-newproj/backend/fixtures/costar_index.json
-# Local tooling / OS
+
+# ---- Licensed / owner data: record locally, never commit ----
+# Vexcel API responses (backend/scripts/record_demo_fixture.py)
+backend/fixtures/vexcel_*.json
+# Matterport scans incl. safety-net copies (backend/scripts/record_matterport_fixture.py)
+backend/fixtures/matterport/
+# CoStar kit index (backend/scripts/build_costar_index.py)
+backend/fixtures/costar_index.json
+# v1 (legacy/): cached licensed Vexcel imagery
+legacy/backend/static/vexcel-cache/
+
+# ---- Local tooling / OS ----
+.DS_Store
+*.log
 .claude/
 .idea/
 .vscode/

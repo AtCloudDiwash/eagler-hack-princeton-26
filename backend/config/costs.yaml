@@ -1,81 +1,128 @@
-# Cost bands for the deterministic cost engine. Ranges, not quotes.
-# unit: each | per_sqft. adds_months extends the build-out period (rent paid before opening).
+# Deterministic cost engine inputs (services/costs.py). Ranges, not quotes.
+# All dollar figures are PLANNING ASSUMPTIONS (rule-of-thumb bands), not listing or contractor data.
+# The Cost Agent chooses which adders apply and must cite the evidence that triggered each one.
 
 disclaimer: >-
-  Preliminary estimates from fixed cost bands, not contractor quotes. Actual costs vary
-  with site conditions, finishes and local labor rates.
+  Preliminary ranges from fixed planning bands, not contractor quotes or listing rents. Actual costs
+  vary with site conditions, finishes, landlord concessions and local labor rates.
 
-items:
-  kitchen_install:
-    label: "Commercial kitchen (hood, line, fixtures)"
-    unit: each
-    min: 40000
-    max: 60000
-    adds_months: { min: 1, max: 2 }
+# Asking rent bands, USD per sq ft per year (NNN), by city key and use. Used only when no listing rent
+# is available (CoStar listing data is not connected in this build).
+rent_bands:
+  houston-tx:
+    restaurant: {low: 22, high: 40}
+    medical_office: {low: 22, high: 36}
+    gym: {low: 14, high: 26}
+    office: {low: 24, high: 42}
+    retail: {low: 20, high: 38}
+    source: "Planning assumption for Houston (not listing data); replace with CoStar asking rent when connected"
+  los-angeles-ca:
+    restaurant: {low: 36, high: 72}
+    medical_office: {low: 36, high: 60}
+    gym: {low: 24, high: 42}
+    office: {low: 36, high: 60}
+    retail: {low: 36, high: 72}
+    source: "Planning assumption for Los Angeles (not listing data)"
+  _default:
+    restaurant: {low: 20, high: 45}
+    medical_office: {low: 20, high: 40}
+    gym: {low: 12, high: 28}
+    office: {low: 20, high: 45}
+    retail: {low: 18, high: 42}
+    source: "National planning assumption (not listing data)"
+
+nnn_per_sqft_year: {low: 7, high: 12}   # taxes, insurance, CAM
+
+# Base tenant fit-out per sq ft (shell -> open), before adders. Second-generation space (same prior use)
+# usually sits at the low end; first-generation shell at the high end.
+base_fitout_per_sqft:
+  restaurant: {low: 75, high: 175}
+  medical_office: {low: 90, high: 200}
+  gym: {low: 25, high: 70}
+  office: {low: 30, high: 90}
+  retail: {low: 30, high: 90}
+
+# Adders the Cost Agent can apply. unit: each | per_sqft. applies_to limits which uses may add them.
+adders:
   hood_exhaust:
-    label: "Kitchen exhaust hood + fire suppression"
+    label: Kitchen exhaust hood + fire suppression
     unit: each
-    min: 15000
-    max: 30000
-    adds_months: { min: 0, max: 1 }
+    low: 15000
+    high: 30000
+    applies_to: [restaurant]
   grease_interceptor:
-    label: "Grease interceptor"
+    label: Grease interceptor (in-ground)
     unit: each
-    min: 8000
-    max: 20000
-  restroom_add:
-    label: "Additional restroom (toilet + lavatory)"
-    unit: each
-    min: 10000
-    max: 15000
-  door_widening:
-    label: "Widen entrance door to ADA clear width"
-    unit: each
-    min: 1000
-    max: 3000
-  entrance_ramp:
-    label: "ADA entrance ramp"
-    unit: each
-    min: 5000
-    max: 10000
+    low: 8000
+    high: 20000
+    applies_to: [restaurant]
   hvac_rtu:
-    label: "Rooftop HVAC unit (5-ton)"
-    unit: each
-    min: 15000
-    max: 25000
-  electrical_service_upgrade:
-    label: "Electrical service / panel upgrade"
-    unit: each
-    min: 10000
-    max: 25000
-  operatory_plumbing:
-    label: "Plumb treatment room (water, vacuum, air)"
-    unit: each
-    min: 5000
-    max: 8000
-  fire_sprinkler:
-    label: "Fire sprinkler system"
-    unit: per_sqft
-    min: 3
-    max: 7
-    adds_months: { min: 1, max: 1 }
+    label: New rooftop HVAC unit(s)
+    unit: each            # quantity = units needed
+    low: 15000
+    high: 25000
+    applies_to: [restaurant, medical_office, gym, office, retail]
   roof_repair:
-    label: "Roof repair / recoat (flat commercial roof)"
-    unit: per_sqft           # qty = the suite's size_sqft (a tenant's share, not the whole building)
-    min: 4
-    max: 9
+    label: Roof repair / recoat (tenant share)
+    unit: per_sqft
+    low: 4
+    high: 9
+    applies_to: [restaurant, medical_office, gym, office, retail]
+  electrical_upgrade:
+    label: Electrical service / panel upgrade
+    unit: each
+    low: 10000
+    high: 25000
+    applies_to: [restaurant, medical_office, gym]
+  operatory_plumbing:
+    label: Plumb treatment rooms (water, vacuum, air) per operatory
+    unit: each
+    low: 5000
+    high: 8000
+    applies_to: [medical_office]
+  ada_upgrades:
+    label: ADA entrance / restroom upgrades
+    unit: each
+    low: 5000
+    high: 25000
+    applies_to: [restaurant, medical_office, gym, office, retail]
+  restroom_add:
+    label: Additional restroom
+    unit: each
+    low: 10000
+    high: 15000
+    applies_to: [restaurant, medical_office, gym, retail]
+  rubber_flooring:
+    label: Impact flooring for free-weight areas
+    unit: per_sqft
+    low: 4
+    high: 10
+    applies_to: [gym]
+  locker_showers:
+    label: Locker rooms with showers
+    unit: each
+    low: 40000
+    high: 90000
+    applies_to: [gym]
+  parking_agreement:
+    label: Shared-parking agreement / variance process (first year)
+    unit: each
+    low: 5000
+    high: 30000
+    applies_to: [restaurant, medical_office, gym, office, retail]
 
 soft_costs:
-  permits_fees: { label: "Permits and fees", min: 5000, max: 10000 }
-  general_conditions_pct: { label: "Demolition / general conditions", min: 0.10, max: 0.20 }
-  contingency_pct: { label: "Contingency", min: 0.10, max: 0.20 }
+  permits_fees: {low: 5000, high: 15000}
+  contingency_pct: {low: 0.10, high: 0.20}
 
-ranking:
-  # Properties are ranked by first-year cost = cost to open + this many months of rent after opening.
-  horizon_months: 12
-  # Min-score gate: properties whose criteria fit score (0-100) is below this are ranked after all
-  # qualifying properties (but before disqualified ones) and labelled "Weak fit" in the UI.
-  # 55 = clearly more than half of the weighted, scored criteria pass (a space scoring exactly 50,
-  # e.g. a medical office searched for a restaurant, is a weak fit). Config-driven; set to 0 to
-  # disable and rank purely by first-year cost.
-  min_score: 55
+lease:
+  amortize_fitout_years: 10   # tenant-paid fit-out spread over a typical term for the monthly view
+  deposit_months: 2           # upfront security deposit, months of rent
+
+# Typical budgets used to judge whether costs are "within range" (occupancy_cost metric).
+typical_upfront_per_sqft:
+  restaurant: {good: 150, high: 275}
+  medical_office: {good: 170, high: 300}
+  gym: {good: 60, high: 120}
+  office: {good: 70, high: 140}
+  retail: {good: 70, high: 140}

@@ -11,7 +11,7 @@ four scores: **Creativity, Utility, Charity, Avidity**.
 |---|---|---|
 | Main track | **Business and Enterprise** | A small-business tool built on commercial real-estate data. Other teams will push "social good" here; our Charity story makes us stand out. |
 | Special tracks | CoStar, Peri, **LangChain** (see §10), plus any other LLM/agents track you qualify for | CoStar: Vexcel data, Matterport-ready. Peri: needs a real owner interview (see §6). LangChain: the whole agent layer is built on LangChain Deep Agents. |
-| Which build to demo | **v2 (`newproj/`)**: map, live Vexcel, agent log, dashboard | It looks the most impressive. Borrow v1's main point: the cheapest rent is not the cheapest space. |
+| Which build to demo | **v2 (repo root)**: map, live Vexcel, agent log, dashboard | It looks the most impressive. Borrow v1's main point: the cheapest rent is not the cheapest space. |
 | One-sentence pitch | *"Listings tell you the rent. We tell you what it will actually cost to open there, and whether you're even allowed to."* | Say it word for word, twice: at the start and at the end. |
 
 ---
@@ -177,7 +177,7 @@ Before submitting, check that the Devpost lists a LangChain prize, and read its 
 
 | What | Where | What to say about it |
 |---|---|---|
-| 5 domain agents built with `create_deep_agent` (Deep Agents on LangGraph) | `newproj/backend/agents/base.py:243`, `agents/*_agent.py` | "Each agent is a Deep Agent with only its own domain tools. We removed the default file, shell and sub-agent tools." |
+| 5 domain agents built with `create_deep_agent` (Deep Agents on LangGraph) | `backend/agents/base.py:243`, `agents/*_agent.py` | "Each agent is a Deep Agent with only its own domain tools. We removed the default file, shell and sub-agent tools." |
 | A custom `BaseChatModel` that wraps local CLIs (Codex, Claude Code) | `services/cli_chat.py`, `codex_chat.py`, `claude_chat.py` | "We wrote our own LangChain chat models that turn a local coding CLI into a tool-calling, structured-output model, so LangGraph runs tools the same way it would with any provider." |
 | A fallback chat model: Codex → Claude Code → Ollama, with usage-limit cooldowns | `services/llm.py` (`FallbackChat`) | "If one provider hits its usage limit, the analysis switches to the next one mid-run and keeps going. The live log shows the switch." |
 | `ModelCallLimitMiddleware` + per-agent tool budgets + `ToolStrategy` structured output | `agents/base.py` | "Bounded agents: there's a cap on model calls and tool uses, and no repeated tool calls." |
@@ -190,7 +190,7 @@ Before submitting, check that the Devpost lists a LangChain prize, and read its 
 > they never set the score."
 
 **Quick win (~15 min): LangSmith tracing.** LangChain/LangGraph send traces with no code changes once
-these are set in `newproj/backend/.env`:
+these are set in `backend/.env`:
 ```bash
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=<your key>

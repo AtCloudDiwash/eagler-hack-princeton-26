@@ -1,152 +1,140 @@
-# Jurisdiction rules used by the compliance checks. Keyed "<city>-<state>" in lower case;
-# anything not listed falls back to `default` (keys a city omits are inherited from `default`).
-# Every value here is a simplification for decision support — the UI must tell users to verify
-# with the city / a licensed professional.
+# Verified jurisdiction rules for the Compliance Agent. The agent may only cite what is here (or
+# report "unknown" with the official place to check). Never add a rule without an official source.
+# Houston entries were researched Nov 2026 (see notes); re-verify before relying on them.
 #
-# Field reference
-#   zoning_mode            districts -> look the listing's zoning code up in `zoning` (per business use)
-#                          none      -> the city has no zoning ordinance; `zoning_note` is shown instead
-#   zoning_note            plain-English note for zoning_mode: none
-#   zoning_source          citation shown on the zoning_use result for this city
-#   use_restriction_blocks recorded deed / lease / CC&R restriction tag (Property.use_restrictions)
-#                          -> business uses (business_types.yaml `zoning_use`) it prohibits.
-#                          A blocking restriction is a definitive failure (hard block) in ANY city.
-#   parking_minimums       true when the city sets off-street parking minimums
-#   parking_ratios         zoning_use -> required spaces per 1,000 sq ft of gross floor area (GFA)
-#   parking_ratio_source   citation for parking_ratios
-#   parking_ratio_cite     short form of that citation used in result notes (optional; falls back
-#                          to parking_ratio_source)
-#   parking_exempt_areas   areas with no minimum (polygons as [lon, lat] rings, approximate)
-#   parking_note           sentence appended to parking results
+#   match            how a reverse-geocoded address maps to this entry (city + state)
+#   zoning_mode      none | districts | unverified
+#   permitted_use    per zoning_use: {status: pass|risk|fail|unknown, detail, citation, url}
+#   parking          {minimums: bool, ratios: {zoning_use: spaces per 1,000 sq ft GFA}, citation, url,
+#                     exempt_areas: [{name, polygon [[lon, lat], ...], citation}]}
+#   requirements     per zoning_use (or "all"): list of {id, rule, detail, citation, url}
 
-default:
-  name: "Generic (model codes)"
-  zoning_mode: "districts"
-  zoning_note: null
-  zoning_source: null
-  zoning: {}
-  use_restriction_blocks:
-    no_food_service: ["restaurant"]
-    no_restaurant: ["restaurant"]
-    no_cooking: ["restaurant"]
-    no_medical: ["medical_office"]
-    office_only: ["restaurant"]
-  use_restriction_source: "Recorded deed restriction / lease use clause disclosed in the listing"
-  parking_minimums: false
-  parking_ratios: {}
-  parking_ratio_source: null
-  parking_ratio_cite: null
-  parking_exempt_areas: []
-  parking_note: "No local parking rule loaded; compared against the spaces your business needs."
-  plumbing_code: "Model plumbing code fixture table (IPC Table 2902.1 / UPC Table 422.1)"
-  building_code: "International Building Code"
-  health_code: "State food establishment rules"
-
-austin-tx:
-  name: "Austin, TX"
-  zoning_mode: "districts"
-  parking_minimums: false
-  parking_note: >-
-    Austin eliminated minimum parking requirements citywide on Nov 2, 2023
-    (some special districts kept older rules; ADA accessible-space rules still apply).
-  plumbing_code: "2024 Uniform Plumbing Code as amended by Austin (City Code Ch. 25-12), Table 422.1"
-  building_code: "International Building Code as adopted by Austin"
-  health_code: "Texas Food Establishment Rules, 25 TAC Chapter 228"
-  grease_code: "UPC §1014 Grease Interceptors; Austin Water pretreatment program"
-  zoning_source: "Austin Land Development Code §25-2-491 permitted-use table (simplified — verify per parcel)"
-  # Base districts only; suffixes like -MU, -CO, -V are stripped before lookup.
-  zoning:
-    restaurant:
-      permitted: ["GR", "CS", "CS-1", "CH", "CBD", "DMU"]
-      conditional: ["LR"]
-      prohibited: ["LO", "GO", "NO", "SF-1", "SF-2", "SF-3", "MF-1", "MF-2", "MF-3"]
-    medical_office:
-      permitted: ["LO", "GO", "GR", "CS", "CS-1", "CH", "CBD", "DMU"]
-      conditional: ["LR", "NO"]
-      prohibited: ["SF-1", "SF-2", "SF-3"]
-
-# ------------------------------------------------------------------------------------------------
-# Houston, TX — researched Nov 2026. Sources:
-#   Zoning / deed restrictions: City of Houston Legal Dept., Deed Restriction Enforcement
-#     https://www.houstontx.gov/legal/deed.html — the City may sue to enforce recorded restrictions
-#     on use, setbacks, lot/structure size (Code of Ordinances Ch. 10, Art. XV, §§10-551–10-555;
-#     Tex. Local Gov't Code Ch. 212). Development/platting rules: Code Ch. 42.
-#   Parking: Code Ch. 26, Art. VIII "Off-Street Parking and Loading", §26-492 table
-#     (Ord. No. 2013-208, Exh. A, 3-6-2013), published by Houston Planning & Development:
-#     https://www.houstontx.gov/planning/DevelopRegs/docs_pdfs/Requirements%20for%20Use%20Classifications.pdf
-#     https://www.houstontx.gov/planning/Off-Street-Parking-Ordinance.html
-#     Market-based parking area (100% reduction): §26-471 as amended by Ord. 2019-0540 (July 17, 2019),
-#     which expanded the area from Downtown to East Downtown (EaDo) and parts of Midtown / Near
-#     Northside. Chapter 26 revisions were proposed to Council committee in May 2026 — re-verify.
-#   Plumbing: 2021 Uniform Plumbing Code with City of Houston amendments (Council vote Oct 2023,
-#     effective Jan 2, 2024; IAPMO press release 2023-10-26; Houston Permitting Center).
-#   Health: Houston Health Department — effective Sept 1, 2025 the City adopted the FDA Model Food
-#     Code and Texas Food Establishment Rules by reference and repealed the Houston Food Ordinance
-#     (Code Ch. 20) https://www.houstonhealth.org/services/permits/food-permits ; plan review,
-#     pre-operational inspection and an annual Food Dealer permit are required
-#     https://www.houstonhealth.org/services/permits/food-permits/opening-food-establishment
-#   Grease: Code Ch. 47, Art. XI (grease traps / interceptors); §47-512(b) requires interceptors to be
-#     fully pumped at least quarterly; a FOG generator permit is renewed annually (Houston Permitting Center).
-# ------------------------------------------------------------------------------------------------
 houston-tx:
-  name: "Houston, TX"
-  zoning_mode: "none"
-  zoning_note: >-
-    Houston has no zoning ordinance, so no zoning approval is needed for this use. Verify recorded
-    deed restrictions (enforced by the City) and any lease or shopping-center use clause.
-  zoning_source: >-
-    Houston has no zoning; recorded deed restrictions are enforceable by the City (Houston Code of
-    Ordinances Ch. 10, Art. XV, §§10-551–10-555); development rules in Code Ch. 42
-  zoning: {}
-  use_restriction_source: >-
-    Recorded deed restriction / lease use clause disclosed in the listing; deed restrictions on use are
-    enforceable by the City of Houston (Code Ch. 10, Art. XV, §§10-551–10-555)
+  name: Houston, TX
+  match: {city: [houston], state: [texas, tx]}
+  zoning_mode: none
+  permitted_use:
+    _default:
+      status: pass
+      detail: >-
+        Houston has no zoning ordinance, so no zoning approval is needed for this use. Recorded deed
+        restrictions (enforced by the City) and lease/shopping-center use clauses can still prohibit it
+        and must be checked for this parcel.
+      citation: "Houston Code of Ordinances Ch. 10, Art. XV, §§10-551–10-555 (deed restriction enforcement)"
+      url: https://www.houstontx.gov/legal/deed.html
+  parking:
+    minimums: true
+    ratios: {restaurant: 10.0, medical_office: 3.5}
+    unverified_uses_note: >-
+      The ratio for this use was not verified in our rule set; look it up in the §26-492 use-class table.
+    citation: "Houston Code Ch. 26, Art. VIII, §26-492 (Ord. 2013-208)"
+    url: https://www.houstontx.gov/planning/DevelopRegs/docs_pdfs/Requirements%20for%20Use%20Classifications.pdf
+    exempt_areas:
+      - name: Downtown market-based parking area
+        citation: "Houston Code Ch. 26, §26-471 (market-based parking area)"
+        polygon: [[-95.3700, 29.7500], [-95.3600, 29.7500], [-95.3600, 29.7640], [-95.3700, 29.7640]]
+      - name: East Downtown (EaDo) market-based parking area
+        citation: "Houston Code Ch. 26, §26-471 as amended by Ord. 2019-0540"
+        polygon: [[-95.3565, 29.7450], [-95.3460, 29.7450], [-95.3460, 29.7590], [-95.3565, 29.7590]]
+    exempt_note: >-
+      Exempt-area polygons are conservative inner approximations of the official map; a site just
+      outside them may still be exempt.
+  requirements:
+    restaurant:
+      - id: health_permit
+        rule: Food establishment permit, plan review & pre-opening inspection
+        detail: >-
+          Houston adopted the FDA Food Code and Texas Food Establishment Rules by reference (effective
+          Sept 1, 2025). Plan review, a pre-operational inspection and an annual Food Dealer permit are required.
+        citation: "Texas Food Establishment Rules, 25 TAC Ch. 228; Houston Health Department food permits"
+        url: https://www.houstonhealth.org/services/permits/food-permits/opening-food-establishment
+      - id: grease_interceptor
+        rule: Grease interceptor & FOG permit
+        detail: >-
+          Food service needs a grease interceptor, pumped at least quarterly (§47-512(b)), and an annual
+          FOG generator permit.
+        citation: "Houston Code Ch. 47, Art. XI; §47-512(b)"
+        url: https://www.houstonpermittingcenter.org/
+      - id: plumbing_fixtures
+        rule: Restroom fixture count
+        detail: "2021 Uniform Plumbing Code Table 422.1 (assembly: restaurants), ~2 restrooms for ~46 occupants."
+        citation: "2021 UPC with City of Houston amendments (effective Jan 2, 2024), Table 422.1"
+        url: https://www.houstonpermittingcenter.org/
+    medical_office:
+      - id: xray_registration
+        rule: Dental X-ray registration
+        detail: Dental radiation machines must be registered with the Texas DSHS Radiation Control Program.
+        citation: "25 TAC §289.232 (dental radiation machines)"
+        url: https://www.dshs.texas.gov/texas-radiation-control
+      - id: building_permit_b
+        rule: Building permit for medical tenant build-out
+        detail: Tenant improvements need a Houston building permit under the Houston Construction Code.
+        citation: "2021 International Building Code with City of Houston amendments"
+        url: https://www.houstonpermittingcenter.org/
+    all:
+      - id: ada_tas
+        rule: Accessibility (ADA + Texas Accessibility Standards)
+        detail: >-
+          Public accommodations must meet the 2010 ADA Standards; in Texas, projects over $50,000 also need
+          TDLR registration and review under the Texas Accessibility Standards.
+        citation: "2010 ADA Standards for Accessible Design; Texas Architectural Barriers Act / TAS (TDLR)"
+        url: https://www.tdlr.texas.gov/ab/abtas.htm
+      - id: certificate_occupancy
+        rule: Certificate of Occupancy for change of use
+        detail: A change of occupancy (e.g., retail to restaurant) needs a new Certificate of Occupancy.
+        citation: "Houston Construction Code; Houston Permitting Center"
+        url: https://www.houstonpermittingcenter.org/
 
-  parking_minimums: true
-  # Spaces per 1,000 sq ft GFA, keyed by business_types.yaml `zoning_use`.
-  #   restaurant: §26-492 Class 7(e) "Restaurant" = 10.0 per 1,000 sq ft GFA, plus outdoor decks/patios/
-  #     seating in excess of 15% of GFA. Smaller categories exist (7(c) "Small restaurant" 8.0, 7(d)
-  #     "Neighborhood restaurant" 9.0) but their size/location definitions (§26-472) were not verified,
-  #     so the conservative full-restaurant ratio is used.
-  #   medical_office: §26-492 Class 3(d) "Clinic (medical or dental)" = 3.5 per 1,000 sq ft GFA.
-  # §26-492 applies to new construction and to the *incremental* increase when a building is altered
-  # (e.g. retail at 4.0 -> restaurant at 10.0). Re-tenanting with the same use class is not modeled;
-  # the full ratio is applied (conservative).
-  parking_ratios:
-    restaurant: 10.0
-    medical_office: 3.5
-  parking_ratio_source: "Houston Code of Ordinances Ch. 26, Art. VIII, §26-492 (Ord. 2013-208)"
-  parking_ratio_cite: "Houston Code §26-492"
-  # Market-based parking area: no minimum (§26-471, Ord. 2019-0540). The official boundary is a map;
-  # the polygons below are deliberately CONSERVATIVE inner approximations (a property outside them is
-  # treated as subject to minimums). Midtown is only partly in the area and its exact boundary was not
-  # verified, so it is not modeled (Midtown listings get the minimum — conservative).
-  parking_exempt_areas:
-    - name: "Downtown market-based parking area"
-      source: "Houston Code Ch. 26, §26-471 (market-based parking area)"
-      polygon: [[-95.3700, 29.7500], [-95.3600, 29.7500], [-95.3600, 29.7640], [-95.3700, 29.7640]]
-    - name: "East Downtown (EaDo) market-based parking area"
-      source: "Houston Code Ch. 26, §26-471 as amended by Ord. 2019-0540 (July 2019 expansion)"
-      # Roughly US-59 (west) to St. Emanuel / stadium blocks and east toward the rail line; Buffalo Bayou
-      # (north) to the Gulf Freeway (south), trimmed inward.
-      polygon: [[-95.3565, 29.7450], [-95.3460, 29.7450], [-95.3460, 29.7590], [-95.3565, 29.7590]]
-  parking_note: >-
-    Houston requires off-street parking by use (Code Ch. 26, §26-492: restaurant 10 spaces and
-    medical/dental clinic 3.5 spaces per 1,000 sq ft GFA) except in the market-based parking areas
-    (Downtown, EaDo, parts of Midtown; §26-471). Shared-parking agreements and variances are possible.
+los-angeles-ca:
+  name: Los Angeles, CA
+  match: {city: [los angeles], state: [california, ca]}
+  zoning_mode: unverified
+  permitted_use:
+    _default:
+      status: unknown
+      detail: >-
+        Los Angeles uses zoning districts. The parcel's zone and whether this use is permitted were not
+        verified; look the parcel up in ZIMAS and check the LAMC use list for that zone.
+      citation: "Los Angeles Municipal Code Chapter 1 (Planning & Zoning); ZIMAS parcel lookup"
+      url: https://zimas.lacity.org/
+  parking:
+    minimums: unknown
+    ratios: {}
+    unverified_uses_note: >-
+      LA parking rules vary by zone and by AB 2097 transit proximity; not verified in our rule set.
+    citation: "LAMC §12.21 A.4; California AB 2097 (2022)"
+    url: https://zimas.lacity.org/
+    exempt_areas: []
+  requirements:
+    all:
+      - id: ada_cbc11b
+        rule: Accessibility (ADA + California Building Code Ch. 11B)
+        detail: Public accommodations must meet the 2010 ADA Standards and CBC Chapter 11B.
+        citation: "2010 ADA Standards; California Building Code Chapter 11B"
+        url: https://www.ada.gov/law-and-regs/design-standards/2010-stds/
 
-  plumbing_code: >-
-    2021 Uniform Plumbing Code with City of Houston amendments (effective Jan 2, 2024), Table 422.1
-  # UPC 2021 Table 422.1, Assembly — restaurants/pubs/lounges (occupant load split 50/50 by sex):
-  #   water closets: male 1 per 1–50, female 1 per 1–25 (2 for 26–50); lavatories 1 per 1–150 each.
-  # Our simplified rule (business_types.yaml `restrooms`) gives 2 restrooms for a 40-seat restaurant
-  # (occupant load 46), which matches this table. Houston amendments to 422.1 were not reviewed.
-  plumbing_fixture_note: "UPC 2021 Table 422.1 (Assembly: restaurants) — 2 restrooms for ~46 occupants"
-  building_code: "2021 International Building Code with City of Houston amendments (Houston Construction Code)"
-  health_code: >-
-    Texas Food Establishment Rules (25 TAC Ch. 228) and FDA Food Code, adopted by reference by the
-    City of Houston effective Sept 1, 2025; Houston Health Department plan review, pre-operational
-    inspection and annual Food Dealer permit
-  grease_code: >-
-    Houston Code Ch. 47, Art. XI (grease interceptors; §47-512(b) quarterly pump-out) and annual
-    FOG generator permit
+_default:
+  name: Unverified jurisdiction
+  zoning_mode: unverified
+  permitted_use:
+    _default:
+      status: unknown
+      detail: >-
+        This location is not in our verified rule set. Ask the local planning/zoning office (or check the
+        municipal code) whether this use is permitted in the parcel's district.
+      citation: null
+      url: null
+  parking:
+    minimums: unknown
+    ratios: {}
+    unverified_uses_note: Parking minimums for this city were not verified.
+    citation: null
+    url: null
+    exempt_areas: []
+  requirements:
+    all:
+      - id: ada
+        rule: Accessibility (ADA)
+        detail: Public accommodations must meet the 2010 ADA Standards for Accessible Design.
+        citation: "2010 ADA Standards for Accessible Design (28 CFR Part 36)"
+        url: https://www.ada.gov/law-and-regs/design-standards/2010-stds/

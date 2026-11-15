@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Turnkey Matchmaker theme: dark navy/charcoal surfaces, teal/cyan accent.
+   Tailwind v4 reads theme tokens from @theme (there is no tailwind.config.js). Use them as
+   bg-navy-950, bg-surface, text-accent, border-line, etc. Status colors map to PASS/RISK/UNKNOWN. */
+@theme {
+  --color-navy-950: #0b1220;
+  --color-navy-900: #0f172a;
+  --color-surface: #131c2e;
+  --color-surface-raised: #1a2540;
+  --color-line: #26324d;
+  --color-ink: #e6edf7;
+  --color-ink-muted: #94a3b8;
+  --color-accent: #22d3ee;
+  --color-accent-strong: #06b6d4;
+  --color-pass: #34d399;
+  --color-risk: #fb923c;
+  --color-unknown: #94a3b8;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-navy-950);
+  color: var(--color-ink);
+}

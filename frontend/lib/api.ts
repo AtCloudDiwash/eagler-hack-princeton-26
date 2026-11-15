@@ -1,116 +1,76 @@
-// Typed client for the Turnkey Matchmaker REST API (docs/API_CONTRACT.md).
-// All URLs are relative; next.config.ts rewrites /api/v1/*, /static/* and /health to the backend.
-
+/** Thin typed client for the FastAPI backend. All secrets live on the backend. */
 import type {
+  Analysis,
+  AnalysisRequest,
   AnalysisSummary,
-  AnalyzeRequest,
-  AnalyzeResponse,
-  BusinessType,
-  Criterion,
-  HealthResponse,
-  Property,
-} from "./types";
+  BusinessTypeInfo,
+  Health,
+  Neighborhood,
+  PropertyDetail,
+  SearchResponse,
+} from "./api-types";
 
-/** Error carrying the HTTP status and FastAPI's `detail` message (status 0 = network failure). */
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const TILE_URL = `${API_URL}/api/tiles/{z}/{x}/{y}`;
+
 export class ApiError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
     super(message);
-    this.name = "ApiError";
-    this.status = status;
   }
 }
 
-/** FastAPI returns `{detail: string}` or, for 422, `{detail: [{msg, loc}, ...]}`. */
-function detailMessage(body: unknown, fallback: string): string {
-  if (body && typeof body === "object" && "detail" in body) {
-    const detail = (body as { detail: unknown }).detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) {
-      const messages = detail
-        .map((entry) => (entry && typeof entry === "object" && "msg" in entry ? String(entry.msg) : null))
-        .filter(Boolean);
-      if (messages.length > 0) return messages.join("; ");
-    }
-  }
-  return fallback;
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+async function request<T>(path: string, init?: RequestInit & { signal?: AbortSignal }): Promise<T> {
+  let res: Response;
   try {
-    response = await fetch(path, {
+    res = await fetch(`${API_URL}${path}`, {
       ...init,
-      headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
+      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError(0, "Could not reach the Turnkey Matchmaker API. Is the backend running on port 8000?");
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+    throw new ApiError(`Can't reach the backend at ${API_URL}. Is it running?`, 0);
   }
-
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
     try {
-      body = JSON.parse(text);
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : body.error || JSON.stringify(body.detail ?? body);
     } catch {
-      body = null;
+      /* non-JSON error body */
     }
+    throw new ApiError(detail, res.status);
   }
-
-  if (!response.ok) {
-    // The Next.js dev proxy answers 500 with an HTML/empty body when the backend is down.
-    const fallback =
-      response.status >= 500 && body === null
-        ? "The API is unavailable right now. Is the backend running on port 8000?"
-        : `Request failed (${response.status} ${response.statusText})`;
-    throw new ApiError(response.status, detailMessage(body, fallback));
-  }
-  if (body === null) throw new ApiError(response.status, "The API returned an empty or invalid response.");
-  return body as T;
+  return (await res.json()) as T;
 }
-
-/** Builds a query string, skipping empty values. */
-export function toQuery(params: Record<string, string | number | null | undefined>): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && String(value).trim() !== "") search.set(key, String(value).trim());
-  }
-  const query = search.toString();
-  return query ? `?${query}` : "";
-}
-
-export interface CriteriaQuery {
-  business_type?: string;
-  city?: string;
-  state?: string;
-}
-
-export interface PropertiesQuery extends CriteriaQuery {
-  min_size?: number;
-  max_size?: number;
-  budget?: number;
-}
-
-type Opts = { signal?: AbortSignal };
 
 export const api = {
-  health: (opts?: Opts) => request<HealthResponse>("/health", opts),
-  businessTypes: (opts?: Opts) => request<BusinessType[]>("/api/v1/business-types", opts),
-  criteria: (query: CriteriaQuery = {}, opts?: Opts) =>
-    request<Criterion[]>(`/api/v1/criteria${toQuery({ ...query })}`, opts),
-  properties: (query: PropertiesQuery = {}, opts?: Opts) =>
-    request<Property[]>(`/api/v1/properties${toQuery({ ...query })}`, opts),
-  analyze: (body: AnalyzeRequest, opts?: Opts) =>
-    request<AnalyzeResponse>("/api/v1/analyze", { method: "POST", body: JSON.stringify(body), ...opts }),
-  analyses: (limit = 20, opts?: Opts) => request<AnalysisSummary[]>(`/api/v1/analyses${toQuery({ limit })}`, opts),
-  analysis: (id: string, opts?: Opts) =>
-    request<AnalyzeResponse>(`/api/v1/analyses/${encodeURIComponent(id)}`, opts),
+  health: () => request<Health>("/api/health"),
+  businessTypes: () => request<BusinessTypeInfo[]>("/api/business-types"),
+  search: (query: string, signal?: AbortSignal) =>
+    request<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify({ query }), signal }),
+  /** With the user's request, the detail's panel tiles describe what this building offers that request. */
+  property: (id: string, signal?: AbortSignal, forRequest?: { business_type: string; sqft?: number; budget?: { amount: number; period: string } | null }) => {
+    const q = new URLSearchParams();
+    if (forRequest) {
+      q.set("business_type", forRequest.business_type);
+      if (forRequest.sqft) q.set("sqft", String(Math.round(forRequest.sqft)));
+      if (forRequest.budget) {
+        q.set("budget_amount", String(forRequest.budget.amount));
+        q.set("budget_period", forRequest.budget.period);
+      }
+    }
+    return request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}${q.size ? `?${q}` : ""}`, { signal });
+  },
+  neighborhood: (id: string, radius: number, signal?: AbortSignal) =>
+    request<Neighborhood>(`/api/properties/${encodeURIComponent(id)}/neighborhood?radius_m=${radius}`, { signal }),
+  linkMatterport: (id: string, tour: string) =>
+    request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}/matterport`, { method: "PUT", body: JSON.stringify({ tour }) }),
+  unlinkMatterport: (id: string) => request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}/matterport`, { method: "DELETE" }),
+  startAnalysis: (body: AnalysisRequest) =>
+    request<{ id: string; status: string }>("/api/analyses", { method: "POST", body: JSON.stringify(body) }),
+  analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/api/analyses/${encodeURIComponent(id)}`, { signal }),
+  analyses: () => request<AnalysisSummary[]>("/api/analyses"),
 };
-
-/** Human-readable message for any thrown value. */
-export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return "Something went wrong.";
-}
