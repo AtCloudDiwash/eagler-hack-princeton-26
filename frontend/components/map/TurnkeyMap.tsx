@@ -45,6 +45,9 @@ type Props = {
   selectedId?: string | null;
   onHover?: (id: string | null) => void;
   onSelect?: (id: string) => void;
+  /** A place dot was clicked (it becomes what follow-up questions refer to). */
+  onPlaceSelect?: (id: string) => void;
+  activePlaceId?: string | null;
   focus?: { lon: number; lat: number; zoom?: number; pitch?: number; bearing?: number; key: string | number } | null;
   fit?: { points: LngLat[]; key: string | number } | null;
   padding?: { top: number; bottom: number; left: number; right: number };
@@ -105,11 +108,11 @@ export default function TurnkeyMap(p: Props) {
         .map((pl) => ({
           type: "Feature",
           id: pl.id,
-          properties: { group: pl.group, name: pl.name ?? placeMeta(pl.group).label, hl: (p.highlightGroups ?? []).includes(pl.group) ? 1 : 0 },
+          properties: { pid: pl.id, group: pl.group, name: pl.name ?? placeMeta(pl.group).label, hl: (p.highlightGroups ?? []).includes(pl.group) ? 1 : 0, active: pl.id === p.activePlaceId ? 1 : 0 },
           geometry: { type: "Point", coordinates: [pl.lon, pl.lat] },
         })),
     };
-  }, [p.places, p.visibleGroups, p.highlightGroups]);
+  }, [p.places, p.visibleGroups, p.highlightGroups, p.activePlaceId]);
   const parcel = useMemo<FC>(() => {
     const g = asGeometry(p.parcel ?? null);
     return g ? { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: g }] } : EMPTY_FC;
@@ -226,13 +229,19 @@ export default function TurnkeyMap(p: Props) {
   // ---------- interaction
   const onMove = useCallback((e: MapLayerMouseEvent) => {
     const f = e.features?.[0];
-    const id = (f?.properties?.id as string | undefined) ?? null;
+    const id = f?.layer.id === "tk-cand-ext" ? ((f.properties?.id as string | undefined) ?? null) : null;
     live.current.onHover?.(id);
     const canvas = mapRef.current?.getCanvas();
-    if (canvas) canvas.style.cursor = id ? "pointer" : "";
+    if (canvas) canvas.style.cursor = f ? "pointer" : "";
   }, []);
   const onClick = useCallback((e: MapLayerMouseEvent) => {
-    const id = e.features?.[0]?.properties?.id as string | undefined;
+    const f = e.features?.[0];
+    if (f?.layer.id === "tk-places-dot") {
+      const pid = f.properties?.pid as string | undefined;
+      if (pid) live.current.onPlaceSelect?.(pid);
+      return;
+    }
+    const id = f?.properties?.id as string | undefined;
     if (id) live.current.onSelect?.(id);
   }, []);
 
@@ -246,9 +255,9 @@ export default function TurnkeyMap(p: Props) {
       mapStyle={STYLE_URL}
       maxPitch={75}
       style={{ position: "absolute", inset: 0 }}
-      interactiveLayerIds={p.onSelect ? ["tk-cand-ext"] : []}
+      interactiveLayerIds={[...(p.onPlaceSelect ? ["tk-places-dot"] : []), ...(p.onSelect ? ["tk-cand-ext"] : [])]}
       onMove={(e) => p.onViewChange?.({ lat: e.viewState.latitude, lon: e.viewState.longitude, zoom: e.viewState.zoom })}
-      onMouseMove={p.onHover ? onMove : undefined}
+      onMouseMove={p.onHover || p.onPlaceSelect ? onMove : undefined}
       onMouseLeave={() => p.onHover?.(null)}
       onClick={onClick}
       attributionControl={{ compact: true }}
@@ -308,8 +317,8 @@ export default function TurnkeyMap(p: Props) {
           paint={{
             "circle-color": PLACE_COLOR,
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 18, 6],
-            "circle-stroke-color": "#0a0a0c",
-            "circle-stroke-width": 1,
+            "circle-stroke-color": ["case", ["==", ["get", "active"], 1], "#ffffff", "#0a0a0c"],
+            "circle-stroke-width": ["case", ["==", ["get", "active"], 1], 2.5, 1],
             "circle-opacity": ["case", ["==", ["get", "hl"], 1], 1, 0.75],
           }}
         />

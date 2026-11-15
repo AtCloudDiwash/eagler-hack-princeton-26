@@ -65,6 +65,11 @@ which provider served how many calls, and switches appear in the live log. Usage
    cafes, named businesses, zoom, aerial/street layers and 2D/3D views can be requested in chat.
    Visual searches (e.g. "show buildings with outdoor patios") use Vexcel's documented
    `/embedding/extract` semantic imagery API and highlight matching regions, with verification caveats.
+   Each map question is one **interaction type** (`services/discovery_chat.py`): find nearby, find the nearest,
+   find by description, explore surroundings, inspect, adjust results, control the view, and back. Follow-ups build
+   on a map context the client sends: "which is closest?" → "what's around it?" → "only parking" → "back".
+   A strip above the input shows and edits that context (**Around** · **Within** · **Showing**). Result cards and place
+   pins are clickable and become the new "it". Suggested next questions appear under each answer.
    Keep going until the matches look right; analysis receives the final effective intent and stores the conversation separately.
 4. **Select a building.** Readable key facts plus the complete Vexcel JSON, and a neighborhood view:
    Vexcel neighbor parcels plus OpenStreetMap places within an adjustable radius. The slow Overpass

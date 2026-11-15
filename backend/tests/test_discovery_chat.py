@@ -9,7 +9,7 @@ os.environ.setdefault('DATABASE_PATH', '/tmp/turnkey-test.db')
 
 import pytest
 import main
-from schemas import Intent, RefineRequest
+from schemas import Intent, MapContext, RefineRequest
 from services import external, refine
 
 
@@ -120,3 +120,67 @@ def test_visual_service_access_error_is_not_a_chat_crash(places, monkeypatch):
     out = asyncio.run(main.refine_search(request('show buildings with patios')))
     assert out.action == 'answer' and out.map_action is None
     assert 'unavailable' in out.reply
+
+
+# ---------------------------------------------------------------- interaction types and follow-ups
+
+SHOWN = [
+    {'id': 'far', 'name': 'Far Cafe', 'group': 'food_drink', 'category': 'amenity=cafe', 'lat': 29.762, 'lon': -95.37},
+    {'id': 'near', 'name': 'Near Cafe', 'group': 'food_drink', 'category': 'amenity=cafe', 'lat': 29.7601, 'lon': -95.37},
+]
+
+
+def follow_up(message, **ctx):
+    req = request(message)
+    req.map_context = MapContext(**{'places': SHOWN, **ctx})
+    return asyncio.run(main.refine_search(req))
+
+
+def test_nearby_reports_interaction_and_follow_up_suggestions(places):
+    out = asyncio.run(main.refine_search(request('show cafes around here')))
+    assert out.map_action['interaction'] == 'find_nearby'
+    assert out.map_action['suggestions'] and 'Which is closest?' in out.map_action['suggestions']
+
+
+def test_which_is_closest_resolves_against_shown_places_and_anchors_it(places, monkeypatch):
+    async def no_lookup(*args):
+        raise AssertionError('closest-of-shown must not refetch places')
+    monkeypatch.setattr(external, 'nearby_places', no_lookup)
+    out = follow_up('which is closest?')
+    assert out.map_action['interaction'] == 'find_nearest'
+    assert out.map_action['places'][0]['id'] == 'near'
+    assert out.map_action['anchor']['id'] == 'near'
+
+
+def test_ordinal_reference_inspects_that_place(places):
+    out = follow_up('tell me about the second one')
+    assert out.map_action['interaction'] == 'inspect'
+    assert out.map_action['anchor']['id'] == 'near'
+    assert out.map_action['focus'] == {'lat': 29.7601, 'lon': -95.37}
+
+
+def test_whats_around_it_explores_from_the_anchor(places, monkeypatch):
+    calls = []
+    async def nearby(lat, lon):
+        calls.append((lat, lon))
+        return [{'id': 'parking', 'name': 'Garage', 'group': 'parking', 'category': 'amenity=parking', 'lat': 29.7602, 'lon': -95.37}]
+    monkeypatch.setattr(external, 'nearby_places', nearby)
+    out = follow_up("what's around it?", anchor={'kind': 'place', 'id': 'near', 'label': 'Near Cafe', 'lat': 29.7601, 'lon': -95.37})
+    assert calls == [(29.7601, -95.37)]
+    assert out.map_action['interaction'] == 'explore_surroundings'
+    assert out.map_action['summary'][0]['group'] == 'parking'
+    assert 'Near Cafe' in out.reply
+
+
+def test_radius_adjustment_filters_results(places):
+    out = follow_up('only parking within 50 m')
+    assert out.map_action['interaction'] == 'adjust_results'
+    assert out.map_action['radius_m'] == 50 and [p['id'] for p in out.map_action['places']] == ['parking']
+    wider = follow_up('look farther', radius_m=100)
+    assert wider.map_action['radius_m'] == 200
+
+
+@pytest.mark.parametrize('message', ['back', 'go back to the cafes', 'undo'])
+def test_back_is_a_client_side_restore(places, message):
+    out = follow_up(message)
+    assert out.map_action == {'kind': 'back', 'interaction': 'back'}

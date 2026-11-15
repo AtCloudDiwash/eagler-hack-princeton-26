@@ -94,6 +94,23 @@ class MapCenter(BaseModel):
     lon: float = Field(ge=-180, le=180)
 
 
+class MapAnchor(BaseModel):
+    """What follow-up questions are about ("around it", "near there"): a clicked place, an area or the map view."""
+    kind: Literal["place", "area", "view"] = "place"
+    id: str | None = None
+    label: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class MapContext(BaseModel):
+    """The map's current conversational state, so follow-ups ("which is closest?", "the second one") resolve."""
+    anchor: MapAnchor | None = None
+    radius_m: int | None = Field(default=None, ge=50, le=1500)  # None: everything the place data covers
+    interaction: str | None = None  # the previous interaction type
+    places: list[dict] = []  # places currently shown, in display order (id, name, group, category, lat, lon)
+
+
 class RefineRequest(BaseModel):
     """A follow-up message on the current search ("make it 60 seats", "which ones have parking?")."""
     intent: Intent  # the current search
@@ -102,6 +119,7 @@ class RefineRequest(BaseModel):
     center: MapCenter | None = None
     history: list[dict] = []  # earlier turns: [{"role": "user"|"agent", "text": ...}]
     matches: list[dict] = []  # the current top matches, summarized by the client (lets the agent answer questions)
+    map_context: MapContext | None = None
 
 
 class RefineResponse(BaseModel):

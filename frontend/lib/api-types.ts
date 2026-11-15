@@ -164,11 +164,40 @@ export type SearchResponse = {
 };
 
 /** One turn of the refine-as-you-go conversation on the discovery page. */
-export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[]; failed?: boolean };
+export type ChatTurn = {
+  role: "user" | "agent";
+  text: string;
+  changes?: string[];
+  failed?: boolean;
+  interaction?: MapInteraction;
+  places?: Place[]; // result cards for map answers
+  suggestions?: string[]; // follow-up questions the user can tap
+};
+
+/** How a map question was handled; each type has one predictable response (backend services/discovery_chat). */
+export type MapInteraction =
+  | "find_nearby" | "find_nearest" | "find_by_description" | "explore_surroundings"
+  | "inspect" | "adjust_results" | "control_view" | "back";
+
+/** What "it", "there" and "around here" refer to in a follow-up: a clicked/found place. */
+export type MapAnchor = { kind: "place" | "area" | "view"; id?: string | null; label: string; lat: number; lon: number };
+
+/** The map's conversational state sent with every follow-up. */
+export type MapContext = {
+  anchor?: MapAnchor | null;
+  radius_m?: number | null;
+  interaction?: MapInteraction | null;
+  places?: Pick<Place, "id" | "name" | "group" | "category" | "lat" | "lon">[];
+};
 
 /** POST /api/search/refine: a follow-up either changes the search (re-run, new results) or is answered. */
 export type MapAction = {
-  kind: "places" | "areas" | "focus" | "zoom" | "layer" | "tilt" | "fit" | "clear";
+  kind: "places" | "areas" | "focus" | "zoom" | "layer" | "tilt" | "fit" | "clear" | "back" | "radius";
+  interaction?: MapInteraction | null;
+  anchor?: MapAnchor | null;
+  radius_m?: number | null;
+  suggestions?: string[];
+  summary?: { group: string; label: string; count: number }[];
   places?: Place[];
   groups?: string[];
   areas?: GeoJSON.FeatureCollection;
