@@ -76,7 +76,7 @@ def _detail(prop: dict, raw: dict | None, intent=None) -> dict:
 
     tiles = fit_summary.tiles(shown, raw, intent) if intent else building_facts.highlights(shown, raw)
     return {**shown, "key_facts": facts, "highlights": tiles, "raw": raw, "imagery": vexcel.imagery_meta(raw), "matterport": matterport.link_info(shown),
-            "costar": costar.summarize(p) if p else None}
+            "costar": costar.summarize(p, selected_space=shown.get("best_space")) if p else None}
 
 
 async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:

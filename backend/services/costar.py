@@ -143,15 +143,21 @@ def _available_spaces(p: dict) -> list[dict]:
     ]
 
 
-def summarize(p: dict, need_min: int | None = None, need_max: int | None = None) -> dict:
+def summarize(p: dict, need_min: int | None = None, need_max: int | None = None, *, selected_space: dict | None = None) -> dict:
     """Readable leasing summary; with a size range, the spaces that fit it."""
     spaces = []
     for l in p["lease_listings"]:
         for s in l["spaces"]:
             sq = s.get("sqft_max") or s.get("sqft_min")
             spaces.append({**s, "sqft": sq, "rent_per_sqft_yr": _yearly_rate(s), "listing_id": l["listing_id"]})
-    spaces.sort(key=lambda s: s["sqft"] or 0)
-    total_avail = sum(s["sqft"] or 0 for s in spaces if not s["lease_pending"]) or None
+    def selected(space: dict) -> bool:
+        return bool(selected_space) and all(space.get(k) == selected_space.get(k) for k in ("listing_id", "suite", "floor"))
+
+    # Carry the resolved suite's proposed area into the leasing list, and keep
+    # it visible even when the building has more than the displayed 20 spaces.
+    spaces = [{**space, **selected_space} if selected(space) else space for space in spaces]
+    spaces.sort(key=lambda space: (not selected(space), space["sqft"] or 0))
+    total_avail = sum(s.get("sqft_max") or s["sqft"] or 0 for s in spaces if not s["lease_pending"]) or None
     fits = [s for s in spaces if s["sqft"] and need_min and need_max and (s.get("sqft_min") or s["sqft"]) <= need_max and s["sqft"] >= need_min and not s["lease_pending"]]
     rents = [s["rent_per_sqft_yr"] for s in spaces if s["rent_per_sqft_yr"]]
     return {
