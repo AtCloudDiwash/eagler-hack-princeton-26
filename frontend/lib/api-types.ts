@@ -64,7 +64,16 @@ export type SpaceProgram = {
   business_type: string;
   business_label: string;
   acknowledged: { label: string; value: string; source: "stated" | "derived" | "default" }[];
-  size: { target_sqft: number; min_sqft: number; max_sqft: number; basis: string[] };
+  size: {
+    target_sqft: number;
+    min_sqft: number;
+    max_sqft: number;
+    basis: string[];
+    concept?: string | null; // e.g. coffee_shop, full_service, yoga_studio
+    concept_label?: string;
+    components?: { label: string; sqft: number }[];
+    source?: "stated" | "derived" | "default";
+  };
   occupancy: { counts: Record<string, number>; group: string; group_label: string; occupant_load: number; area_based_load: number; people_stated: number; basis: string[] };
   code: { id: string; rule: string; value: string; detail: string; citation: string | null }[];
   building: { suitable_types: string[]; acceptable_types: string[]; ground_floor: "required" | "preferred" | "any"; min_ceiling_ft: number; ceiling_reason: string; buildout_months: [number, number] };
@@ -94,6 +103,7 @@ export type Candidate = {
   stories_est: number | null;
   match_score: number; // 0-100, deterministic pre-screen (NOT the agent analysis)
   match_reasons: string[];
+  distance_m?: number | null; // from the searched place
   source: "vexcel" | "osm" | "demo" | "costar";
   address: string | null;
   // CoStar (sponsor kit): leasing figures the aerial data can't measure
@@ -104,6 +114,7 @@ export type Candidate = {
   available_sqft?: number | null; // spaces on the market (not lease-pending)
   space_count?: number;
   best_space?: CostarSpace | null; // listed suite closest to the user's size
+  closest_space_sqft?: number | null; // no suite in range: the listed space nearest the user's size
   asking_rent_per_sqft_yr?: [number, number] | null;
 };
 
@@ -111,6 +122,7 @@ export type CostarSpace = {
   suite: string | null;
   floor: string | null;
   sqft: number | null;
+  sqft_min?: number | null; // divisible listing: smallest part offered
   rent_per_sqft_yr: number | null; // asking, normalised to $/sq ft/yr
   service: string | null; // TripleNet, FullService, ...
   use: string | null;

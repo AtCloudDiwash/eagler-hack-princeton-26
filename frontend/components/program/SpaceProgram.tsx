@@ -57,7 +57,12 @@ export function ProgramSummary({ program, compact = false }: { program: SpacePro
   return (
     <div className="space-y-2.5">
       <div className="grid grid-cols-2 gap-1.5">
-        <Fact icon={<Ruler size={12} />} label="Space" value={`${fmtNum(program.size.min_sqft)}–${fmtNum(program.size.max_sqft)} sq ft`} hint={program.size.basis.join("\n")} />
+        <Fact
+          icon={<Ruler size={12} />}
+          label={program.size.concept_label ? `Space · ${program.size.concept_label}` : "Space"}
+          value={`${fmtNum(program.size.min_sqft)}–${fmtNum(program.size.max_sqft)} sq ft`}
+          hint={program.size.basis.join("\n")}
+        />
         <Fact icon={<Users size={12} />} label="Occupancy" value={`~${occ.occupant_load} people · Group ${occ.group}`} hint={occ.basis.join("\n")} />
         {exits && <Fact icon={<DoorOpen size={12} />} label="Exits" value={exits.value} hint={exits.detail} />}
         {rest && <Fact icon={<Droplets size={12} />} label="Restrooms" value={rest.value.split(",")[0]} hint={rest.detail} />}
@@ -78,6 +83,20 @@ export function ProgramSummary({ program, compact = false }: { program: SpacePro
         </p>
       )}
       <Collapsible title={<span className="text-[11px]">How we worked this out</span>}>
+        {program.size.components && program.size.components.length > 1 && (
+          <dl className="mb-2 space-y-0.5 text-[11px] text-slate-400">
+            {program.size.components.map((c) => (
+              <div key={c.label} className="flex justify-between gap-3">
+                <dt className="truncate">{c.label}</dt>
+                <dd className="shrink-0 font-mono text-slate-300">{fmtNum(c.sqft)} sq ft</dd>
+              </div>
+            ))}
+            <div className="flex justify-between gap-3 border-t border-white/10 pt-0.5 text-slate-200">
+              <dt>Typical size</dt>
+              <dd className="shrink-0 font-mono">{fmtNum(program.size.target_sqft)} sq ft</dd>
+            </div>
+          </dl>
+        )}
         <ul className="space-y-1 text-[11px] leading-snug text-slate-400">
           {program.size.basis.map((b) => (
             <li key={b}>• {b}</li>

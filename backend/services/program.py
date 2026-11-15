@@ -22,6 +22,7 @@ from datetime import date
 
 from config import business, needs_registry, occupancy_codes
 from schemas import Intent, Need
+from services import sizing
 from services.vexcel import primary_structure, stories_estimate
 
 DISCLAIMER = (
@@ -141,33 +142,9 @@ def _fixtures(occupant_load: int, group: dict) -> dict:
 
 
 def target_size(intent: Intent) -> tuple[int, int, int, list[str]]:
-    """(target, min, max sq ft, explanation lines)."""
-    cfg = business(intent.business_type)
-    sizing, drivers = cfg["sizing"], cfg["program"]["drivers"]
-    counts = {**intent.occupancy, **({"seats": intent.seats} if intent.seats and "seats" not in intent.occupancy else {})}
-    basis: list[str] = []
-    driven = None
-    for d in drivers:
-        if counts.get(d["field"]):
-            n = counts[d["field"]]
-            driven = d["base_sqft"] + n * d["sqft_each"]
-            line = f"{n} {d['label']} × {d['sqft_each']} sq ft" + (f" + {d['base_sqft']:,} sq ft support space" if d["base_sqft"] else "") + f" ≈ {driven:,} sq ft ({d['why']})"
-            basis.append(line)
-            break
-    if intent.sqft:
-        target = intent.sqft
-        basis.insert(0, f"{intent.sqft:,} sq ft requested")
-        if driven and abs(driven - intent.sqft) / intent.sqft > 0.25:
-            basis.append(f"Note: your headcount suggests ~{driven:,} sq ft, {'more' if driven > intent.sqft else 'less'} than the {intent.sqft:,} sq ft requested.")
-    elif driven:
-        target = driven
-    elif sizing.get("default_seats") and sizing.get("sqft_per_seat"):
-        target = sizing["default_seats"] * sizing["sqft_per_seat"]
-        basis.append(f"No size given: typical {sizing['default_seats']}-seat {cfg['label'].lower()} ({sizing['sqft_per_seat']} sq ft/seat)")
-    else:
-        target = sizing.get("default_sqft", 2500)
-        basis.append(f"No size given: typical {cfg['label'].lower()} (~{target:,} sq ft)")
-    return int(target), int(round(target * 0.85, -1)), int(round(target * 1.3, -1)), basis
+    """(target, min, max sq ft, explanation lines): services/sizing.py's estimate."""
+    est = sizing.estimate(intent)
+    return est["target_sqft"], est["min_sqft"], est["max_sqft"], est["basis"]
 
 
 def build(intent: Intent) -> dict:
@@ -175,7 +152,8 @@ def build(intent: Intent) -> dict:
     prog = cfg["program"]
     codes = occupancy_codes()
     cites = codes["_citations"]
-    target, lo, hi, size_basis = target_size(intent)
+    size = sizing.estimate(intent)
+    target = size["target_sqft"]
     counts = {**intent.occupancy, **({"seats": intent.seats} if intent.seats and "seats" not in intent.occupancy else {})}
 
     # occupant load: area method (IBC Table 1004.5), never below the people the user expects
@@ -236,7 +214,9 @@ def build(intent: Intent) -> dict:
     labels = {d["field"]: d["label"] for d in prog["drivers"]} | {"staff": "staff", "seats": "seats"}
     for f, n in counts.items():
         acknowledged.append({"label": f"{n} {labels.get(f, f)}", "value": f, "source": "stated"})
-    acknowledged.append({"label": f"~{target:,} sq ft", "value": "size", "source": "stated" if intent.sqft else "derived" if counts else "default"})
+    acknowledged.append({"label": f"~{target:,} sq ft", "value": "size", "source": size["source"]})
+    if size.get("concept") and intent.concept:
+        acknowledged.insert(1, {"label": size["concept_label"].capitalize(), "value": "concept", "source": "stated"})
     acknowledged.append({"label": f"~{occupant_load} occupants · Group {group_key}", "value": "occupancy", "source": "derived"})
     if intent.open_within_months:
         acknowledged.append({"label": f"Open in ~{intent.open_within_months} mo", "value": "timeline", "source": "stated"})
@@ -247,7 +227,7 @@ def build(intent: Intent) -> dict:
         "business_type": intent.business_type,
         "business_label": cfg["label"],
         "acknowledged": acknowledged,
-        "size": {"target_sqft": target, "min_sqft": lo, "max_sqft": hi, "basis": size_basis},
+        "size": size,
         "occupancy": {"counts": counts, "group": group_key, "group_label": group["label"], "occupant_load": occupant_load, "area_based_load": area_load, "people_stated": people, "basis": load_basis},
         "code": code,
         "building": {
@@ -289,6 +269,7 @@ def facts_from(candidate: dict, feature: dict | None, building: dict | None = No
         "space_count": candidate.get("space_count") or 0,
         "available_sqft": candidate.get("available_sqft"),
         "best_space": candidate.get("best_space"),
+        "closest_space_sqft": candidate.get("closest_space_sqft"),
         "ceiling_height_ft": fact("ceiling_height_ft"),
         "sprinklers": fact("sprinklers"),
         "parking_spaces": fact("parking_spaces"),
@@ -303,21 +284,10 @@ def site_checks(program: dict, facts: dict) -> list[dict]:
     fp, stories, btype = facts.get("footprint_sqft"), facts.get("stories"), facts.get("building_type")
 
     best = facts.get("best_space")
-    if best:
-        where = ('Suite ' + str(best['suite'])) if best.get('suite') else 'a space'
-        if size["min_sqft"] <= best["sqft"] <= size["max_sqft"]:
-            out.append({"id": "size", "label": "Size", "status": "pass", "detail": f"CoStar lists {where} with {best['sqft']:,.0f} rentable sq ft, inside your {size['min_sqft']:,}-{size['max_sqft']:,} sq ft range"})
-        else:
-            out.append({"id": "size", "label": "Size", "status": "risk", "detail": f"The closest listed space ({where}, {best['sqft']:,.0f} rentable sq ft) is outside your {size['min_sqft']:,}-{size['max_sqft']:,} sq ft range; ask whether it can be " + ("divided" if best["sqft"] > size["max_sqft"] else "expanded or combined")})
-    elif facts.get("space_count"):
-        out.append({"id": "size", "label": "Size", "status": "risk", "detail": f"CoStar lists {facts['space_count']} space(s) ({facts.get('available_sqft') or 0:,.0f} sq ft in total), none in your {size['min_sqft']:,}-{size['max_sqft']:,} sq ft range; ask whether spaces can be combined or divided"})
-    elif fp:
-        if fp >= size["min_sqft"]:
-            out.append({"id": "size", "label": "Size", "status": "pass", "detail": f"Building footprint {fp:,.0f} sq ft (one floor; no rentable figure) covers the {size['min_sqft']:,}-{size['max_sqft']:,} sq ft you need" + (" (you would lease part of it)" if fp > size["max_sqft"] * 2 else "")})
-        elif stories and stories > 1 and fp * stories >= size["min_sqft"]:
-            out.append({"id": "size", "label": "Size", "status": "risk", "detail": f"Only {fp:,.0f} sq ft per floor: your ~{size['target_sqft']:,} sq ft would span {math.ceil(size['target_sqft'] / fp)} floors"})
-        else:
-            out.append({"id": "size", "label": "Size", "status": "risk", "detail": f"{fp:,.0f} sq ft is below the ~{size['min_sqft']:,} sq ft minimum for your program"})
+    graded = sizing.fit(size, best_space=best, closest_space_sqft=facts.get("closest_space_sqft"), space_count=facts.get("space_count") or 0,
+                        available_sqft=facts.get("available_sqft"), footprint_sqft=fp, stories=stories, ground_floor_required=bld["ground_floor"] == "required")
+    if graded:
+        out.append({"id": "size", "label": "Size", "status": graded.check, "detail": graded.reason, "score": round(graded.score, 2)})
     else:
         out.append({"id": "size", "label": "Size", "status": "unknown", "detail": "Building area unknown"})
 

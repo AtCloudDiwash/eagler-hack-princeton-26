@@ -36,7 +36,8 @@ def test_restaurant_request_is_fully_acknowledged():
     assert i.occupancy == {"seats": 60, "staff": 10} and i.location_text == "Houston Heights"
     assert {(n.id, n.priority) for n in i.needs} == {("parking", "must"), ("patio", "nice")}
     p = program.build(i)
-    assert p["size"]["target_sqft"] == 2100 and target_sqft(i)[0] == 2100
+    # full-service concept: (60 seats x 18 sq ft + 150 sq ft host/waiting) grossed up for 38% back of house
+    assert p["size"]["concept"] == "full_service" and p["size"]["target_sqft"] == 1980 and target_sqft(i)[0] == 1980
     assert p["occupancy"]["group"] == "A-2" and p["occupancy"]["occupant_load"] >= 70  # 60 seats + 10 staff at least
     assert _code(p, "exits")["value"] == "2 exits"
     assert p["timeline"]["status"] == "tight"  # 4 months vs 4-8 month restaurant build-out
@@ -64,7 +65,7 @@ def test_business_specific_sizing_drivers():
 def test_stated_sqft_wins_but_conflict_is_noted():
     i = parse_rules("2,000 sq ft restaurant with 100 seats in Houston")
     target, _, _, basis = program.target_size(i)
-    assert target == 2000 and any("suggests ~3,500" in b for b in basis)
+    assert target == 2000 and any("suggests ~3,150" in b for b in basis)
 
 
 def test_restroom_fixtures_follow_ipc_tiers():
