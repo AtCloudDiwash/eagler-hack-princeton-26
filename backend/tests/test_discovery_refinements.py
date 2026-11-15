@@ -62,3 +62,40 @@ def test_only_ground_floor_is_a_hard_need_in_rules():
     for message in ("only ground floor", "ground floor only"):
         need = next(n for n in parse_rules(message).needs if n.id == "ground_floor")
         assert need.priority == "must"
+
+
+def test_available_properties_rank_first_before_result_limit(monkeypatch):
+    from config import settings
+
+    async def locate(text, notes):
+        return {"lat": 40.0, "lon": -74.0, "name": "Town"}
+
+    async def buildings(lat, lon):
+        unknown = [{"id": f"unknown-{i}", "lat": lat, "lon": lon, "building_type": "commercial", "source": "osm"} for i in range(27)]
+        return [
+            *unknown,
+            {"id": "pending", "lat": lat, "lon": lon, "building_type": "commercial", "source": "osm", "space_count": 2},
+            {"id": "available-far", "lat": lat + .002, "lon": lon, "building_type": "commercial", "source": "osm",
+             "best_space": {"sqft": 1800}, "space_count": 1},
+            {"id": "available-near", "lat": lat, "lon": lon, "building_type": "commercial", "source": "osm",
+             "best_space": {"sqft": 1800}, "space_count": 1},
+            {"id": "available-best-fit", "lat": lat + .003, "lon": lon, "building_type": "commercial", "source": "osm",
+             "best_space": {"sqft": 1800}, "space_count": 1},
+        ]
+
+    def score(candidate, *args):
+        return (20 if candidate["id"] == "available-best-fit" else 10 if candidate.get("best_space") else 99), []
+
+    monkeypatch.setattr(discovery, "locate", locate)
+    monkeypatch.setattr(discovery, "_osm_buildings", buildings)
+    monkeypatch.setattr(discovery, "attach_costar", lambda *args: set())
+    monkeypatch.setattr(discovery, "prescreen", score)
+    monkeypatch.setattr(discovery.costar, "available", lambda: False)
+    monkeypatch.setattr(discovery.db, "get_property", lambda *args: None)
+    monkeypatch.setattr(discovery.db, "save_property", lambda *args: None)
+    monkeypatch.setattr(settings, "vexcel_api_key", "")
+
+    result = asyncio.run(discovery.search("", Intent(location_text="Town")))
+    assert len(result.candidates) == 25
+    assert [c.id for c in result.candidates[:3]] == ["available-best-fit", "available-near", "available-far"]
+    assert all(c.best_space is None for c in result.candidates[3:])

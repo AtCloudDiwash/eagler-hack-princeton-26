@@ -390,13 +390,10 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
         scored.append(Candidate(**c))
     if ground_only:
         notes.append(f"Ground-floor only: excluded {unknown_ground} building(s) with unconfirmed floor; only confirmed street-level matches are shown.")
-    # By fit score (a listed suite in range already scores its size and evidence in full), then nearest first.
-    # Keep some other listed buildings in the list too (spaces can often be combined/divided).
-    scored.sort(key=lambda c: (-c.match_score, c.distance_m or 0))
+    # A selected vacancy comes from non-pending CoStar spaces. space_count also includes
+    # pending leases, so it must not qualify a property for the available-first group.
+    scored.sort(key=lambda c: (not bool(c.best_space), -c.match_score, c.distance_m or 0))
     top = scored[:25]
-    extra_listed = [c for c in scored[25:] if c.space_count][: max(0, 8 - sum(1 for c in top if c.space_count))]
-    if extra_listed:
-        top = top[: 25 - len(extra_listed)] + extra_listed
     from services.scan_identity import default_scan  # no network: picks among CoStar's scans by caption only
 
     for c in top:

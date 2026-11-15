@@ -56,7 +56,7 @@ function Card({ c, i, hovered, onHover, onSelect, compact = false }: { c: Candid
           <span className="truncate text-[13px] font-medium text-slate-100">{candidateTitle(c)}</span>
         </div>
         <div className="truncate text-[11px] text-slate-400">
-          {c.space_count ? <span className="mr-1 rounded bg-emerald-400/15 px-1 text-[10px] font-semibold text-emerald-200">For lease</span> : null}
+          {c.best_space ? <span className="mr-1 rounded bg-emerald-400/15 px-1 text-[10px] font-semibold text-emerald-200">For lease</span> : null}
           {[candidateSize(c), candidateMeta(c)].filter(Boolean).join(" · ")}
         </div>
       </div>
@@ -93,7 +93,7 @@ export default function CandidateRail({ result, hoveredId, onHover, onSelect }: 
               <Building2 size={15} className="text-teal-300" />
               {cands.length} matching buildings
             </h2>
-            <span className="text-[10px] text-slate-500">ranked by fit</span>
+            <span className="text-[10px] text-slate-500">listed spaces first</span>
           </div>
           <IntentChips result={result} />
         </div>

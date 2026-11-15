@@ -119,3 +119,15 @@ def test_selection_survives_another_search_and_drives_panel(monkeypatch):
     assert "3,400 sq ft" in next(t for t in tiles if t["id"] == "monthly")["hint"]
     with pytest.raises(ValueError, match="no longer available"):
         costar.selected_fields(stored, intent, {**chosen, "listing_id": 999})
+
+
+def test_pending_leases_do_not_supply_an_available_space():
+    from copy import deepcopy
+
+    rec = deepcopy(PROPS[0])
+    for listing in rec["lease_listings"]:
+        for space in listing["spaces"]:
+            space["lease_pending"] = True
+    fields = costar.candidate_fields(rec, 1500, 4000, 1800)
+    assert fields["space_count"] == 2
+    assert fields["best_space"] is None
