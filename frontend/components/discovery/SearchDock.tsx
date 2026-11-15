@@ -13,6 +13,15 @@ const EXAMPLES: { q: string; icon: ReactNode }[] = [
   { q: "Office for a 12-person startup in Houston", icon: <Briefcase size={14} /> },
 ];
 
+/** Follow-ups offered once there are results: keep talking until the matches look right. */
+const REFINE_EXAMPLES: { q: string; icon: ReactNode }[] = [
+  { q: "Only spaces on the ground floor", icon: <Sparkles size={14} /> },
+  { q: "My budget is $8k a month", icon: <Sparkles size={14} /> },
+  { q: "Make it bigger, around 2,500 sq ft", icon: <Sparkles size={14} /> },
+  { q: "It must have parking", icon: <Sparkles size={14} /> },
+  { q: "Which of these have a space listed for lease?", icon: <Sparkles size={14} /> },
+];
+
 const RECENT_KEY = "turnkey:recent";
 export function loadRecents(): string[] {
   try {
@@ -37,10 +46,13 @@ type Props = {
   loading: boolean;
   /** Open the suggestions on first load so new users see what to type. */
   idle: boolean;
+  /** "refine": there are results; the bar talks to the agent to change them (no recents, follow-up examples). */
+  mode?: "search" | "refine";
 };
 
 /** Search bar docked at the bottom center; suggestions rise above it. */
-export default function SearchDock({ query, setQuery, onSearch, loading, idle }: Props) {
+export default function SearchDock({ query, setQuery, onSearch, loading, idle, mode = "search" }: Props) {
+  const refining = mode === "refine";
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(-1);
   const [recents, setRecents] = useState<string[]>([]);
@@ -51,11 +63,12 @@ export default function SearchDock({ query, setQuery, onSearch, loading, idle }:
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (refining) return REFINE_EXAMPLES.filter((e) => !q || e.q.toLowerCase().includes(q)).map((e) => ({ ...e, recent: false }));
     const rec = recents.filter((r) => !q || r.toLowerCase().includes(q)).map((r) => ({ q: r, icon: <Clock size={14} />, recent: true }));
     const ex = EXAMPLES.filter((e) => !q || e.q.toLowerCase().includes(q) || q.length < 3).map((e) => ({ ...e, recent: false }));
     const seen = new Set<string>();
     return [...rec, ...ex].filter((i) => (seen.has(i.q) ? false : (seen.add(i.q), true))).slice(0, 6);
-  }, [query, recents]);
+  }, [query, recents, refining]);
 
   const open = !loading && (focused || (idle && !query)) && items.length > 0;
 
@@ -74,7 +87,7 @@ export default function SearchDock({ query, setQuery, onSearch, loading, idle }:
     setFocused(false);
     setActive(-1);
     inputRef.current?.blur();
-    pushRecent(v);
+    if (!refining) pushRecent(v);
     onSearch(v);
   }
 
@@ -107,7 +120,7 @@ export default function SearchDock({ query, setQuery, onSearch, loading, idle }:
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="glass-strong absolute inset-x-0 bottom-full mb-3 overflow-hidden rounded-2xl p-1.5"
           >
-            <li className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{query ? "Suggestions" : "Try one of these"}</li>
+            <li className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{refining ? "Refine or ask" : query ? "Suggestions" : "Try one of these"}</li>
             {items.map((it, i) => (
               <motion.li
                 key={it.q}
@@ -154,8 +167,8 @@ export default function SearchDock({ query, setQuery, onSearch, loading, idle }:
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKey}
-          placeholder="What do you want to open, and where?"
-          aria-label="Describe your business and location"
+          placeholder={refining ? "Refine: bigger, cheaper, ground floor, near transit… or ask about the matches" : "What do you want to open, and where?"}
+          aria-label={refining ? "Refine the search or ask about the matches" : "Describe your business and location"}
           className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-slate-50 placeholder:text-slate-500 focus:outline-none"
         />
         {query && !loading && (

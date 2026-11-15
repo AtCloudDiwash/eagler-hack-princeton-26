@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { BusinessTypeInfo, Candidate, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
+import type { BusinessTypeInfo, Candidate, ChatTurn, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtFootprint } from "@/lib/format";
 import { heightFor, type LngLat } from "@/lib/geo";
 import { useMedia } from "@/lib/useMedia";
@@ -18,6 +18,7 @@ import ScanOverlay from "@/components/discovery/ScanOverlay";
 import CandidateRail, { candidateTitle } from "@/components/discovery/CandidateRail";
 import PropertySheet from "@/components/discovery/PropertySheet";
 import HistoryDrawer from "@/components/discovery/HistoryDrawer";
+import RefineThread from "@/components/discovery/RefineThread";
 
 const TurnkeyMap = dynamic(() => import("@/components/map/TurnkeyMap"), {
   ssr: false,
@@ -25,12 +26,34 @@ const TurnkeyMap = dynamic(() => import("@/components/map/TurnkeyMap"), {
 });
 
 const SESSION_KEY = "turnkey:discovery";
-type Saved = { query: string; result: SearchResponse; selectedId: string | null; radius: number | null };
+type Saved = { query: string; result: SearchResponse; selectedId: string | null; radius: number | null; turns?: ChatTurn[] };
+
+/** What the agent says after a search: what it found and that the user can keep refining. */
+function foundMessage(r: SearchResponse): string {
+  const size = r.program ? ` (~${r.program.size.target_sqft.toLocaleString()} sq ft)` : "";
+  const where = r.location?.name ? ` near ${r.location.name.split(",")[0]}` : "";
+  const listed = r.candidates.filter((c) => c.best_space).length;
+  if (!r.candidates.length) return `I couldn't find buildings for a ${r.intent.business_label.toLowerCase()}${where}. Try another area or a different size.`;
+  return `Found ${r.candidates.length} buildings for a ${r.intent.business_label.toLowerCase()}${size}${where}` + (listed ? `, ${listed} with a space listed in your size range` : "") +
+    ". Tell me what to change (size, budget, area, must-haves) or ask about them. When one looks right, open it and analyze.";
+}
+
+/** The matches the agent can talk about (it never sees more than this). */
+function matchSummary(r: SearchResponse): Record<string, unknown>[] {
+  return r.candidates.slice(0, 12).map((c) => ({
+    title: candidateTitle(c), fit: c.match_score, building_type: c.building_type, stories: c.stories_est,
+    listed_space: c.best_space ? { suite: c.best_space.suite, sqft: c.best_space.sqft, floor: c.best_space.floor, rent_per_sqft_yr: c.best_space.rent_per_sqft_yr } : null,
+    spaces_on_market: c.space_count, reasons: c.match_reasons.slice(0, 3),
+  }));
+}
 
 export default function DiscoveryPage() {
   const router = useRouter();
   const desktop = useMedia("(min-width: 640px)");
   const [query, setQuery] = useState("");
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [refineText, setRefineText] = useState("");
+  const [refining, setRefining] = useState(false);
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -92,6 +115,7 @@ export default function DiscoveryPage() {
       const saved = JSON.parse(raw) as Saved;
       setQuery(saved.query);
       setResult(saved.result);
+      setTurns(saved.turns ?? [{ role: "user", text: saved.query }, { role: "agent", text: foundMessage(saved.result) }]);
       setFitKey(`restore-${Date.now()}`);
       const c = saved.result.candidates.find((x) => x.id === saved.selectedId);
       if (c) {
@@ -106,11 +130,11 @@ export default function DiscoveryPage() {
   useEffect(() => {
     if (!result) return;
     try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ query, result, selectedId: selected?.id ?? null, radius } satisfies Saved));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ query, result, selectedId: selected?.id ?? null, radius, turns } satisfies Saved));
     } catch {
       /* ignore */
     }
-  }, [query, result, selected, radius]);
+  }, [query, result, selected, radius, turns]);
 
   async function runSearch(q: string) {
     searchAbort.current?.abort();
@@ -121,9 +145,11 @@ export default function DiscoveryPage() {
     setSelected(null);
     setDetail(null);
     setNeighborhood(null);
+    setTurns([{ role: "user", text: q }]);
     try {
       const r = await api.search(q, ctrl.signal);
       setResult(r);
+      setTurns([{ role: "user", text: q }, { role: "agent", text: foundMessage(r) }]);
       setFitKey(`${q}-${Date.now()}`);
       setRiseKey(`${q}-${Date.now()}`);
       if (r.candidates.length === 0 && r.location) setFocus({ lat: r.location.lat, lon: r.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
@@ -131,6 +157,42 @@ export default function DiscoveryPage() {
       if ((e as Error).name !== "AbortError") setSearchError((e as Error).message);
     } finally {
       if (searchAbort.current === ctrl) setSearching(false);
+    }
+  }
+
+  /** A follow-up on the current results: the agent changes the search (and it re-runs) or answers a question. */
+  async function runRefine(message: string) {
+    if (!result) return;
+    searchAbort.current?.abort();
+    const ctrl = new AbortController();
+    searchAbort.current = ctrl;
+    const history = turns;
+    setTurns([...history, { role: "user", text: message }]);
+    setRefineText("");
+    setRefining(true);
+    setSearchError(null);
+    try {
+      const r = await api.refine({ intent: result.intent, message, history, matches: matchSummary(result) }, ctrl.signal);
+      const changes = r.changes.length ? r.changes : undefined;
+      if (r.result) {
+        setSelected(null);
+        setDetail(null);
+        setNeighborhood(null);
+        setResult(r.result);
+        setFitKey(`refine-${Date.now()}`);
+        setRiseKey(`refine-${Date.now()}`);
+        const count = ` ${r.result.candidates.length} matches now` + (r.result.candidates.some((c) => c.best_space) ? `, ${r.result.candidates.filter((c) => c.best_space).length} with a listed space.` : ".");
+        setTurns((t) => [...t, { role: "agent", text: `${r.reply}${count}`, changes }]);
+        if (r.result.candidates.length === 0 && r.result.location) setFocus({ lat: r.result.location.lat, lon: r.result.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
+      } else {
+        setTurns((t) => [...t, { role: "agent", text: r.reply, changes }]);
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        setTurns((t) => [...t, { role: "agent", text: `Sorry, that didn't go through (${(e as Error).message}). Try again.` }]);
+      }
+    } finally {
+      if (searchAbort.current === ctrl) setRefining(false);
     }
   }
 
@@ -171,7 +233,10 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
+      // The agents get the whole conversation, so refinements ("ground floor only", "$8k a month") reach them too.
+      const said = turns.filter((t) => t.role === "user").map((t) => t.text);
+      const fullQuery = said.length > 1 ? `${said[0]} (then: ${said.slice(1).join("; ")})` : query;
+      const { id } = await api.startAnalysis({ query: fullQuery, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);
@@ -184,6 +249,9 @@ export default function DiscoveryPage() {
     searchAbort.current?.abort();
     setSearching(false);
     setQuery("");
+    setTurns([]);
+    setRefineText("");
+    setRefining(false);
     setResult(null);
     setSearchError(null);
     setSelected(null);
@@ -406,7 +474,12 @@ export default function DiscoveryPage() {
                   <p className="mt-1 text-sm text-slate-300/80 drop-shadow">AI agents check the building, the neighborhood, the rules and the cost.</p>
                 </motion.div>
               )}
-              <SearchDock query={query} setQuery={setQuery} onSearch={runSearch} loading={searching} idle={!result && !searching} />
+              {result && <RefineThread turns={turns} thinking={refining} onNewSearch={resetAll} />}
+              {result ? (
+                <SearchDock key="refine" mode="refine" query={refineText} setQuery={setRefineText} onSearch={runRefine} loading={refining || searching} idle={false} />
+              ) : (
+                <SearchDock key="search" query={query} setQuery={setQuery} onSearch={runSearch} loading={searching} idle={!searching} />
+              )}
             </div>
           </motion.div>
         )}

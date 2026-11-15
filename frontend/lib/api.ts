@@ -4,9 +4,12 @@ import type {
   AnalysisRequest,
   AnalysisSummary,
   BusinessTypeInfo,
+  ChatTurn,
   Health,
+  Intent,
   Neighborhood,
   PropertyDetail,
+  RefineResponse,
   SearchResponse,
 } from "./api-types";
 
@@ -51,6 +54,9 @@ export const api = {
   businessTypes: () => request<BusinessTypeInfo[]>("/api/business-types"),
   search: (query: string, signal?: AbortSignal) =>
     request<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify({ query }), signal }),
+  /** Apply a follow-up ("make it 60 seats", "which ones have parking?") to the current search. */
+  refine: (body: { intent: Intent; message: string; history: ChatTurn[]; matches: Record<string, unknown>[] }, signal?: AbortSignal) =>
+    request<RefineResponse>("/api/search/refine", { method: "POST", body: JSON.stringify(body), signal }),
   /** With the user's request, the detail's panel tiles describe what this building offers that request. */
   property: (id: string, signal?: AbortSignal, forRequest?: { business_type: string; sqft?: number; budget?: { amount: number; period: string } | null }) => {
     const q = new URLSearchParams();

@@ -58,12 +58,17 @@ which provider served how many calls, and switches appear in the live log. Usage
    (LA + Houston) it falls back to OpenStreetMap footprints and says so. No key → labelled demo mode
    from a recorded Houston sample (licensed data, gitignored; record it once with
    `backend/scripts/record_demo_fixture.py`).
-3. **Select a building.** Readable key facts plus the complete Vexcel JSON, and a neighborhood view:
+3. **Refine in conversation.** Once there are results, the search bar talks to the agent (`POST /api/search/refine`,
+   `services/refine.py`): "make it 60 seats", "only ground floor", "budget $8k a month", "drop parking", "near Rice"
+   change the current search (everything else is kept, the results re-run, and the changes show as chips), while
+   questions about the matches ("which two would you shortlist?") are answered from the current results without a new
+   search. Keep going until the matches look right; the analysis then receives the whole conversation.
+4. **Select a building.** Readable key facts plus the complete Vexcel JSON, and a neighborhood view:
    Vexcel neighbor parcels plus OpenStreetMap places within an adjustable radius. The slow Overpass
    fetch is started for the whole search area at search time and cached in SQLite.
-4. **Analyze.** `POST /api/analyses` stores a job in SQLite and runs `multi_agent_engine.py` in the
+5. **Analyze.** `POST /api/analyses` stores a job in SQLite and runs `multi_agent_engine.py` in the
    background; the UI polls the live event log.
-5. **Dashboard.** Verdict, score, confidence, business-specific metrics, agent reports, evidence and
+6. **Dashboard.** Verdict, score, confidence, business-specific metrics, agent reports, evidence and
    costs, plus a comparison view across analyses.
 
 ## Agents (`backend/agents/`, LangChain Deep Agents on the Codex CLI)

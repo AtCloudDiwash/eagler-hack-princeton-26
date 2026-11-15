@@ -148,6 +148,17 @@ export type SearchResponse = {
   program: SpaceProgram | null; // what the request implies (shown before any building is chosen)
 };
 
+/** One turn of the refine-as-you-go conversation on the discovery page. */
+export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[] };
+
+/** POST /api/search/refine: a follow-up either changes the search (re-run, new results) or is answered. */
+export type RefineResponse = {
+  action: "refine" | "answer";
+  reply: string;
+  changes: string[]; // what changed in the search ("60 seats", "+ On-site parking (must)", "Budget $8,000 monthly")
+  result: SearchResponse | null; // new results when action === "refine"
+};
+
 export type KeyFact = { group: string; label: string; value: string; note?: string | null };
 
 /** One property-panel tile: a known fact, best first (backend services/building_facts.highlights). */
