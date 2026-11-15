@@ -63,7 +63,9 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
         {/* Compact score bar once the hero scrolls away */}
         <AnimatePresence>
           {!heroVisible && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-white/[0.04]">
+            // Overlay just below the sticky header: it must not change layout height, or the hero re-enters view,
+            // the bar collapses and the page jitters (feedback loop with useInView + scroll anchoring).
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="absolute inset-x-0 top-full border-b border-white/[0.06] bg-ink-950/95 shadow-lg shadow-black/30 backdrop-blur-xl">
               <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2">
                 <ScoreRing value={rec.score} size={34} color={v.color} animateIn={false} />
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${v.bg} ${v.text}`}>{rec.label || v.label}</span>
