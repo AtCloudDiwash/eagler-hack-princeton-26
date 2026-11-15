@@ -7,7 +7,7 @@ const spaceGrotesk = Space_Grotesk({ variable: "--font-space-grotesk", subsets: 
 const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Turnkey Matchmaker",
+  title: "EagleEye",
   description: "Find a building for your business and get an evidence-backed, multi-agent suitability analysis.",
 };
 

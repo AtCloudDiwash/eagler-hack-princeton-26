@@ -1,4 +1,4 @@
-# Turnkey Matchmaker: backend (FastAPI + agents) + frontend (Next.js).
+# EagleEye: backend (FastAPI + agents) + frontend (Next.js).
 #
 #   codex login                              # once, on this machine (or use the ChatGPT/Codex app)
 #   cp backend/.env.example backend/.env     # add VEXCEL_API_KEY (optional: OSM-only mode without it)

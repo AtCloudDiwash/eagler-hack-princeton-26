@@ -1,4 +1,6 @@
-# Turnkey Matchmaker
+<img src="assets/brand/logo/eagleeye-logo-dark.png" alt="EagleEye" width="96" />
+
+# EagleEye
 
 Find and vet a commercial building for a specific business. Describe what you want to open, pick a
 building on a live Vexcel aerial map, and a team of local AI agents investigates whether that building
