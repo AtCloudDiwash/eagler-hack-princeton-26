@@ -69,17 +69,25 @@ class ChatClaudeCLI(CLIChatModel):
             cmd += ["--json-schema", json.dumps(schema)]
         return cmd
 
+    NATIVE_TOOL_RETRIES: ClassVar[int] = 2  # Claude retries are ~5-10 s; falling through to local Ollama costs ~30 s per call
+
     def _call_sync(self, prompt: str, schema: dict | None) -> str:
-        try:
-            return super()._call_sync(prompt, schema)
-        except NativeToolAttemptError:
-            return super()._call_sync(prompt + RETRY_NOTE, schema)  # a second failure falls through to the next provider
+        for attempt in range(self.NATIVE_TOOL_RETRIES + 1):
+            try:
+                return super()._call_sync(prompt if attempt == 0 else prompt + RETRY_NOTE, schema)
+            except NativeToolAttemptError:
+                if attempt == self.NATIVE_TOOL_RETRIES:
+                    raise  # falls through to the next provider
+        raise AssertionError("unreachable")
 
     async def _call_async(self, prompt: str, schema: dict | None) -> str:
-        try:
-            return await super()._call_async(prompt, schema)
-        except NativeToolAttemptError:
-            return await super()._call_async(prompt + RETRY_NOTE, schema)
+        for attempt in range(self.NATIVE_TOOL_RETRIES + 1):
+            try:
+                return await super()._call_async(prompt if attempt == 0 else prompt + RETRY_NOTE, schema)
+            except NativeToolAttemptError:
+                if attempt == self.NATIVE_TOOL_RETRIES:
+                    raise
+        raise AssertionError("unreachable")
 
     def _extract(self, rc: int, stdout: str, stderr: str, out_path: str, schema: dict | None) -> str:
         try:

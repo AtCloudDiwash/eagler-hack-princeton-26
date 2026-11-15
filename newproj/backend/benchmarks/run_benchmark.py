@@ -103,6 +103,14 @@ async def run(label: str, only: list[str] | None) -> Path:
     db.conn()
     props = {}
     print("warming caches (not timed)...", flush=True)
+    try:  # newer versions use Census LODES worker data: build its index before timing
+        from services import lodes
+
+        t = time.time()
+        await asyncio.to_thread(lodes.index, "tx")
+        print(f"  LODES index ready ({time.time() - t:.1f}s)", flush=True)
+    except ImportError:
+        pass
     for c in cases:
         props[c["id"]] = await load_property(c["lat"], c["lon"])
         p = props[c["id"]]

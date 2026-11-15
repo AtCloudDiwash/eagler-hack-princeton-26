@@ -272,6 +272,9 @@ async def run_agent(
     if prefetch_calls:
         block = await asyncio.to_thread(prefetch, tools, prefetch_calls)
         budget.limit = budget.used + extra_tool_calls
+        ready = ctx.shared.get(f"prefetched:{agent}")
+        if isinstance(ready, asyncio.Event):
+            ready.set()  # dependents (Cost) can start from this evidence without waiting for the write-up
         if block:
             task = f"{task}\n\n{block}"
     output: AgentOutput | None = None

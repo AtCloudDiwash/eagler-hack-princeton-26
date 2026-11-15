@@ -113,6 +113,7 @@ METRIC_TOOLS: dict[str, tuple[str, ...]] = {
     "accessibility_ada": ("check_accessibility_signals", "list_use_requirements"),
     "occupancy_cost": ("estimate_costs",),
     "conversion_risk": ("estimate_costs",),
+    "flood_risk": ("check_flood_zone",),
 }
 
 
@@ -173,6 +174,15 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
         current = assessed.get("parking_requirement", (None, None))[1]
         if not current or current.status not in allowed:
             override("parking_requirement", {"pass": "strong", "risk": "weak", "unknown": "unknown"}[data["status"]], f"the parking rule computation is '{data['status']}'", [eid])
+
+    # Flood risk is governed by the FEMA zone + verified floodplain rule (agents can be more cautious, not less).
+    for eid, data in _evidence_data(ctx, "check_flood_zone")[-1:]:
+        level = data.get("level") if data["status"] != "unknown" else "unknown"
+        rule_status = {"minimal": "strong", "moderate": "adequate", "sfha": "weak", "unknown": "unknown"}[level]
+        current = assessed.get("flood_risk", (None, None))[1]
+        allowed = {"strong": {"strong", "adequate"}, "adequate": {"adequate", "weak"}, "weak": {"weak"}, "unknown": {"unknown"}}[rule_status]
+        if "flood_risk" in ctx.business["metrics"] and (not current or current.status not in allowed):
+            override("flood_risk", rule_status, f"FEMA puts the site in {data.get('evidence', {}).get('zone') or 'an unmapped'} zone", [eid])
 
     # Cost metrics are computed by the deterministic engine.
     est = _evidence_data(ctx, "estimate_costs")
@@ -352,7 +362,7 @@ def key_reasons(metrics: list[MetricResult]) -> list[dict]:
 def compliance_items(ctx: RunContext) -> list[dict]:
     items: dict[str, dict] = {}
     for e in ctx.evidence.all():
-        if e.tool in {"check_permitted_use", "compute_parking_requirement"} and isinstance(e.data, dict):
+        if e.tool in {"check_permitted_use", "compute_parking_requirement", "check_flood_zone"} and isinstance(e.data, dict):
             d = e.data
             items[d["id"]] = {"id": d["id"], "rule": d["rule"], "status": d["status"], "detail": d["detail"], "citation": d.get("citation"), "url": d.get("url"), "evidence_ids": [e.id]}
         if e.tool == "list_use_requirements" and isinstance(e.data, dict):
@@ -435,16 +445,26 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
                 return AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
 
         if ctx.mode == "quick":
-            # Quick: evidence is pre-gathered per agent; the Cost agent only depends on building + rules, so it
-            # starts as soon as the Vexcel and Compliance agents finish (Neighborhood keeps running alongside).
-            log_.emit("engine", "plan", "Quick mode: agents start from pre-gathered evidence; Cost starts after Vexcel + Compliance")
-            t_neigh = asyncio.create_task(neighborhood_agent.run(ctx))
-            t_mp = asyncio.create_task(matterport_agent.run(ctx))
-            collect(["vexcel", "compliance"], await asyncio.gather(vexcel_agent.run(ctx), compliance_agent.run(ctx), return_exceptions=True))
-            n = share_upstream(("vexcel", "compliance"))
-            log_.emit("engine", "plan", f"Cost Agent starts with {n} findings from Vexcel + Compliance")
+            # Quick: agents start from pre-gathered evidence. The Cost agent only needs the building and rules
+            # evidence (not the other agents' write-ups), so it starts as soon as that evidence exists.
+            log_.emit("engine", "plan", "Quick mode: agents start from pre-gathered evidence; Cost starts once building + rules evidence is in")
+            for name in ("vexcel", "compliance"):
+                ctx.shared[f"prefetched:{name}"] = asyncio.Event()
+            tasks = {name: asyncio.create_task(mod.run(ctx)) for name, mod in
+                     (("vexcel", vexcel_agent), ("compliance", compliance_agent), ("neighborhood", neighborhood_agent), ("matterport", matterport_agent))}
+
+            async def evidence_ready(name: str) -> None:
+                waiter = asyncio.create_task(ctx.shared[f"prefetched:{name}"].wait())
+                await asyncio.wait({tasks[name], waiter}, return_when=asyncio.FIRST_COMPLETED)  # finished/skipped also counts
+                waiter.cancel()
+
+            await asyncio.gather(evidence_ready("vexcel"), evidence_ready("compliance"))
+            lines = [f"- [{AGENT_LABELS[e.agent]}] {e.id} {e.tool}: {e.summary}" for e in ctx.evidence.all() if e.agent in ("vexcel", "compliance")]
+            ctx.shared["upstream_findings"] = "\n".join(lines[:24])
+            log_.emit("engine", "plan", f"Cost Agent starts with {len(lines)} evidence items from Vexcel + Compliance")
             t_cost = asyncio.create_task(run_cost())
-            collect(["neighborhood", "matterport"], await asyncio.gather(t_neigh, t_mp, return_exceptions=True))
+            order = ["vexcel", "compliance", "neighborhood", "matterport"]
+            collect(order, await asyncio.gather(*(tasks[n] for n in order), return_exceptions=True))
             collect(["cost"], [await asyncio.gather(t_cost, return_exceptions=True)][0])
         else:
             # ---- phase 1: independent investigations, concurrently

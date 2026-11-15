@@ -50,6 +50,7 @@ restaurant:
     interior_layout: {weight: 3, why: "Dining-room and kitchen layout drive seat count and workflow."}
     conversion_risk: {weight: 4, why: "Unknown kitchen and HVAC conditions are the usual source of restaurant budget overruns."}
     area_character: {weight: 3, why: "Commercial, mixed-use streets support restaurant traffic."}
+    flood_risk: {weight: 4, why: "Flooding can shut a kitchen for months; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 dental_clinic:
@@ -87,6 +88,7 @@ dental_clinic:
     interior_layout: {weight: 4, why: "Corridors and room sizes determine operatory count."}
     conversion_risk: {weight: 4, why: "Plumbing in slab is the classic dental budget surprise."}
     area_character: {weight: 3, why: "Residential and retail mix supports patient visits."}
+    flood_risk: {weight: 4, why: "Flood damage to clinical equipment is costly; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 gym:
@@ -124,6 +126,7 @@ gym:
     accessibility_ada: {weight: 3, why: "Public-facing facility must be accessible."}
     parking_requirement: {weight: 4, why: "Assembly/recreation uses often carry parking minimums."}
     conversion_risk: {weight: 3, why: "Showers and locker rooms add plumbing unknowns."}
+    flood_risk: {weight: 4, why: "Large ground floors flood easily; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 office:
@@ -157,6 +160,7 @@ office:
     parking_requirement: {weight: 4, why: "Office parking minimums apply in many cities."}
     hvac_ventilation: {weight: 5, why: "Comfort cooling for dense occupancy."}
     interior_layout: {weight: 4, why: "Open vs. private offices drive build-out."}
+    flood_risk: {weight: 4, why: "Flood zones add insurance cost and can disrupt operations."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 retail:
@@ -190,4 +194,5 @@ retail:
     building_condition: {weight: 5, why: "Condition affects storefront appeal and repair risk."}
     accessibility_ada: {weight: 5, why: "Public-facing stores must be accessible."}
     parking_requirement: {weight: 4, why: "Retail parking minimums apply in many cities."}
+    flood_risk: {weight: 4, why: "Flooding destroys inventory; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}

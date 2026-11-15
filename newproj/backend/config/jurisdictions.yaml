@@ -39,6 +39,18 @@ houston-tx:
     exempt_note: >-
       Exempt-area polygons are conservative inner approximations of the official map; a site just
       outside them may still be exempt.
+  flood:
+    sfha: >-
+      Inside a FEMA Special Flood Hazard Area (about a 1% yearly flood chance). Houston's floodplain rules
+      (Code Ch. 19, amended 2018 after Harvey) require new construction and substantial improvements to be
+      elevated above the 500-year flood level; federally backed loans require flood insurance. A typical tenant
+      fit-out is not a "substantial improvement", but confirm with the Houston Permitting Center and budget for insurance.
+    moderate: >-
+      In the 500-year (0.2% yearly) floodplain. Houston's 2018 floodplain rules also cover the 500-year floodplain for
+      new construction and substantial improvements; flood insurance is optional but often advisable here.
+    minimal: "Area of minimal flood hazard (FEMA zone X): no floodplain construction rules apply."
+    citation: "FEMA NFHL flood zone; Houston Code of Ordinances Ch. 19 (Floodplain), amended 2018"
+    url: https://www.houstonpermittingcenter.org/
   requirements:
     restaurant:
       - id: health_permit
@@ -105,6 +117,14 @@ los-angeles-ca:
     citation: "LAMC §12.21 A.4; California AB 2097 (2022)"
     url: https://zimas.lacity.org/
     exempt_areas: []
+  flood:
+    sfha: >-
+      Inside a FEMA Special Flood Hazard Area: federally backed loans require flood insurance (National Flood
+      Insurance Program) and Los Angeles floodplain rules apply to substantial improvements (not verified in our rule set).
+    moderate: "In the 500-year (0.2% yearly) floodplain: flood insurance is optional but often advisable."
+    minimal: "Area of minimal flood hazard (FEMA zone X)."
+    citation: "FEMA National Flood Hazard Layer; National Flood Insurance Program"
+    url: https://msc.fema.gov/portal/home
   requirements:
     all:
       - id: ada_cbc11b
@@ -131,6 +151,14 @@ _default:
     citation: null
     url: null
     exempt_areas: []
+  flood:
+    sfha: >-
+      Inside a FEMA Special Flood Hazard Area (about a 1% yearly flood chance): federally backed loans require flood
+      insurance (National Flood Insurance Program) and local floodplain rules apply to substantial improvements.
+    moderate: "In the 500-year (0.2% yearly) floodplain: flood insurance is optional but often advisable."
+    minimal: "Area of minimal flood hazard (FEMA zone X)."
+    citation: "FEMA National Flood Hazard Layer; National Flood Insurance Program"
+    url: https://msc.fema.gov/portal/home
   requirements:
     all:
       - id: ada

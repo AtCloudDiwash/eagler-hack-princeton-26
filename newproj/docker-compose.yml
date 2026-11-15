@@ -31,6 +31,7 @@ services:
       - "host.docker.internal:host-gateway"   # makes host.docker.internal work on Linux too
     volumes:
       - turnkey-data:/data
+      - turnkey-lodes:/app/data   # Census LODES worker/resident data, downloaded once on first use
       - ${CODEX_HOME_DIR:-~/.codex}:/codex-home
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -51,3 +52,4 @@ services:
 
 volumes:
   turnkey-data:
+  turnkey-lodes:

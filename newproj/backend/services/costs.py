@@ -92,6 +92,7 @@ def estimate(business_type: str, sqft: float, jurisdiction_key: str, adders: lis
         "monthly_occupancy": {"low": round(monthly_low), "high": round(monthly_high)},
         "upfront": {"low": round(fit_low + deposit_low), "high": round(fit_high + deposit_high)},
         "assumptions": assumptions,
+        "second_generation": bool(second_generation),
         "_benchmark": {"upfront_per_sqft_mid": round((fit_low + fit_high) / 2 / sqft), "typical_good": typical["good"], "typical_high": typical["high"]},
     }
 

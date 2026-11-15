@@ -5,12 +5,13 @@ from __future__ import annotations
 
 from agents.base import AgentReport, RunContext, ToolBudget, run_agent, tracked_tool
 from services import rules
+from services.flood import SOURCE, flood_zone
 from services.vexcel import primary_structure, stories_estimate
 
 ROLE = (
     "You investigate the regulations that apply to THIS address and THIS use: whether the use is permitted "
     "(zoning or its absence, deed/lease restrictions), parking minimums, health/food or medical rules, "
-    "accessibility and occupancy permits. Only cite rules returned by your tools. Never invent a regulation "
+    "accessibility, flood zone and occupancy permits. Only cite rules returned by your tools. Never invent a regulation "
     "and never call the property compliant unless a tool result supports it; otherwise say what must be verified and where."
 )
 
@@ -55,7 +56,13 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         data = {"stories_estimate": stories_estimate(s), "entrance_elevation": s.get("roof-characteristics.entrance-elevation"), "building_type": s.get("building-type.class"), "ground_elevation_ft": s.get("ground-elevation.value")}
         return {"summary": f"~{data['stories_estimate'] or '?'} stories, entrance elevation {data['entrance_elevation'] if data['entrance_elevation'] is not None else 'not measured'}", "data": data, "source": "Vexcel /property/extract", "guidance": ["Aerial data cannot confirm door widths, ramps or restroom layout; those need a site visit or Matterport scan."]}
 
-    return [identify_jurisdiction, check_permitted_use, compute_parking_requirement, list_use_requirements, check_accessibility_signals]
+    @tool
+    def check_flood_zone() -> dict:
+        """FEMA flood hazard zone at the address and the floodplain rules / insurance it triggers here."""
+        item = rules.flood_item(jur, flood_zone(ctx.property["lat"], ctx.property["lon"]))
+        return {"summary": f"Flood: {item['status'].upper()} — {item['detail'][:170]}", "data": item, "source": SOURCE, "url": item.get("url")}
+
+    return [identify_jurisdiction, check_permitted_use, compute_parking_requirement, list_use_requirements, check_accessibility_signals, check_flood_zone]
 
 
 def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
@@ -80,6 +87,7 @@ async def run(ctx: RunContext, budget_limit: int = 6, focus: str | None = None) 
             ("compute_parking_requirement", {"leased_floor_sqft": ctx.target_sqft}),
             ("list_use_requirements", {}),
             ("check_accessibility_signals", {}),
+            ("check_flood_zone", {}),
         ]
         return await run_agent(ctx, "compliance", ROLE, task_prompt(ctx), tools, budget, prefetch_calls=calls, extra_tool_calls=1, max_model_calls=3)
     return await run_agent(ctx, "compliance", ROLE, task_prompt(ctx, focus), tools, budget)

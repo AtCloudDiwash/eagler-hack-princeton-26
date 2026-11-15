@@ -38,7 +38,7 @@ def test_plain_structured_output_unaffected():
     assert json.loads(raw)["business_type"] == "restaurant"
 
 
-def test_retries_once_then_gives_up(monkeypatch):
+def test_retries_twice_then_gives_up(monkeypatch):
     calls = []
     def fake(self, prompt, schema):
         calls.append(prompt)
@@ -46,4 +46,4 @@ def test_retries_once_then_gives_up(monkeypatch):
     monkeypatch.setattr("services.cli_chat.CLIChatModel._call_sync", fake)
     with pytest.raises(NativeToolAttemptError):
         ChatClaudeCLI()._call_sync("p", TOOL_TURN_SCHEMA)
-    assert len(calls) == 2 and "Reminder" in calls[1]
+    assert len(calls) == 3 and all("Reminder" in c for c in calls[1:])

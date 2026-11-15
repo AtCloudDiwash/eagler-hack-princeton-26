@@ -39,8 +39,12 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
             "stories_estimate": stories_estimate(s),
             "structures_on_parcel": parcel.get("structure.count"),
         }
+        flags = building_flags(s)
+        if flags:
+            data["data_quality_flags"] = flags
         return {
-            "summary": f"{data['building_type'] or 'unknown'} building, {data['footprint_area_sqft'] or '?'} sq ft footprint, ~{data['stories_estimate'] or '?'} stories",
+            "summary": f"{data['building_type'] or 'unknown'} building, {data['footprint_area_sqft'] or '?'} sq ft footprint, ~{data['stories_estimate'] or '?'} stories"
+            + (f" — {len(flags)} data-quality flag(s)" if flags else ""),
             "data": data,
             "guidance": [FIELD_NOTES["building-type.class"], FIELD_NOTES["footprint.area"], FIELD_NOTES["roof-characteristics.height"]],
         }
@@ -97,6 +101,9 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         """Parcel paving and vehicles: a proxy for on-site parking capacity and activity."""
         paved = parcel.get("hardscapes.area")
         data = {"hardscape_area_sqft": paved, "hardscape_percent": parcel.get("hardscapes.percent"), "vehicles_seen": parcel.get("vehicles.count"), "estimated_spaces_if_all_paving_were_parking": round(paved / 325) if isinstance(paved, (int, float)) else None, "tree_cover_percent": parcel.get("parcel-tree-cover.percent")}
+        flags = paving_flags(parcel)
+        if flags:
+            data["data_quality_flags"] = flags
         return {"summary": f"Paved area {paved or '?'} sq ft (≈{data['estimated_spaces_if_all_paving_were_parking'] or '?'} spaces max), {data['vehicles_seen'] or 0} vehicles seen", "data": data, "guidance": [FIELD_NOTES["hardscapes.area"], FIELD_NOTES["vehicles.count"]]}
 
     @tool
@@ -132,6 +139,27 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         return {"summary": f"{len(hits)} fields matching '{field}'", "data": hits or None}
 
     return [get_building_overview, check_size_fit, inspect_roof, inspect_site_paving, compare_with_neighbors, get_imagery_metadata, lookup_vexcel_field]
+
+
+def building_flags(s: dict) -> list[str]:
+    """Signs that a Vexcel value shouldn't be taken at face value (told to the agent, never hidden)."""
+    flags = []
+    conf = s.get("building-type.score")
+    if isinstance(conf, (int, float)) and conf < 0.6:
+        flags.append(f"Building type '{s.get('building-type.class')}' has low AI confidence ({conf:.2f}); verify the use on site.")
+    area = s.get("footprint.area")
+    if isinstance(area, (int, float)) and area < 800:
+        flags.append(f"Very small footprint ({area:,.0f} sq ft): may be an accessory structure or kiosk rather than a leasable building.")
+    if not isinstance(s.get("roof-characteristics.height"), (int, float)):
+        flags.append("No roof height measured: stories (and usable floor area) are unknown.")
+    return flags
+
+
+def paving_flags(parcel: dict) -> list[str]:
+    paved, vehicles = parcel.get("hardscapes.area"), parcel.get("vehicles.count")
+    if isinstance(paved, (int, float)) and isinstance(vehicles, (int, float)) and vehicles >= 5 and paved < vehicles * 150:
+        return [f"{vehicles:.0f} vehicles seen on only {paved:,.0f} sq ft of detected paving: paving is likely under-detected, so don't conclude there is no parking."]
+    return []
 
 
 def task_prompt(ctx: RunContext, focus: str | None = None) -> str:

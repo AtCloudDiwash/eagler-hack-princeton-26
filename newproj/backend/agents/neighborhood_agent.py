@@ -347,6 +347,13 @@ def quick_prefetch(ctx: RunContext) -> list[tuple[str, dict]]:
     groups = [g for role in ("competitors", "demand") for g in roles.get(role, [])]
     calls = [("count_places", {"group": g, "radius_m": radius}) for g in dict.fromkeys(groups)]
     calls += [("get_building_mix", {"radius_m": radius}), ("get_access_options", {"radius_m": 400})]
+    signal_calls = {
+        "daytime_workers": ("get_daytime_workers", {"radius_m": radius}),
+        "residents": ("get_residents", {"radius_m": radius}),
+        "competitors": ("find_direct_competitors", {"radius_m": radius}),
+        "walk_access": ("get_walkable_reach", {"minutes": 10}),
+    }
+    calls += [signal_calls[name] for name in select_signals(ctx)[0] if name in signal_calls]
     if settings.census_api_key:
         calls.append(("get_demographics", {}))
     return calls

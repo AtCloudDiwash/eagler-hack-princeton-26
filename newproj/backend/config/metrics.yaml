@@ -247,6 +247,19 @@ conversion_risk:
     weak: Large share of the budget rests on unverified assumptions.
     blocker: Not used.
 
+flood_risk:
+  name: Flood risk
+  group: Compliance
+  category: common
+  owner: compliance
+  description: FEMA flood hazard zone at the address and the rules and insurance it triggers.
+  evidence_hint: check_flood_zone tool (FEMA National Flood Hazard Layer + the city's floodplain rule).
+  status_guide:
+    strong: Area of minimal flood hazard (zone X).
+    adequate: 500-year (0.2% yearly) floodplain, or floodplain rules unlikely to affect a tenant fit-out.
+    weak: Special Flood Hazard Area (zone A/AE/AO/AH/V/VE) - insurance and possible elevation rules.
+    blocker: Not used (flood risk is managed, not prohibited).
+
 evidence_quality:
   name: Evidence quality
   group: Confidence

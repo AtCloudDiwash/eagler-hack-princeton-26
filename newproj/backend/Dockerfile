@@ -32,7 +32,7 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # SQLite database (analyses, cached places) lives on a volume so it survives rebuilds.
-RUN mkdir -p /data /codex-home && useradd --create-home appuser && chown -R appuser /app /data /codex-home
+RUN mkdir -p /data /codex-home /app/data && useradd --create-home appuser && chown -R appuser /app /data /codex-home
 USER appuser
 VOLUME ["/data"]
 

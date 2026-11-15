@@ -121,6 +121,9 @@ An agent that fails or times out never sinks the analysis: its metrics become `u
 | Vexcel `/ortho/tile`, `/property/extract` | Live (key geofenced to Los Angeles + Houston) or labelled demo sample |
 | OpenStreetMap Nominatim / Overpass | Geocoding, places (volunteer-mapped; counts are lower bounds) |
 | US Census geocoder + ACS | Tract always; demographics with a free `CENSUS_API_KEY` |
+| US Census LEHD LODES 2023 | Daytime workers and employed residents near the site (public download, ~27 MB per state, cached in `backend/data/`) |
+| OSRM foot routing (routing.openstreetmap.de) | Walking reach, so highways and bayous inside a radius aren't counted as walkable |
+| FEMA National Flood Hazard Layer | Flood zone at the address (Compliance agent), cached per location |
 | Verified rule set | Houston (no zoning, §26-492 parking, health/grease/ADA); others report `unknown` |
 | CoStar listings / rents | Not connected; rent uses documented planning bands |
 | Matterport | Optional; no tours linked in this build, so the agent reports interior questions as open |
