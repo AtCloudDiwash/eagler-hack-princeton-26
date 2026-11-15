@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import uuid
 
@@ -236,7 +237,7 @@ async def start_analysis(req: AnalysisRequest) -> dict:
     if not stored:
         raise HTTPException(404, "Unknown property")
     analysis_id = uuid.uuid4().hex[:12]
-    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(*stored), req.radius_m)
+    db.create_analysis(analysis_id, req.query, req.intent.model_dump(), _detail(*stored), req.radius_m, req.mode, req.search_id, req.requirements)
     task = asyncio.create_task(multi_agent_engine.run_analysis(analysis_id, req))
     _running.add(task)
     task.add_done_callback(_running.discard)
@@ -248,19 +249,53 @@ def get_analysis(analysis_id: str) -> dict:
     a = db.get_analysis(analysis_id)
     if not a:
         raise HTTPException(404, "Unknown analysis")
-    return a
+    return {**a, "search_id": _group_key(a)}
+
+
+def _group_key(a: dict) -> str:
+    """Which search an analysis belongs to. Analyses made before search ids are grouped by request + business."""
+    if a.get("search_id"):
+        return a["search_id"]
+    basis = f"{(a.get('base_query') or a['query']).strip().lower()}|{a['intent'].get('business_type')}"
+    return "legacy-" + hashlib.sha1(basis.encode()).hexdigest()[:10]
+
+
+def _summary(a: dict) -> dict:
+    rec = (a.get("result") or {}).get("recommendation") or {}
+    p = a["property"]
+    costs = (a.get("result") or {}).get("costs") or {}
+    return {
+        "id": a["id"], "status": a["status"], "created_at": a["created_at"], "query": a["query"],
+        "base_query": a.get("base_query") or a["query"], "extra_requirements": a.get("extra_requirements"),
+        "business_type": a["intent"].get("business_type"), "business_label": a["intent"].get("business_label"),
+        "property": {"id": p.get("id"), "lat": p.get("lat"), "lon": p.get("lon"), "building_type": p.get("building_type"), "area_sqft": p.get("area_sqft"), "address": p.get("address")},
+        "score": rec.get("score"), "confidence": rec.get("confidence"), "verdict": rec.get("verdict"), "mode": a.get("mode", "deep"),
+        "search_id": _group_key(a), "budget_status": (costs.get("budget") or {}).get("status"),
+    }
 
 
 @app.get("/api/analyses")
 def list_analyses() -> list[dict]:
-    out = []
-    for a in db.list_analyses():
-        rec = (a.get("result") or {}).get("recommendation") or {}
-        p = a["property"]
-        out.append({
-            "id": a["id"], "status": a["status"], "created_at": a["created_at"], "query": a["query"],
-            "business_label": a["intent"].get("business_label"),
-            "property": {"id": p.get("id"), "lat": p.get("lat"), "lon": p.get("lon"), "building_type": p.get("building_type"), "area_sqft": p.get("area_sqft"), "address": p.get("address")},
-            "score": rec.get("score"), "confidence": rec.get("confidence"), "verdict": rec.get("verdict"),
-        })
-    return out
+    return [_summary(a) for a in db.list_analyses()]
+
+
+@app.get("/api/searches/{search_id}")
+def get_search(search_id: str) -> dict:
+    """One search: its request, its ranked candidate buildings and the analyses run on them (for Compare)."""
+    analyses = [a for a in db.list_analyses() if _group_key(a) == search_id]
+    search = db.get_search(search_id)
+    if not search and not analyses:
+        raise HTTPException(404, "Unknown search")
+    if search:
+        scores = search.get("scores") or {}
+        candidates = [{**c, **scores.get(c["id"], {})} for c, _ in filter(None, (db.get_property(pid) for pid in search["candidate_ids"]))]
+        query, intent, location = search["query"], search["intent"], search["location"]
+    else:  # legacy group: no stored candidate list, only the analyzed buildings
+        first = analyses[-1]
+        candidates = [a["property"] for a in analyses]
+        query, intent, location = first.get("base_query") or first["query"], first["intent"], None
+    return {
+        "id": search_id, "query": query, "intent": intent, "location": location, "legacy": search is None,
+        "candidates": [{k: c.get(k) for k in ("id", "lat", "lon", "building_type", "area_sqft", "roof_condition", "roof_condition_label", "stories_est", "match_score", "match_reasons", "address", "source")} for c in candidates],
+        "analyses": [_summary(a) for a in analyses],
+    }

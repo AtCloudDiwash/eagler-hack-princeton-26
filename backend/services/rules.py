@@ -98,3 +98,17 @@ def use_requirements(jur: dict, business_type: str) -> list[dict]:
             "url": r.get("url"),
         })
     return items
+
+
+def flood_item(jur: dict, zone: dict) -> dict:
+    """Compliance item for a FEMA flood zone using the jurisdiction's verified flood text."""
+    rule = jur.get("flood") or {}
+    base = {"id": "flood_zone", "rule": "Flood hazard zone", "citation": rule.get("citation"), "url": rule.get("url"), "evidence": zone}
+    if zone.get("status") != "ok":
+        return {**base, "status": "unknown", "detail": zone.get("error") or "Flood zone could not be determined; check the FEMA Flood Map Service Center."}
+    label = f"FEMA zone {zone.get('zone')}" + (f" ({zone['subtype'].lower()})" if zone.get("subtype") else "")
+    if zone.get("sfha"):
+        return {**base, "status": "risk", "level": "sfha", "detail": f"{label}. {rule.get('sfha', '').strip()}"}
+    if zone.get("moderate"):
+        return {**base, "status": "risk", "level": "moderate", "detail": f"{label}. {rule.get('moderate', '').strip()}"}
+    return {**base, "status": "pass", "level": "minimal", "detail": f"{label}. {rule.get('minimal', '').strip()}"}

@@ -1,0 +1,449 @@
+{
+  "label": "fix",
+  "ran_at": "2026-11-15 01:13:50",
+  "cases": [
+    {
+      "id": "restaurant_downtown",
+      "status": "completed",
+      "error": null,
+      "duration_s": 39.5,
+      "llm_calls": 9,
+      "llm_providers": {
+        "Claude Code (sonnet)": 9
+      },
+      "tool_calls": 31,
+      "evidence_items": 31,
+      "score": 69,
+      "verdict": "conditional",
+      "confidence": 90,
+      "unknown_weight_pct": 10,
+      "evidenced_weight_pct": 93,
+      "unverified_findings": 1,
+      "statuses": {
+        "permitted_use": "adequate",
+        "hvac_ventilation": "weak",
+        "customer_demand": "strong",
+        "size_fit": "weak",
+        "occupancy_cost": "adequate",
+        "parking_requirement": "strong",
+        "health_permitting": "adequate",
+        "building_condition": "adequate",
+        "competition": "adequate",
+        "accessibility_transit": "strong",
+        "accessibility_ada": "adequate",
+        "onsite_parking": "weak",
+        "kitchen_infrastructure": "unknown",
+        "interior_layout": "unknown",
+        "conversion_risk": "adequate",
+        "area_character": "strong",
+        "flood_risk": "unknown",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 2,
+          "total": 2,
+          "detail": [
+            {
+              "exp": {
+                "metric": "permitted_use",
+                "in": [
+                  "strong",
+                  "adequate"
+                ]
+              },
+              "ok": true
+            },
+            {
+              "exp": {
+                "metric": "customer_demand",
+                "in": [
+                  "strong",
+                  "adequate"
+                ]
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 2,
+          "total": 2,
+          "detail": [
+            {
+              "exp": {
+                "evidence_tool": "get_daytime_workers"
+              },
+              "ok": true
+            },
+            {
+              "exp": {
+                "evidence_tool": "check_flood_zone"
+              },
+              "ok": true
+            }
+          ]
+        }
+      },
+      "wall_s": 39.5
+    },
+    {
+      "id": "restaurant_low_demand",
+      "status": "completed",
+      "error": null,
+      "duration_s": 42.3,
+      "llm_calls": 9,
+      "llm_providers": {
+        "Claude Code (sonnet)": 9
+      },
+      "tool_calls": 31,
+      "evidence_items": 31,
+      "score": 62,
+      "verdict": "conditional",
+      "confidence": 90,
+      "unknown_weight_pct": 10,
+      "evidenced_weight_pct": 93,
+      "unverified_findings": 1,
+      "statuses": {
+        "permitted_use": "adequate",
+        "hvac_ventilation": "weak",
+        "customer_demand": "adequate",
+        "size_fit": "adequate",
+        "occupancy_cost": "weak",
+        "parking_requirement": "weak",
+        "health_permitting": "adequate",
+        "building_condition": "strong",
+        "competition": "strong",
+        "accessibility_transit": "weak",
+        "accessibility_ada": "adequate",
+        "onsite_parking": "adequate",
+        "kitchen_infrastructure": "unknown",
+        "interior_layout": "unknown",
+        "conversion_risk": "adequate",
+        "area_character": "adequate",
+        "flood_risk": "unknown",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "metric": "customer_demand",
+                "not_in": [
+                  "strong"
+                ]
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 1,
+          "total": 2,
+          "detail": [
+            {
+              "exp": {
+                "evidence_tool": "get_daytime_workers"
+              },
+              "ok": true
+            },
+            {
+              "exp": {
+                "metric": "customer_demand",
+                "in": [
+                  "weak"
+                ]
+              },
+              "ok": false
+            }
+          ]
+        }
+      },
+      "wall_s": 42.3
+    },
+    {
+      "id": "dental_two_budgets",
+      "status": "completed",
+      "error": null,
+      "duration_s": 46.0,
+      "llm_calls": 11,
+      "llm_providers": {
+        "Claude Code (sonnet)": 11
+      },
+      "tool_calls": 27,
+      "evidence_items": 27,
+      "score": 57,
+      "verdict": "not_recommended",
+      "confidence": 93,
+      "unknown_weight_pct": 7,
+      "evidenced_weight_pct": 96,
+      "unverified_findings": 1,
+      "statuses": {
+        "permitted_use": "adequate",
+        "medical_infrastructure": "adequate",
+        "accessibility_ada": "adequate",
+        "customer_demand": "adequate",
+        "size_fit": "weak",
+        "occupancy_cost": "weak",
+        "parking_requirement": "weak",
+        "onsite_parking": "weak",
+        "competition": "strong",
+        "building_condition": "adequate",
+        "accessibility_transit": "strong",
+        "interior_layout": "unknown",
+        "conversion_risk": "adequate",
+        "area_character": "adequate",
+        "flood_risk": "unknown",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 2,
+          "total": 2,
+          "detail": [
+            {
+              "exp": {
+                "metric": "occupancy_cost",
+                "in": [
+                  "weak"
+                ]
+              },
+              "ok": true
+            },
+            {
+              "exp": {
+                "budget_status": "over"
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "evidence_tool": "check_flood_zone"
+              },
+              "ok": true
+            }
+          ]
+        }
+      },
+      "wall_s": 46.0
+    },
+    {
+      "id": "gym_midtown",
+      "status": "completed",
+      "error": null,
+      "duration_s": 59.8,
+      "llm_calls": 13,
+      "llm_providers": {
+        "Claude Code (sonnet)": 13
+      },
+      "tool_calls": 29,
+      "evidence_items": 29,
+      "score": 82,
+      "verdict": "recommended",
+      "confidence": 75,
+      "unknown_weight_pct": 25,
+      "evidenced_weight_pct": 100,
+      "unverified_findings": 1,
+      "statuses": {
+        "size_fit": "strong",
+        "structural_floor": "unknown",
+        "permitted_use": "adequate",
+        "customer_demand": "strong",
+        "occupancy_cost": "adequate",
+        "onsite_parking": "weak",
+        "competition": "strong",
+        "hvac_ventilation": "unknown",
+        "area_character": "strong",
+        "building_condition": "strong",
+        "accessibility_transit": "strong",
+        "accessibility_ada": "adequate",
+        "parking_requirement": "unknown",
+        "conversion_risk": "weak",
+        "flood_risk": "unknown",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 2,
+          "total": 2,
+          "detail": [
+            {
+              "exp": {
+                "metric": "size_fit",
+                "not_in": [
+                  "blocker"
+                ]
+              },
+              "ok": true
+            },
+            {
+              "exp": {
+                "metric": "permitted_use",
+                "in": [
+                  "strong",
+                  "adequate"
+                ]
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "evidence_tool": "get_daytime_workers"
+              },
+              "ok": true
+            }
+          ]
+        }
+      },
+      "wall_s": 59.8
+    },
+    {
+      "id": "retail_downtown",
+      "status": "completed",
+      "error": null,
+      "duration_s": 67.4,
+      "llm_calls": 12,
+      "llm_providers": {
+        "Claude Code (sonnet)": 12
+      },
+      "tool_calls": 31,
+      "evidence_items": 31,
+      "score": 77,
+      "verdict": "conditional",
+      "confidence": 96,
+      "unknown_weight_pct": 4,
+      "evidenced_weight_pct": 100,
+      "unverified_findings": 1,
+      "statuses": {
+        "customer_demand": "strong",
+        "permitted_use": "adequate",
+        "occupancy_cost": "adequate",
+        "size_fit": "weak",
+        "accessibility_transit": "strong",
+        "competition": "adequate",
+        "onsite_parking": "weak",
+        "area_character": "strong",
+        "building_condition": "adequate",
+        "accessibility_ada": "adequate",
+        "parking_requirement": "strong",
+        "flood_risk": "unknown",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "metric": "customer_demand",
+                "in": [
+                  "strong",
+                  "adequate"
+                ]
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "evidence_tool": "get_daytime_workers"
+              },
+              "ok": true
+            }
+          ]
+        }
+      },
+      "wall_s": 67.4
+    },
+    {
+      "id": "restaurant_second_generation",
+      "status": "completed",
+      "error": null,
+      "duration_s": 44.1,
+      "llm_calls": 7,
+      "llm_providers": {
+        "Claude Code (sonnet)": 7
+      },
+      "tool_calls": 30,
+      "evidence_items": 30,
+      "score": 75,
+      "verdict": "conditional",
+      "confidence": 93,
+      "unknown_weight_pct": 7,
+      "evidenced_weight_pct": 93,
+      "unverified_findings": 1,
+      "statuses": {
+        "permitted_use": "adequate",
+        "hvac_ventilation": "weak",
+        "customer_demand": "strong",
+        "size_fit": "weak",
+        "occupancy_cost": "strong",
+        "parking_requirement": "strong",
+        "health_permitting": "adequate",
+        "building_condition": "adequate",
+        "competition": "strong",
+        "accessibility_transit": "strong",
+        "accessibility_ada": "adequate",
+        "onsite_parking": "weak",
+        "kitchen_infrastructure": "unknown",
+        "interior_layout": "unknown",
+        "conversion_risk": "adequate",
+        "area_character": "strong",
+        "flood_risk": "strong",
+        "evidence_quality": "strong"
+      },
+      "expect": {
+        "core": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "metric": "permitted_use",
+                "in": [
+                  "strong",
+                  "adequate"
+                ]
+              },
+              "ok": true
+            }
+          ]
+        },
+        "upgrade": {
+          "passed": 1,
+          "total": 1,
+          "detail": [
+            {
+              "exp": {
+                "cost_flag": "second_generation"
+              },
+              "ok": true
+            }
+          ]
+        }
+      },
+      "wall_s": 44.1
+    }
+  ]
+}

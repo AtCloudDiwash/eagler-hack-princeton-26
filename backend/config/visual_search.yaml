@@ -1,0 +1,26 @@
+# Visual (semantic) matching in discovery, using Vexcel /embedding/extract.
+# Needs the user states that can be SEEN from the air are turned into descriptive phrases; Vexcel returns
+# ~66 m imagery cells ranked by similarity, and candidate buildings overlapping strong cells rank higher.
+# Needs that aren't visual (foot traffic, zoning, budget...) are ignored here and left to the agents.
+
+weight: 0.3          # final = (1 - weight) * pre-screen score + weight * visual percentile (0 disables)
+max_phrases: 3       # at most this many embedding searches per discovery search (each is a billed request)
+records: 500         # cells requested per phrase (Vexcel max page size)
+
+# need keyword (matched inside the user's stated requirements) -> phrase sent to the embedding search
+phrases:
+  patio: "restaurant with outdoor patio seating"
+  outdoor seating: "restaurant with outdoor patio seating"
+  terrace: "restaurant with outdoor patio seating"
+  parking: "commercial building with a large surface parking lot"
+  drive-thru: "fast food building with a drive-through lane"
+  drive thru: "fast food building with a drive-through lane"
+  storefront: "retail storefront facing a busy main road"
+  visibility: "retail storefront facing a busy main road"
+  main road: "retail storefront facing a busy main road"
+  green space: "building next to a green park with trees"
+  park: "building next to a green park with trees"
+  loading: "commercial building with loading docks"
+  warehouse: "large warehouse building with loading docks"
+  strip mall: "strip mall shopping center with parking"
+  shopping center: "strip mall shopping center with parking"

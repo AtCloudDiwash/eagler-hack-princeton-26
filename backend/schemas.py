@@ -35,7 +35,8 @@ class Intent(BaseModel):
     concept: str | None = None  # business concept (coffee shop, fine dining, yoga studio...); None = the default
     size_hint: Literal["small", "large"] | None = None  # "small cafe", "large gym" when no count is given
     requirements: list[str] = []  # readable labels of everything asked for (needs + free-text extras)
-    budget: Budget | None = None
+    budget: Budget | None = None  # the most recently stated budget (primary)
+    budgets: list[Budget] = []  # every stated budget, one per period (e.g. $9k/month AND $80k upfront)
     parser: Literal["llm", "rules"] = "rules"
     # Space program inputs (services/program.py)
     occupancy: dict[str, int] = {}  # counts stated in the request: seats, chairs, members, class_size, employees, staff
@@ -74,6 +75,7 @@ class Candidate(BaseModel):
     best_space: dict | None = None  # the listed suite closest to the user's size: suite, floor, sqft (sqft_min when divisible), rent_per_sqft_yr
     closest_space_sqft: float | None = None  # when no listed suite is in range: the listed space nearest the user's size
     asking_rent_per_sqft_yr: list[float] | None = None  # [low, high] across listed spaces
+    visual_matches: list[dict] = []  # [{need, pct}] similarity to the user's visual needs in Vexcel imagery
 
 
 class SearchRequest(BaseModel):
@@ -87,6 +89,7 @@ class SearchResponse(BaseModel):
     candidates: list[Candidate]
     notes: list[str] = []
     program: dict | None = None  # what the request implies: size, occupancy, code needs, building needs
+    search_id: str | None = None  # groups analyses of buildings from this search (Compare)
 
 
 class RefineRequest(BaseModel):
@@ -114,6 +117,8 @@ class AnalysisRequest(BaseModel):
     property_id: str
     radius_m: int = 500
     requirements: str | None = None
+    mode: Literal["quick", "deep"] = "deep"  # quick = pre-gathered evidence, fewer LLM calls; deep = full investigation
+    search_id: str | None = None  # the search this building came from
 
 
 # ------------------------------------------------------------------ agent outputs (LLM-facing)

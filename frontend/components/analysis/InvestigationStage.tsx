@@ -262,7 +262,7 @@ export default function InvestigationStage({ analysis, mode, onDone, onExit }: P
         <div className="border-b border-white/[0.06] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-300/80">{mode === "replay" ? `Replay · ${Math.round(speed)}× speed` : "Live investigation"}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-300/80">{mode === "replay" ? `Replay · ${Math.round(speed)}× speed` : "Live investigation"} · {analysis.mode === "quick" ? "Quick" : "Deep report"}</div>
               <h2 className="mt-0.5 text-[15px] font-semibold text-slate-50">{finished ? (analysis.status === "failed" ? "Investigation stopped" : "Investigation complete") : "Agents are investigating"}</h2>
             </div>
             <div className="text-right">

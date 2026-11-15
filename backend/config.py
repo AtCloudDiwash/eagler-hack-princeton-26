@@ -39,6 +39,11 @@ class Settings:
     ollama_base_url = (os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
     ollama_model = (os.getenv("OLLAMA_MODEL") or "qwen3:8b").strip()
     census_api_key = _key("CENSUS_API_KEY")
+    # Neighborhood data: Census LODES (jobs + employed residents per block; public, cached on disk) and a
+    # public OSRM foot router for walking times.
+    lodes_dir = Path(os.getenv("LODES_DIR") or BACKEND_DIR / "data" / "lodes")
+    lodes_year = int(os.getenv("LODES_YEAR") or 2023)
+    walk_router_url = os.getenv("WALK_ROUTER_URL") or "https://routing.openstreetmap.de/routed-foot"
     matterport_api_key = _key("MATTERPORT_API_KEY")
     matterport_api_secret = _key("MATTERPORT_API_SECRET")
     # Optional sandbox token (sees only the account's demo model): for development and the query contract test.

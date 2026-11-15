@@ -316,6 +316,21 @@ def _accessibility_ada(ctx: Any) -> Verdict:
     return Verdict("accessibility_ada", status, reason, (eid,), "verified accessibility data")
 
 
+def _flood_risk(ctx: Any) -> Verdict | None:
+    """FEMA zone + the city's floodplain rule, from the Compliance Agent's check_flood_zone result (agents may be
+    more cautious, never less)."""
+    hits = [e for e in ctx.evidence.all() if e.tool == "check_flood_zone"]
+    if not hits:
+        return None
+    e = hits[-1]
+    data = e.data or {}
+    level = data.get("level") if data.get("status") != "unknown" else "unknown"
+    status = {"minimal": "strong", "moderate": "adequate", "sfha": "weak"}.get(level or "", "unknown")
+    zone = (data.get("evidence") or {}).get("zone") or "an unmapped"
+    cautious = {"strong": {"adequate"}, "adequate": {"weak"}}.get(status, set())
+    return Verdict("flood_risk", status, f"FEMA puts the site in {zone} zone. {data.get('detail', '')}".strip(), (e.id,), "FEMA flood map", also_accept=frozenset(cautious))
+
+
 RESOLVERS: dict[str, Callable[[Any], Verdict | None]] = {
     "permitted_use_rule": _permitted_use,
     "parking_rule": _parking_requirement,
@@ -328,6 +343,7 @@ RESOLVERS: dict[str, Callable[[Any], Verdict | None]] = {
     "places_required": _competition,
     "interior_scan_cap": _interior_layout,
     "accessibility_verified": _accessibility_ada,
+    "fema_flood": _flood_risk,
 }
 
 

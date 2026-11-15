@@ -223,3 +223,184 @@ def test_budget_parsing_and_check():
     assert tight["status"] == "over" and costs.budget_status(tight) == "weak"
     typical = costs.budget_check(est, None, "restaurant")
     assert typical["source"] == "typical" and "didn't specify a budget" in typical["note"]
+
+
+def test_quick_prefetch_registers_cited_evidence():
+    from agents.base import ToolBudget, prefetch
+    from agents.compliance_agent import build_tools
+
+    ctx = _ctx()
+    budget = ToolBudget(6)
+    block = prefetch(build_tools(ctx, budget), [("identify_jurisdiction", {}), ("check_permitted_use", {}), ("no_such_tool", {})])
+    assert block.startswith("PRE-GATHERED EVIDENCE") and "E1 [identify_jurisdiction]" in block and "E2 [check_permitted_use]" in block
+    assert budget.used == 2 and len(ctx.evidence.all()) == 2
+
+
+def test_quick_cost_items_come_from_evidence():
+    from agents.cost_agent import pick_adders
+
+    ctx = _ctx()
+    roof = ctx.evidence.add("vexcel", "inspect_roof", "x", "0 AC units", {"roof-objects.ac-unit.count": 0, "roof-objects.roof-vent.count": 2})
+    cond = ctx.evidence.add("vexcel", "inspect_roof", "x", "roof 2/5", {"roof-characteristics.condition": 2.0})
+    park = ctx.evidence.add("compliance", "compute_parking_requirement", "x", "risk", {"status": "risk"})
+    reqs = ctx.evidence.add("compliance", "list_use_requirements", "x", "reqs", {"items": [{"id": "grease_interceptor"}, {"id": "ada_tas"}]})
+    items = {a["id"]: a for a in pick_adders(ctx)}
+    assert set(items) == {"hood_exhaust", "grease_interceptor", "hvac_rtu", "roof_repair", "parking_agreement", "ada_upgrades"}
+    assert items["hvac_rtu"]["evidence_ids"] == [roof] and items["roof_repair"]["evidence_ids"] == [cond]
+    assert items["parking_agreement"]["evidence_ids"] == [park] and items["grease_interceptor"]["evidence_ids"] == [reqs]
+
+
+def test_analysis_request_defaults_to_deep():
+    from schemas import AnalysisRequest, Intent
+
+    assert AnalysisRequest(query="q", intent=Intent(), property_id="p").mode == "deep"
+    assert AnalysisRequest(query="q", intent=Intent(), property_id="p", mode="quick").mode == "quick"
+
+
+def test_extra_requirements_are_folded_into_the_request(monkeypatch):
+    import asyncio
+
+    from services import intent as intent_mod
+
+    async def rules_only(q):
+        return intent_mod.parse_rules(q)
+
+    monkeypatch.setattr(intent_mod, "parse", rules_only)
+    base = intent_mod.parse_rules("I want to open a 40-seat restaurant in Houston with a budget of $12k/month")
+    combined = intent_mod.combine_request("I want to open a 40-seat restaurant in Houston", "needs parking, budget under $8k/month")
+    assert combined.endswith("Additional requirements: needs parking, budget under $8k/month")
+    refined = asyncio.run(intent_mod.refine(base, "I want to open a 40-seat restaurant in Houston", "needs parking, budget under $8k/month"))
+    assert refined.budget.amount == 8000 and refined.budget.period == "monthly"  # the later, more specific budget wins
+    assert any("parking" in r for r in refined.requirements) and refined.business_type == "restaurant" and refined.location_text == "Houston"
+    assert any(n.id == "parking" and n.priority == "must" for n in refined.needs)  # reaches the space program as a must-have
+    assert asyncio.run(intent_mod.refine(base, "q", "  ")) == base
+
+
+def test_requirement_checks_need_real_evidence(monkeypatch):
+    import asyncio
+
+    import multi_agent_engine as engine
+
+    ctx = _ctx()
+    ctx.intent = {**ctx.intent, "requirements": ["parking", "outdoor patio", "open late"]}
+    real = ctx.evidence.add("vexcel", "inspect_site_paving", "x", "paved 3,500 sq ft", {"hardscape_area_sqft": 3500})
+
+    class FakeLLM:
+        def with_structured_output(self, schema, **kw):
+            class R:
+                async def ainvoke(self, prompt):
+                    return schema(checks=[
+                        {"requirement": "parking", "status": "met", "rationale": "Paved lot.", "evidence_ids": [real]},
+                        {"requirement": "outdoor patio", "status": "unmet", "rationale": "Guess.", "evidence_ids": ["E99"]},
+                    ])
+            return R()
+
+    monkeypatch.setattr(engine, "chat_model", lambda *a, **k: FakeLLM())
+    checks = {c["requirement"]: c for c in asyncio.run(engine.requirement_checks(ctx))}
+    assert checks["parking"]["status"] == "met" and checks["parking"]["evidence_ids"] == [real]
+    assert checks["outdoor patio"]["status"] == "unknown"  # cited evidence that doesn't exist
+    assert checks["open late"]["status"] == "unknown"  # not evaluated by the model
+
+
+def test_compare_groups_analyses_by_search():
+    import uuid
+
+    from fastapi.testclient import TestClient
+
+    import db
+    import main
+
+    sid = "s" + uuid.uuid4().hex[:8]
+    cands = []
+    for i in range(3):
+        c = {"id": f"vx_{sid}_{i}", "lat": 29.76 + i / 1000, "lon": -95.36, "building_type": "commercial", "area_sqft": 2500 + i,
+             "match_score": 90 - i, "match_reasons": [], "source": "vexcel", "address": None}
+        db.save_property(c, None)
+        cands.append(c)
+    db.save_search(sid, "gym in Houston", {"business_type": "gym", "business_label": "Gym"}, None, "vexcel_live", [c["id"] for c in cands])
+    for i in (0, 2):
+        db.create_analysis(f"a_{sid}_{i}", "gym in Houston", {"business_type": "gym", "business_label": "Gym"}, cands[i], 1200, "quick", sid, None)
+    db.create_analysis(f"a_{sid}_other", "restaurant in Houston", {"business_type": "restaurant", "business_label": "Restaurant"}, cands[1], 500)
+
+    client = TestClient(main.app)
+    data = client.get(f"/api/searches/{sid}").json()
+    assert {a["id"] for a in data["analyses"]} == {f"a_{sid}_0", f"a_{sid}_2"}  # never mixes in other searches
+    assert [c["id"] for c in data["candidates"]] == [c["id"] for c in cands] and not data["legacy"]
+    other = next(a for a in client.get("/api/analyses").json() if a["id"] == f"a_{sid}_other")
+    assert other["search_id"].startswith("legacy-")  # no search id: grouped by request + business type
+    assert client.get("/api/searches/nope").status_code == 404
+
+
+def _square(lon, lat, d=0.0003):
+    return {"type": "Polygon", "coordinates": [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]]}
+
+
+def test_visual_needs_become_phrases_and_others_are_ignored():
+    from schemas import Intent
+    from services.visual import visual_phrases
+
+    i = Intent(business_type="restaurant", requirements=["outdoor patio", "foot traffic", "parking", "open late"])
+    assert [n for n, _ in visual_phrases(i)] == ["outdoor patio", "parking"]  # foot traffic / open late aren't visual
+    assert visual_phrases(Intent(requirements=["foot traffic"])) == []
+
+
+def test_visual_matching_reranks_buildings_that_look_right(monkeypatch):
+    import asyncio
+
+    from schemas import Intent
+    from services import visual
+
+    a = {"id": "a", "lat": 29.760, "lon": -95.360, "footprint": _square(-95.360, 29.760), "match_score": 90, "match_reasons": []}
+    b = {"id": "b", "lat": 29.770, "lon": -95.370, "footprint": _square(-95.370, 29.770), "match_score": 85, "match_reasons": []}
+    # One strong patio-like cell over building b only.
+    cells = [(-95.3705, 29.7695, -95.3695, 29.7705, 0.15), (-95.3505, 29.7495, -95.3495, 29.7505, 0.06)]
+
+    async def fake_search(phrase, lat, lon, box):
+        return cells
+
+    monkeypatch.setattr(visual, "search_cells", fake_search)
+    note = asyncio.run(visual.apply([a, b], Intent(requirements=["outdoor patio"]), 29.76, -95.36, 1600))
+    assert note and "outdoor patio" in note
+    assert b["match_score"] > a["match_score"]  # 0.7*85 + 0.3*100 = 90 vs 0.7*90 + 0 = 63
+    assert b["visual_matches"][0]["need"] == "outdoor patio" and any("Looks like" in r for r in b["match_reasons"])
+
+    # No visual needs: nothing changes. Failed search: ranking unchanged, explained.
+    c = {"id": "c", "lat": 29.76, "lon": -95.36, "footprint": None, "match_score": 70, "match_reasons": []}
+    assert asyncio.run(visual.apply([c], Intent(requirements=["foot traffic"]), 29.76, -95.36, 1600)) is None and c["match_score"] == 70
+
+    async def broken(*a, **k):
+        raise RuntimeError("vexcel down")
+
+    monkeypatch.setattr(visual, "search_cells", broken)
+    note = asyncio.run(visual.apply([c], Intent(requirements=["parking"]), 29.76, -95.36, 1600))
+    assert "unavailable" in note and c["match_score"] == 70
+
+
+def test_extra_budget_is_never_ignored_and_both_budgets_are_checked(monkeypatch):
+    import asyncio
+
+    from services import intent as intent_mod
+    from services.intent import parse_budgets
+
+    async def rules_only(q):
+        return intent_mod.parse_rules(q)
+
+    monkeypatch.setattr(intent_mod, "parse", rules_only)
+    # The user's real case: search budget $9k/month, extra text "budget is under 80k dollars".
+    query = "Dental clinic in Houston with parking, budget $9k/month"
+    base = intent_mod.parse_rules(query)
+    refined = asyncio.run(intent_mod.refine(base, query, "budget is under 80k dollars"))
+    assert {(b.period, b.amount) for b in refined.budgets} == {("monthly", 9000), ("upfront", 80000)}
+    assert refined.budget.amount == 80000  # the later text is the primary budget
+    # Same period in the extra text replaces the search's.
+    refined2 = asyncio.run(intent_mod.refine(base, query, "actually no more than 7k a month"))
+    assert [(b.period, b.amount) for b in refined2.budgets] == [("monthly", 7000)]
+
+    est = costs.estimate("medical_office", 2200, "houston-tx", [])
+    checks = costs.budget_checks(est, refined.model_dump(), "dental_clinic")
+    assert {c["period"] for c in checks} == {"monthly", "upfront"} and costs.worst(checks)["status"] in {"over", "partly", "within"}
+
+    # Seats, square feet, distances and headcounts are never money.
+    for text in ["40-seat restaurant, 2,000 sq ft, within 500 m of transit", "office for 12 people on 3 floors"]:
+        assert parse_budgets(text) == []
+    assert [(b.period, b.amount) for b in parse_budgets("$150k to open, $8k a month")] == [("upfront", 150000), ("monthly", 8000)]

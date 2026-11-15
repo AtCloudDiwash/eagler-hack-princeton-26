@@ -7,6 +7,7 @@ Results are cached in SQLite (OSM/Census data are openly licensed).
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Any
 
@@ -38,8 +39,19 @@ async def _nominatim(path: str, params: dict) -> Any:
         return res.json()
 
 
+_ALIASES = [(re.compile(r"\bDTLA\b", re.I), "Downtown Los Angeles"), (re.compile(r"\bLA\b"), "Los Angeles"),
+            (re.compile(r"\b(?:HTX|H-Town)\b", re.I), "Houston")]
+
+
+def expand_aliases(text: str) -> str:
+    for pattern, full in _ALIASES:
+        text = pattern.sub(full, text)
+    return text
+
+
 async def geocode(text: str) -> dict | None:
-    key = f"geocode2:{text.lower().strip()}"
+    text = expand_aliases(text.strip())  # "Downtown LA" -> "Downtown Los Angeles" (Nominatim reads "LA" as Louisiana)
+    key = f"geocode2:{text.lower()}"
     if (hit := db.cache_get(key, 7 * 86400)) is not None:
         return hit or None
     hits = await _nominatim("search", {"q": text, "limit": 1, "countrycodes": "us", "addressdetails": 1})

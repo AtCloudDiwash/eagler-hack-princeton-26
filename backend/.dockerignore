@@ -10,6 +10,10 @@ __pycache__/
 .pytest_cache/
 *.db
 *.db-*
+# Downloaded public datasets (Census LODES): fetched on first use into the turnkey-lodes volume
+data/
+benchmarks/bench.db*
+benchmarks/results/
 # Licensed Vexcel sample: record it locally if you need demo mode (scripts/record_demo_fixture.py)
 fixtures/vexcel_*.json
 Dockerfile

@@ -45,7 +45,8 @@ export type Intent = {
   seats: number | null;
   sqft: number | null;
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
-  budget: Budget | null; // stated in the query ("$8k/month", "budget of $300k"), else null
+  budget: Budget | null; // the most recently stated budget ("$8k/month", "budget of $300k"), else null
+  budgets?: Budget[]; // every stated budget, one per period (e.g. $9k/month AND $80k upfront)
   parser: "llm" | "rules";
   occupancy?: Record<string, number>; // counts stated: seats, chairs, members, class_size, employees, staff
   needs?: Need[]; // recognised needs (backend/config/needs.yaml)
@@ -116,6 +117,8 @@ export type Candidate = {
   best_space?: CostarSpace | null; // listed suite closest to the user's size
   closest_space_sqft?: number | null; // no suite in range: the listed space nearest the user's size
   asking_rent_per_sqft_yr?: [number, number] | null;
+  /** Similarity to the user's visual needs in Vexcel imagery (pct = rank within this search, 0-100). */
+  visual_matches?: { need: string; pct: number }[];
 };
 
 export type CostarSpace = {
@@ -158,6 +161,8 @@ export type SearchResponse = {
   candidates: Candidate[];
   notes: string[]; // human-readable caveats ("Outside Vexcel coverage: footprints from OpenStreetMap")
   program: SpaceProgram | null; // what the request implies (shown before any building is chosen)
+  search_id?: string | null; // groups analyses of buildings from this search (Compare)
+  query?: string; // client-side: the exact text that produced this result (sent with Analyze)
 };
 
 /** One turn of the refine-as-you-go conversation on the discovery page. */
@@ -251,12 +256,17 @@ export type Neighborhood = {
 
 // ---------------------------------------------------------------- analysis
 
+/** quick = agents start from pre-gathered evidence with fewer LLM calls; deep = full investigation. */
+export type AnalysisMode = "quick" | "deep";
+
 export type AnalysisRequest = {
   query: string;
   intent: Intent;
   property_id: string;
   radius_m: number;
   requirements?: string; // free-text extra requirements from the user
+  mode?: AnalysisMode; // default "deep"
+  search_id?: string | null; // the search this building came from
 };
 
 export type AgentName = "vexcel" | "neighborhood" | "compliance" | "cost" | "matterport" | "engine";
@@ -335,6 +345,8 @@ export type Costs = {
   monthly_occupancy: { low: number; high: number } | null; // rent + NNN + amortized fit-out
   upfront: { low: number; high: number };
   assumptions: string[];
+  /** Every stated budget checked (same shape as `budget`), e.g. monthly AND upfront. */
+  budgets?: NonNullable<Costs["budget"]>[];
   /** Estimate vs the user's budget, or vs a typical budget for this use + size when none was given. */
   budget?: {
     source: "user" | "typical";
@@ -382,6 +394,9 @@ export type AnalysisResult = {
   open_questions: { question: string; why: string; suggested_source: string; agent: AgentName }[];
   conflicts: { description: string; agents: AgentName[]; resolution: string }[];
   followups_run: { agent: AgentName; question: string; outcome: string }[];
+  /** Each need the user stated (search prompt + extra requirements), judged against the evidence. */
+  requirement_checks?: { requirement: string; status: "met" | "unmet" | "unknown"; rationale: string; evidence_ids: string[] }[];
+  mode?: AnalysisMode;
   data_sources: { name: string; status: "used" | "unavailable" | "demo"; note: string }[];
   program?: SpaceProgram; // absent on analyses run before the space program existed
   site_checks?: SiteCheck[];
@@ -395,6 +410,10 @@ export type Analysis = {
   intent: Intent;
   property: PropertyDetail;
   radius_m: number;
+  mode?: AnalysisMode; // absent on analyses made before modes existed (= deep)
+  search_id?: string; // group key: the search it came from (older analyses: grouped by request + business)
+  base_query?: string; // the search prompt alone (query = prompt + extra requirements)
+  extra_requirements?: string | null;
   events: AnalysisEvent[];
   result: AnalysisResult | null;
   error: string | null;
@@ -410,4 +429,21 @@ export type AnalysisSummary = {
   score: number | null;
   confidence: number | null;
   verdict: Verdict | null;
+  mode?: AnalysisMode;
+  search_id?: string;
+  base_query?: string;
+  extra_requirements?: string | null;
+  business_type?: string;
+  budget_status?: "within" | "partly" | "over" | null;
+};
+
+/** GET /api/searches/{id}: one search, its ranked candidates and the analyses run on them. */
+export type SearchGroup = {
+  id: string;
+  query: string;
+  intent: Intent;
+  location: SearchResponse["location"];
+  legacy: boolean; // made before search ids existed: only analyzed buildings are known
+  candidates: Pick<Candidate, "id" | "lat" | "lon" | "building_type" | "area_sqft" | "roof_condition" | "roof_condition_label" | "stories_est" | "match_score" | "match_reasons" | "address" | "source">[];
+  analyses: AnalysisSummary[];
 };

@@ -28,6 +28,7 @@ npm-debug.log*
 # ---- Licensed / owner data: record locally, never commit ----
 # Vexcel API responses (backend/scripts/record_demo_fixture.py)
 backend/fixtures/vexcel_*.json
+<<<<<<< integration
 # Matterport scans incl. safety-net copies (backend/scripts/record_matterport_fixture.py)
 backend/fixtures/matterport/
 # CoStar kit index (backend/scripts/build_costar_index.py)
@@ -42,3 +43,10 @@ legacy/backend/static/vexcel-cache/
 .idea/
 .vscode/
 Thumbs.db
+=======
+
+# Agent benchmark scratch database
+backend/benchmarks/bench.db*
+# Downloaded public datasets (Census LODES), re-fetched on demand
+backend/data/
+>>>>>>> ours
