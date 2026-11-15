@@ -70,6 +70,7 @@ export type SearchResponse = {
   data_mode: "vexcel_live" | "vexcel_demo" | "osm_only";
   candidates: Candidate[];
   notes: string[]; // human-readable caveats ("Outside Vexcel coverage: footprints from OpenStreetMap")
+  search_id?: string | null; // groups analyses of buildings from this search (Compare)
 };
 
 export type KeyFact = { group: string; label: string; value: string; note?: string | null };
@@ -115,6 +116,7 @@ export type AnalysisRequest = {
   radius_m: number;
   requirements?: string; // free-text extra requirements from the user
   mode?: AnalysisMode; // default "deep"
+  search_id?: string | null; // the search this building came from
 };
 
 export type AgentName = "vexcel" | "neighborhood" | "compliance" | "cost" | "matterport" | "engine";
@@ -255,6 +257,9 @@ export type Analysis = {
   property: PropertyDetail;
   radius_m: number;
   mode?: AnalysisMode; // absent on analyses made before modes existed (= deep)
+  search_id?: string; // group key: the search it came from (older analyses: grouped by request + business)
+  base_query?: string; // the search prompt alone (query = prompt + extra requirements)
+  extra_requirements?: string | null;
   events: AnalysisEvent[];
   result: AnalysisResult | null;
   error: string | null;
@@ -271,4 +276,20 @@ export type AnalysisSummary = {
   confidence: number | null;
   verdict: Verdict | null;
   mode?: AnalysisMode;
+  search_id?: string;
+  base_query?: string;
+  extra_requirements?: string | null;
+  business_type?: string;
+  budget_status?: "within" | "partly" | "over" | null;
+};
+
+/** GET /api/searches/{id}: one search, its ranked candidates and the analyses run on them. */
+export type SearchGroup = {
+  id: string;
+  query: string;
+  intent: Intent;
+  location: SearchResponse["location"];
+  legacy: boolean; // made before search ids existed: only analyzed buildings are known
+  candidates: Pick<Candidate, "id" | "lat" | "lon" | "building_type" | "area_sqft" | "roof_condition" | "roof_condition_label" | "stories_est" | "match_score" | "match_reasons" | "address" | "source">[];
+  analyses: AnalysisSummary[];
 };

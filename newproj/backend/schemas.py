@@ -56,6 +56,7 @@ class SearchResponse(BaseModel):
     data_mode: Literal["vexcel_live", "vexcel_demo", "osm_only"]
     candidates: list[Candidate]
     notes: list[str] = []
+    search_id: str | None = None  # groups analyses of buildings from this search (Compare)
 
 
 class AnalysisRequest(BaseModel):
@@ -65,6 +66,7 @@ class AnalysisRequest(BaseModel):
     radius_m: int = 500
     requirements: str | None = None
     mode: Literal["quick", "deep"] = "deep"  # quick = pre-gathered evidence, fewer LLM calls; deep = full investigation
+    search_id: str | None = None  # the search this building came from
 
 
 # ------------------------------------------------------------------ agent outputs (LLM-facing)

@@ -7,6 +7,8 @@ say so. CoStar listings are not connected in this build (noted in the response).
 """
 from __future__ import annotations
 
+import uuid
+
 import httpx
 
 import db
@@ -179,4 +181,6 @@ async def search(query: str) -> SearchResponse:
     for c in top:
         db.save_property(c.model_dump(), raws.get(c.id))
     notes.append("Listings/asking rents (CoStar) are not connected; candidates are existing buildings that suit the use, not confirmed vacancies.")
-    return SearchResponse(intent=intent, location=location, data_mode=data_mode, candidates=top, notes=notes)
+    search_id = uuid.uuid4().hex[:12]
+    db.save_search(search_id, query, intent.model_dump(), location, data_mode, [c.id for c in top])
+    return SearchResponse(intent=intent, location=location, data_mode=data_mode, candidates=top, notes=notes, search_id=search_id)

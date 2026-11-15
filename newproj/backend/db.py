@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS analyses (
   result TEXT,
   error TEXT
 );
+CREATE TABLE IF NOT EXISTS searches (
+  id TEXT PRIMARY KEY,
+  query TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  location TEXT,
+  data_mode TEXT,
+  candidate_ids TEXT NOT NULL,   -- JSON list, ranked
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cache (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
@@ -49,9 +58,11 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
         cols = {r[1] for r in _conn.execute("PRAGMA table_info(analyses)")}
-        if "mode" not in cols:  # migration for databases created before Quick/Deep modes
-            _conn.execute("ALTER TABLE analyses ADD COLUMN mode TEXT NOT NULL DEFAULT 'deep'")
-            _conn.commit()
+        # Migrations for databases created before Quick/Deep modes and search grouping.
+        for col, ddl in (("mode", "TEXT NOT NULL DEFAULT 'deep'"), ("search_id", "TEXT"), ("base_query", "TEXT"), ("extra_requirements", "TEXT")):
+            if col not in cols:
+                _conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {ddl}")
+        _conn.commit()
     return _conn
 
 
@@ -98,11 +109,30 @@ def get_property(prop_id: str) -> tuple[dict, dict | None] | None:
 
 # ---------------------------------------------------------------- analyses
 
-def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int, mode: str = "deep") -> None:
+def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int, mode: str = "deep",
+                    search_id: str | None = None, extra_requirements: str | None = None) -> None:
     _exec(
-        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, mode) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?)",
-        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, mode),
+        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, mode, search_id, base_query, extra_requirements) "
+        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, mode, search_id, query, extra_requirements),
     )
+
+
+def save_search(search_id: str, query: str, intent: dict, location: dict | None, data_mode: str, candidate_ids: list[str]) -> None:
+    _exec(
+        "INSERT OR REPLACE INTO searches (id, query, intent, location, data_mode, candidate_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (search_id, query, json.dumps(intent), json.dumps(location), data_mode, json.dumps(candidate_ids), datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def get_search(search_id: str) -> dict | None:
+    row = _one("SELECT * FROM searches WHERE id = ?", (search_id,))
+    if not row:
+        return None
+    return {
+        "id": row["id"], "query": row["query"], "intent": json.loads(row["intent"]), "location": json.loads(row["location"] or "null"),
+        "data_mode": row["data_mode"], "candidate_ids": json.loads(row["candidate_ids"]), "created_at": row["created_at"],
+    }
 
 
 def _json_default(o: Any) -> Any:
@@ -127,6 +157,9 @@ def _row_to_analysis(row: sqlite3.Row) -> dict:
         "property": json.loads(row["property"]),
         "radius_m": row["radius_m"],
         "mode": row["mode"] if "mode" in row.keys() else "deep",
+        "search_id": row["search_id"] if "search_id" in row.keys() else None,
+        "base_query": (row["base_query"] if "base_query" in row.keys() else None) or row["query"],
+        "extra_requirements": row["extra_requirements"] if "extra_requirements" in row.keys() else None,
         "events": json.loads(row["events"]),
         "result": json.loads(row["result"]) if row["result"] else None,
         "error": row["error"],
@@ -138,7 +171,7 @@ def get_analysis(analysis_id: str) -> dict | None:
     return _row_to_analysis(row) if row else None
 
 
-def list_analyses(limit: int = 50) -> list[dict]:
+def list_analyses(limit: int = 200) -> list[dict]:
     with _lock:
         rows = conn().execute("SELECT * FROM analyses ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     return [_row_to_analysis(r) for r in rows]

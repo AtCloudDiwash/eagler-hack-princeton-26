@@ -7,6 +7,7 @@ import type {
   Health,
   Neighborhood,
   PropertyDetail,
+  SearchGroup,
   SearchResponse,
 } from "./api-types";
 
@@ -58,4 +59,5 @@ export const api = {
     request<{ id: string; status: string }>("/api/analyses", { method: "POST", body: JSON.stringify(body) }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/api/analyses/${encodeURIComponent(id)}`, { signal }),
   analyses: () => request<AnalysisSummary[]>("/api/analyses"),
+  searchGroup: (id: string) => request<SearchGroup>(`/api/searches/${encodeURIComponent(id)}`),
 };

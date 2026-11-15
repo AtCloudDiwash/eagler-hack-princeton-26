@@ -296,3 +296,32 @@ def test_requirement_checks_need_real_evidence(monkeypatch):
     assert checks["parking"]["status"] == "met" and checks["parking"]["evidence_ids"] == [real]
     assert checks["outdoor patio"]["status"] == "unknown"  # cited evidence that doesn't exist
     assert checks["open late"]["status"] == "unknown"  # not evaluated by the model
+
+
+def test_compare_groups_analyses_by_search():
+    import uuid
+
+    from fastapi.testclient import TestClient
+
+    import db
+    import main
+
+    sid = "s" + uuid.uuid4().hex[:8]
+    cands = []
+    for i in range(3):
+        c = {"id": f"vx_{sid}_{i}", "lat": 29.76 + i / 1000, "lon": -95.36, "building_type": "commercial", "area_sqft": 2500 + i,
+             "match_score": 90 - i, "match_reasons": [], "source": "vexcel", "address": None}
+        db.save_property(c, None)
+        cands.append(c)
+    db.save_search(sid, "gym in Houston", {"business_type": "gym", "business_label": "Gym"}, None, "vexcel_live", [c["id"] for c in cands])
+    for i in (0, 2):
+        db.create_analysis(f"a_{sid}_{i}", "gym in Houston", {"business_type": "gym", "business_label": "Gym"}, cands[i], 1200, "quick", sid, None)
+    db.create_analysis(f"a_{sid}_other", "restaurant in Houston", {"business_type": "restaurant", "business_label": "Restaurant"}, cands[1], 500)
+
+    client = TestClient(main.app)
+    data = client.get(f"/api/searches/{sid}").json()
+    assert {a["id"] for a in data["analyses"]} == {f"a_{sid}_0", f"a_{sid}_2"}  # never mixes in other searches
+    assert [c["id"] for c in data["candidates"]] == [c["id"] for c in cands] and not data["legacy"]
+    other = next(a for a in client.get("/api/analyses").json() if a["id"] == f"a_{sid}_other")
+    assert other["search_id"].startswith("legacy-")  # no search id: grouped by request + business type
+    assert client.get("/api/searches/nope").status_code == 404

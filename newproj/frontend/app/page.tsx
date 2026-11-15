@@ -186,7 +186,7 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined, mode });
+      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined, mode, search_id: result.search_id ?? undefined });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);

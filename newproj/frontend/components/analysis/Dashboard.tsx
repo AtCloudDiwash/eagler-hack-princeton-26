@@ -55,7 +55,7 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
             <Link href="/" className="flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-white">
               <ArrowLeft size={14} /> <span className="hidden sm:inline">Another building</span>
             </Link>
-            <Link href={`/compare?ids=${encodeURIComponent(analysis.id)}`} className="flex items-center gap-1.5 rounded-xl bg-teal-300 px-3 py-1.5 text-[11px] font-semibold text-ink-950 hover:bg-teal-200">
+            <Link href={analysis.search_id ? `/compare?search=${encodeURIComponent(analysis.search_id)}` : `/compare?ids=${encodeURIComponent(analysis.id)}`} className="flex items-center gap-1.5 rounded-xl bg-teal-300 px-3 py-1.5 text-[11px] font-semibold text-ink-950 hover:bg-teal-200">
               <Scale size={13} /> Compare
             </Link>
           </div>
