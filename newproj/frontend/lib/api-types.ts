@@ -62,6 +62,8 @@ export type Candidate = {
   match_reasons: string[];
   source: "vexcel" | "osm" | "demo";
   address: string | null;
+  /** Similarity to the user's visual needs in Vexcel imagery (pct = rank within this search, 0-100). */
+  visual_matches?: { need: string; pct: number }[];
 };
 
 export type SearchResponse = {

@@ -325,3 +325,48 @@ def test_compare_groups_analyses_by_search():
     other = next(a for a in client.get("/api/analyses").json() if a["id"] == f"a_{sid}_other")
     assert other["search_id"].startswith("legacy-")  # no search id: grouped by request + business type
     assert client.get("/api/searches/nope").status_code == 404
+
+
+def _square(lon, lat, d=0.0003):
+    return {"type": "Polygon", "coordinates": [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]]}
+
+
+def test_visual_needs_become_phrases_and_others_are_ignored():
+    from schemas import Intent
+    from services.visual import visual_phrases
+
+    i = Intent(business_type="restaurant", requirements=["outdoor patio", "foot traffic", "parking", "open late"])
+    assert [n for n, _ in visual_phrases(i)] == ["outdoor patio", "parking"]  # foot traffic / open late aren't visual
+    assert visual_phrases(Intent(requirements=["foot traffic"])) == []
+
+
+def test_visual_matching_reranks_buildings_that_look_right(monkeypatch):
+    import asyncio
+
+    from schemas import Intent
+    from services import visual
+
+    a = {"id": "a", "lat": 29.760, "lon": -95.360, "footprint": _square(-95.360, 29.760), "match_score": 90, "match_reasons": []}
+    b = {"id": "b", "lat": 29.770, "lon": -95.370, "footprint": _square(-95.370, 29.770), "match_score": 85, "match_reasons": []}
+    # One strong patio-like cell over building b only.
+    cells = [(-95.3705, 29.7695, -95.3695, 29.7705, 0.15), (-95.3505, 29.7495, -95.3495, 29.7505, 0.06)]
+
+    async def fake_search(phrase, lat, lon, box):
+        return cells
+
+    monkeypatch.setattr(visual, "search_cells", fake_search)
+    note = asyncio.run(visual.apply([a, b], Intent(requirements=["outdoor patio"]), 29.76, -95.36, 1600))
+    assert note and "outdoor patio" in note
+    assert b["match_score"] > a["match_score"]  # 0.7*85 + 0.3*100 = 90 vs 0.7*90 + 0 = 63
+    assert b["visual_matches"][0]["need"] == "outdoor patio" and any("Looks like" in r for r in b["match_reasons"])
+
+    # No visual needs: nothing changes. Failed search: ranking unchanged, explained.
+    c = {"id": "c", "lat": 29.76, "lon": -95.36, "footprint": None, "match_score": 70, "match_reasons": []}
+    assert asyncio.run(visual.apply([c], Intent(requirements=["foot traffic"]), 29.76, -95.36, 1600)) is None and c["match_score"] == 70
+
+    async def broken(*a, **k):
+        raise RuntimeError("vexcel down")
+
+    monkeypatch.setattr(visual, "search_cells", broken)
+    note = asyncio.run(visual.apply([c], Intent(requirements=["parking"]), 29.76, -95.36, 1600))
+    assert "unavailable" in note and c["match_score"] == 70

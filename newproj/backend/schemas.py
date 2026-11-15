@@ -44,6 +44,7 @@ class Candidate(BaseModel):
     match_reasons: list[str] = []
     source: Literal["vexcel", "osm", "demo"] = "vexcel"
     address: str | None = None
+    visual_matches: list[dict] = []  # [{need, pct}] similarity to the user's visual needs in Vexcel imagery
 
 
 class SearchRequest(BaseModel):

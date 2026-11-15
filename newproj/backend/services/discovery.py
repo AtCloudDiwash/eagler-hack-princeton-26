@@ -14,7 +14,7 @@ import httpx
 import db
 from config import business, settings
 from schemas import Candidate, Intent, SearchResponse
-from services import external, vexcel
+from services import external, vexcel, visual
 from services.geo import centroid, haversine_m, in_coverage, property_id
 from services.intent import parse, target_sqft
 
@@ -164,7 +164,7 @@ async def search(query: str) -> SearchResponse:
         external.prefetch_places(lat, lon, radius_m=external.PLACES_RADIUS_M + int(SEARCH_BOX_M * 0.72))
     cfg = business(intent.business_type)
     allowed = set(cfg["suitable_building_types"]) | set(cfg.get("acceptable_building_types", []))
-    scored: list[Candidate] = []
+    eligible: list[dict] = []
     seen_ids: set[str] = set()
     for c in candidates:
         if c["id"] in seen_ids:
@@ -175,7 +175,13 @@ async def search(query: str) -> SearchResponse:
         if c.get("_too_low"):
             continue  # roof under 8 ft: canopy/kiosk/shed rather than a leasable building
         c["match_score"], c["match_reasons"] = prescreen(c, intent)
-        scored.append(Candidate(**c))
+        eligible.append(c)
+    if data_mode != "osm_only":
+        # Visual needs ("outdoor patio", "parking lot"...) re-rank by similarity in Vexcel imagery.
+        note = await visual.apply(eligible, intent, lat, lon, SEARCH_BOX_M)
+        if note:
+            notes.append(note)
+    scored = [Candidate(**c) for c in eligible]
     scored.sort(key=lambda c: (-c.match_score, haversine_m(lat, lon, c.lat, c.lon)))
     top = scored[:25]
     for c in top:

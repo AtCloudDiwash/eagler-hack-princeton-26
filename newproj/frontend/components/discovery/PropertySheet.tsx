@@ -7,7 +7,7 @@ import { buildingColor, fmtDistance, fmtSqft, titleCase } from "@/lib/format";
 import { groupIdForLabel, placeMeta } from "@/lib/places";
 import { FieldExplorer } from "@/components/ui/JsonView";
 import { Collapsible, ScoreRing, Spinner, StatTile } from "@/components/ui/primitives";
-import { candidateTitle } from "./CandidateRail";
+import { candidateTitle, LooksLike } from "./CandidateRail";
 
 type Props = {
   candidate: Candidate;
@@ -87,6 +87,7 @@ export default function PropertySheet(p: Props) {
           <StatTile icon={<Camera size={11} />} label="Imagery" value={p.detail?.imagery?.date?.slice(0, 7) ?? (p.detailLoading ? "…" : "—")} accent="#a78bfa" />
         </div>
 
+        <LooksLike c={p.candidate} max={3} />
         {p.candidate.match_reasons.length > 0 && (
           <ul className="space-y-1">
             {p.candidate.match_reasons.slice(0, 3).map((r) => (
