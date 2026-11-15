@@ -65,6 +65,10 @@ class EventLog:
 # ---------------------------------------------------------------- context
 
 async def build_context(req: AnalysisRequest, prop: dict, feature: dict | None, log_: EventLog) -> RunContext:
+    from services import costar
+    prop = costar.selected_fields(prop, req.intent, req.selection)
+    from services.suite_tours import resolve_property
+    prop, _ = await resolve_property(prop, feature, req.intent)
     intent = req.intent.model_dump()
     cfg = business(intent["business_type"])
     lat, lon = prop["lat"], prop["lon"]

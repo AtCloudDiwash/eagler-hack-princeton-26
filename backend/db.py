@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS analyses (
   intent TEXT NOT NULL,
   property TEXT NOT NULL,
   radius_m INTEGER NOT NULL,
+  conversation_history TEXT NOT NULL DEFAULT '[]',
   events TEXT NOT NULL DEFAULT '[]',
   result TEXT,
   error TEXT
@@ -48,6 +49,9 @@ def conn() -> sqlite3.Connection:
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
+        if "conversation_history" not in {r[1] for r in _conn.execute("PRAGMA table_info(analyses)")}:
+            _conn.execute("ALTER TABLE analyses ADD COLUMN conversation_history TEXT NOT NULL DEFAULT '[]'")
+            _conn.commit()
     return _conn
 
 
@@ -108,10 +112,10 @@ def set_matterport_model(prop_id: str, model_id: str | None) -> tuple[dict, dict
 
 # ---------------------------------------------------------------- analyses
 
-def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int) -> None:
+def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radius_m: int, conversation_history: list[dict] | None = None) -> None:
     _exec(
-        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m) VALUES (?, 'queued', ?, ?, ?, ?, ?)",
-        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m),
+        "INSERT INTO analyses (id, status, created_at, query, intent, property, radius_m, conversation_history) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?)",
+        (analysis_id, datetime.now(timezone.utc).isoformat(), query, json.dumps(intent), json.dumps(prop), radius_m, json.dumps(conversation_history or [])),
     )
 
 
@@ -134,6 +138,7 @@ def _row_to_analysis(row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "query": row["query"],
         "intent": json.loads(row["intent"]),
+        "conversation_history": json.loads(row["conversation_history"]),
         "property": json.loads(row["property"]),
         "radius_m": row["radius_m"],
         "events": json.loads(row["events"]),

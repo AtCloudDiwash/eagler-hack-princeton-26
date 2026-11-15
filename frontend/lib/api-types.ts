@@ -119,6 +119,7 @@ export type Candidate = {
 };
 
 export type CostarSpace = {
+  listing_id?: number | string;
   suite: string | null;
   floor: string | null;
   sqft: number | null;
@@ -161,7 +162,7 @@ export type SearchResponse = {
 };
 
 /** One turn of the refine-as-you-go conversation on the discovery page. */
-export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[] };
+export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[]; failed?: boolean };
 
 /** POST /api/search/refine: a follow-up either changes the search (re-run, new results) or is answered. */
 export type RefineResponse = {
@@ -252,6 +253,8 @@ export type Neighborhood = {
 // ---------------------------------------------------------------- analysis
 
 export type AnalysisRequest = {
+  selection?: Record<string, unknown> | null;
+  conversation_history?: ChatTurn[];
   query: string;
   intent: Intent;
   property_id: string;

@@ -101,3 +101,21 @@ def test_older_index_records_still_summarize():
     assert s["building_class"] is None and s["sprinklers"] is None and s["listing_condition"] is None
     fields = costar.candidate_fields(costar.match(29.76, -95.37), 1500, 2200, 1800)
     assert fields["stories"] == 1 and fields["gross_sqft"] == 25000 and fields["parking_ratio"] == 4.0
+
+
+def test_selection_survives_another_search_and_drives_panel(monkeypatch):
+    from schemas import Intent
+    from services import fit_summary
+    rec = costar.match(29.76, -95.37)
+    intent = Intent(sqft=3400)
+    chosen = costar.candidate_fields(rec, 3000, 4000, 3400)["best_space"]
+    assert chosen["suite"] == "110" and chosen["listing_id"] == 9
+    # Another search overwrote the stored building with Suite 105.
+    stored = {"id": "test", "lat": 29.76, "lon": -95.37, **costar.candidate_fields(rec, 1500, 2000, 1800)}
+    resolved = costar.selected_fields(stored, Intent(sqft=1800), chosen)
+    assert resolved["best_space"]["suite"] == "110"
+    tiles = fit_summary.tiles(resolved, None, intent)
+    assert next(t for t in tiles if t["id"] == "space")["sub"] == "Suite 110"
+    assert "3,400 sq ft" in next(t for t in tiles if t["id"] == "monthly")["hint"]
+    with pytest.raises(ValueError, match="no longer available"):
+        costar.selected_fields(stored, intent, {**chosen, "listing_id": 999})

@@ -87,7 +87,7 @@ def candidate_fields(p: dict, need_min: int, need_max: int, target: int, ground_
         "costar_id": p["id"], "building_name": p.get("name"),
         "rentable_sqft": p.get("rentable_sqft"), "rentable_basis": p.get("rentable_basis"),
         "available_sqft": s["available_sqft"], "space_count": s["space_count"],
-        "best_space": {**{k: best.get(k) for k in ("suite", "floor", "sqft", "rent_per_sqft_yr", "service", "use", "available_on")},
+        "best_space": {**{k: best.get(k) for k in ("listing_id", "suite", "floor", "sqft", "rent_per_sqft_yr", "service", "use", "available_on")},
                        "sqft_min": best.get("sqft_min") if (best.get("sqft_min") or 0) < (best.get("sqft") or 0) else None,
                        "ground_floor": is_ground_floor(best.get("floor"))} if best else None,
         "closest_space_sqft": None,
@@ -167,3 +167,25 @@ def summarize(p: dict, need_min: int | None = None, need_max: int | None = None)
         "listing_condition": next((l["condition"] for l in p["lease_listings"] if l.get("condition")), None),
         "note": "CoStar kit snapshot: availability and asking rents are as recorded in the kit, not live. Asking rent is not the achieved rent; check the service type (NNN vs gross).",
     }
+
+
+def selected_fields(prop: dict, intent, selection: dict | None = None) -> dict:
+    """Resolve a request's selection from the index, never trust client rent/area values."""
+    from services import program
+    rec = match(prop["lat"], prop["lon"], prop.get("footprint"))
+    if not rec:
+        if selection:
+            raise ValueError("The selected listing is no longer available; search again.")
+        return prop
+    prog = program.build(intent)
+    size = prog["size"]
+    fields = candidate_fields(rec, size["min_sqft"], size["max_sqft"], size["target_sqft"], prog["building"]["ground_floor"] == "required")
+    if selection:
+        if not isinstance(selection, dict) or not all(k in selection for k in ("listing_id", "suite", "floor")):
+            raise ValueError("Invalid suite selection; search again.")
+        spaces = _available_spaces(rec)
+        chosen = next((s for s in spaces if all(s.get(k) == selection.get(k) for k in ("listing_id", "suite", "floor"))), None)
+        if not chosen:
+            raise ValueError("The selected listing is no longer available; search again.")
+        fields["best_space"] = {**chosen, "ground_floor": is_ground_floor(chosen.get("floor"))}
+    return {**prop, **fields, "_selection_resolved": True}

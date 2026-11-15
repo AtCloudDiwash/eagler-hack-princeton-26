@@ -45,7 +45,7 @@ def tiles(prop: dict, feature: dict | None, intent: Intent) -> list[dict]:
     ground_rule = prog["building"]["ground_floor"]
     rec = costar.match(prop["lat"], prop["lon"], prop.get("footprint")) if prop.get("lat") is not None else None
     fields = costar.candidate_fields(rec, lo, hi, target, ground_rule == "required") if rec else {}
-    best = fields.get("best_space") or {}
+    best = (prop.get("best_space") if prop.get("_selection_resolved") else fields.get("best_space")) or {}
     known = building_facts.facts(prop, feature)["facts"]
     use = cfg["zoning_use"]
     out: list[dict] = []

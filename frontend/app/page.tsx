@@ -32,7 +32,9 @@ type Saved = { query: string; result: SearchResponse; selectedId: string | null;
 function foundMessage(r: SearchResponse): string {
   const size = r.program ? ` (~${r.program.size.target_sqft.toLocaleString()} sq ft)` : "";
   const where = r.location?.name ? ` near ${r.location.name.split(",")[0]}` : "";
-  const listed = r.candidates.filter((c) => c.best_space).length;
+  const listed = r.candidates.filter((c) => c.best_space?.sqft != null && r.program &&
+    (c.best_space.sqft_min || c.best_space.sqft) <= r.program.size.max_sqft &&
+    c.best_space.sqft >= r.program.size.min_sqft).length;
   if (!r.candidates.length) return `I couldn't find buildings for a ${r.intent.business_label.toLowerCase()}${where}. Try another area or a different size.`;
   return `Found ${r.candidates.length} buildings for a ${r.intent.business_label.toLowerCase()}${size}${where}` + (listed ? `, ${listed} with a space listed in your size range` : "") +
     ". Tell me what to change (size, budget, area, must-haves) or ask about them. When one looks right, open it and analyze.";
@@ -166,8 +168,8 @@ export default function DiscoveryPage() {
     searchAbort.current?.abort();
     const ctrl = new AbortController();
     searchAbort.current = ctrl;
-    const history = turns;
-    setTurns([...history, { role: "user", text: message }]);
+    const history = turns.filter((t) => !t.failed);
+    setTurns([...turns, { role: "user", text: message }]);
     setRefineText("");
     setRefining(true);
     setSearchError(null);
@@ -181,7 +183,7 @@ export default function DiscoveryPage() {
         setResult(r.result);
         setFitKey(`refine-${Date.now()}`);
         setRiseKey(`refine-${Date.now()}`);
-        const count = ` ${r.result.candidates.length} matches now` + (r.result.candidates.some((c) => c.best_space) ? `, ${r.result.candidates.filter((c) => c.best_space).length} with a listed space.` : ".");
+        const count = ` ${r.result.candidates.length} matches available` + (r.result.candidates.some((c) => c.best_space) ? `, ${r.result.candidates.filter((c) => c.best_space).length} with a listed space.` : ".");
         setTurns((t) => [...t, { role: "agent", text: `${r.reply}${count}`, changes }]);
         if (r.result.candidates.length === 0 && r.result.location) setFocus({ lat: r.result.location.lat, lon: r.result.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
       } else {
@@ -189,7 +191,8 @@ export default function DiscoveryPage() {
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        setTurns((t) => [...t, { role: "agent", text: `Sorry, that didn't go through (${(e as Error).message}). Try again.` }]);
+        setRefineText(message);
+        setTurns((t) => [...t.map((turn, i) => i === t.length - 1 ? { ...turn, failed: true } : turn), { role: "agent", failed: true, text: `Sorry, that didn't go through (${(e as Error).message}). Try again.` }]);
       }
     } finally {
       if (searchAbort.current === ctrl) setRefining(false);
@@ -200,9 +203,9 @@ export default function DiscoveryPage() {
     if (!selected) return;
     const ctrl = new AbortController();
     setDetailLoading(true);
-    const forRequest = result ? { business_type: result.intent.business_type, sqft: result.program?.size.target_sqft, budget: result.intent.budget } : undefined;
+    const forRequest = result?.intent;
     api
-      .property(selected.id, ctrl.signal, forRequest)
+      .property(selected.id, ctrl.signal, forRequest, selected.best_space)
       .then(setDetail)
       .catch((e: Error) => e.name !== "AbortError" && setDetailError(e.message))
       .finally(() => !ctrl.signal.aborted && setDetailLoading(false));
@@ -233,10 +236,12 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      // The agents get the whole conversation, so refinements ("ground floor only", "$8k a month") reach them too.
-      const said = turns.filter((t) => t.role === "user").map((t) => t.text);
-      const fullQuery = said.length > 1 ? `${said[0]} (then: ${said.slice(1).join("; ")})` : query;
-      const { id } = await api.startAnalysis({ query: fullQuery, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
+      const { id } = await api.startAnalysis({
+        query: `Find a property for this final effective request: ${JSON.stringify(result.intent)}`,
+        intent: result.intent, selection: selected.best_space,
+        conversation_history: turns, property_id: selected.id,
+        radius_m: radius, requirements: requirements.trim() || undefined,
+      });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);

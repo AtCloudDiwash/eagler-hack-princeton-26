@@ -112,6 +112,8 @@ class AnalysisRequest(BaseModel):
     query: str
     intent: Intent
     property_id: str
+    selection: dict | None = None
+    conversation_history: list[dict] = []
     radius_m: int = 500
     requirements: str | None = None
 
