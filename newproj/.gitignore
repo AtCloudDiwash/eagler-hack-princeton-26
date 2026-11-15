@@ -15,3 +15,6 @@ frontend/.next/
 .DS_Store
 # Licensed Vexcel API responses: never commit (record locally with backend/scripts/record_demo_fixture.py)
 backend/fixtures/vexcel_*.json
+
+# Agent benchmark scratch database
+backend/benchmarks/bench.db*
