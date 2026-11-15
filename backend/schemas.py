@@ -83,6 +83,21 @@ class SearchResponse(BaseModel):
     program: dict | None = None  # what the request implies: size, occupancy, code needs, building needs
 
 
+class RefineRequest(BaseModel):
+    """A follow-up message on the current search ("make it 60 seats", "which ones have parking?")."""
+    intent: Intent  # the current search
+    message: str
+    history: list[dict] = []  # earlier turns: [{"role": "user"|"agent", "text": ...}]
+    matches: list[dict] = []  # the current top matches, summarized by the client (lets the agent answer questions)
+
+
+class RefineResponse(BaseModel):
+    action: Literal["refine", "answer"]  # refine: the search changed and was re-run; answer: a reply only
+    reply: str
+    changes: list[str] = []  # what changed in the search (deterministic diff)
+    result: SearchResponse | None = None  # the new results when action == "refine"
+
+
 class MatterportLinkRequest(BaseModel):
     tour: str = Field(description="Matterport showcase URL (…/show/?m=<id>) or bare model id")
 

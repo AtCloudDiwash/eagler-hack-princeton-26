@@ -215,8 +215,9 @@ def attach_costar(candidates: list[dict], lat: float, lon: float, cfg: dict, pro
     return {p["id"] for p in listed}
 
 
-async def search(query: str) -> SearchResponse:
-    intent = await parse(query)
+async def search(query: str, intent: Intent | None = None) -> SearchResponse:
+    """Find candidate buildings. `intent` skips parsing (a search refined in conversation, services/refine.py)."""
+    intent = intent or await parse(query)
     notes: list[str] = []
     location_text = intent.location_text
     if not location_text:

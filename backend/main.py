@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 import multi_agent_engine
 from config import business_types, settings
-from schemas import AnalysisRequest, MatterportLinkRequest, SearchRequest, SearchResponse
+from schemas import AnalysisRequest, MatterportLinkRequest, RefineRequest, RefineResponse, SearchRequest, SearchResponse
 from services import costar, discovery, external, matterport, neighborhood, vexcel
 from services.llm import llm_status
 
@@ -110,6 +110,18 @@ async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:
         out.update(matterport_model_id=None, matterport_auto_model_id=None, matterport_note=None)
     db.save_property(out, raw)
     return out
+
+
+@app.post("/api/search/refine", response_model=RefineResponse)
+async def refine_search(req: RefineRequest) -> RefineResponse:
+    """Apply a follow-up to the current search (and re-run it), or answer a question about the current matches."""
+    from services import refine
+
+    if not req.message.strip():
+        raise HTTPException(400, "Message is empty")
+    out = await refine.refine(req.intent, req.message.strip(), req.history, req.matches)
+    result = await discovery.search(req.message, intent=out["intent"]) if out["action"] == "refine" else None
+    return RefineResponse(action=out["action"], reply=out["reply"], changes=out["changes"], result=result)
 
 
 @app.get("/api/properties/{prop_id}")
