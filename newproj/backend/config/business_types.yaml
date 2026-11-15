@@ -27,6 +27,12 @@ restaurant:
     competitors: [food_drink]
     demand: [offices, lodging, education, entertainment, retail]
     access: [transit, parking]
+  neighborhood:
+    # Situational signals: only these extra tools are offered to the Neighborhood agent for this business.
+    signals: [daytime_workers, residents, competitors, walk_access]
+    competitors: {match: {amenity: [restaurant, fast_food, cafe, food_court]}, kind_by: cuisine}
+    # Planning heuristics at the default catchment radius (scaled by area for other radii). Not market data.
+    benchmarks: {daytime_workers: {strong: 8000, weak: 1500}, employed_residents: {strong: 3000, weak: 600}}
   metrics:
     permitted_use: {weight: 14, why: "A restaurant needs food-service use allowed at the address before anything else matters."}
     hvac_ventilation: {weight: 13, why: "Commercial kitchens need a hood exhaust path to the roof and extra HVAC capacity; retrofitting both is one of the biggest restaurant build-out costs."}
@@ -62,6 +68,10 @@ dental_clinic:
     competitors: [dental_medical]
     demand: [residential_services, retail, offices, education]
     access: [parking, transit]
+  neighborhood:
+    signals: [residents, competitors]
+    competitors: {match: {amenity: [dentist], healthcare: [dentist]}}
+    benchmarks: {employed_residents: {strong: 10000, weak: 2500}, daytime_workers: {strong: 15000, weak: 3000}}
   metrics:
     permitted_use: {weight: 14, why: "Medical/dental use must be allowed (clinic class) at the address."}
     medical_infrastructure: {weight: 13, why: "Operatories need sinks at every chair, vacuum/compressed air and dedicated circuits; retrofits are expensive."}
@@ -95,6 +105,10 @@ gym:
     competitors: [fitness]
     demand: [residential_services, offices, education, retail]
     access: [parking, transit]
+  neighborhood:
+    signals: [residents, daytime_workers, competitors]
+    competitors: {match: {leisure: [fitness_centre, sports_centre]}}
+    benchmarks: {employed_residents: {strong: 8000, weak: 2000}, daytime_workers: {strong: 10000, weak: 2000}}
   metrics:
     size_fit: {weight: 14, why: "Equipment floors and classes need large, open floor area."}
     structural_floor: {weight: 13, why: "Dropped weights and impact need a ground-floor slab, ideally with tall clear height."}
@@ -127,6 +141,9 @@ office:
     competitors: []
     demand: [food_drink, retail, lodging]
     access: [transit, parking]
+  neighborhood:
+    signals: [walk_access]
+    benchmarks: {}
   metrics:
     permitted_use: {weight: 12, why: "Office use must be allowed at the address."}
     size_fit: {weight: 13, why: "Roughly 150-250 sq ft per employee."}
@@ -157,6 +174,10 @@ retail:
     competitors: [retail]
     demand: [food_drink, offices, lodging, residential_services, entertainment]
     access: [parking, transit]
+  neighborhood:
+    signals: [daytime_workers, residents, competitors, walk_access]
+    competitors: {match: {shop: ["*"]}, kind_by: shop}
+    benchmarks: {daytime_workers: {strong: 10000, weak: 2000}, employed_residents: {strong: 5000, weak: 1000}}
   metrics:
     customer_demand: {weight: 15, why: "Foot traffic and nearby shoppers drive sales."}
     permitted_use: {weight: 12, why: "Retail use must be allowed at the address."}

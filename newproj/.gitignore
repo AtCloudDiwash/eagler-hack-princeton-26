@@ -18,3 +18,5 @@ backend/fixtures/vexcel_*.json
 
 # Agent benchmark scratch database
 backend/benchmarks/bench.db*
+# Downloaded public datasets (Census LODES), re-fetched on demand
+backend/data/
