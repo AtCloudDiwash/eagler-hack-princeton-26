@@ -80,8 +80,8 @@ def cache_set(key: str, value: Any) -> None:
 
 def save_property(candidate: dict, raw: dict | None) -> None:
     # A re-run search re-saves its candidates: keep a Matterport tour the user linked to this building.
-    if "matterport_model_id" not in candidate and (old := get_property(candidate["id"])) and old[0].get("matterport_model_id"):
-        candidate = {**candidate, "matterport_model_id": old[0]["matterport_model_id"]}
+    if "matterport_model_id" not in candidate and (old := get_property(candidate["id"])):
+        candidate = {**candidate, **{k: v for k, v in old[0].items() if k.startswith("matterport_")}}
     _exec(
         "INSERT OR REPLACE INTO properties (id, candidate, raw, created_at) VALUES (?, ?, ?, ?)",
         (candidate["id"], json.dumps(candidate), json.dumps(raw) if raw is not None else None, time.time()),

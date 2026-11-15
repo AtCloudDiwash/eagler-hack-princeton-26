@@ -12,6 +12,7 @@ Like every agent it cites evidence ids; "not found in the scan" is an open quest
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Literal
 
@@ -280,13 +281,36 @@ def facts_line(model_id: str, identity: dict, facts: dict) -> str:
     return "; ".join(parts)
 
 
+async def _suite_tour_identity(ctx: RunContext, linked: str, auto_linked: bool) -> dict | None:
+    """When the building's live tour list has a strong tour of the listed suite, analyze that tour as 'verified'
+    (older than STALE_YEARS: 'likely'). None when there is no such tour, or the user linked a different one."""
+    from services import costar, suite_tours
+
+    try:
+        rec = costar.match(ctx.property["lat"], ctx.property["lon"], ctx.property.get("footprint"))
+        tours = await asyncio.wait_for(suite_tours.building_tours(ctx.property, rec), timeout=15)
+    except Exception as err:  # noqa: BLE001 - fall back to the per-scan identity check
+        log.info("suite tours unavailable: %s", err)
+        return None
+    ctx.shared["building_tours"] = tours
+    m = suite_tours.match(tours, ctx.property.get("best_space"))
+    if not m or m["confidence"] != "strong" or not (auto_linked or linked == m["id"]):
+        return None
+    t = next(x for x in tours if x["id"] == m["id"])
+    stale = bool(t.get("age_years") and t["age_years"] > scan_identity.STALE_YEARS)
+    reason = f"Tour '{t['name']}' shows the listed suite: " + "; ".join(m["signals"]) + (f". Caveats: {'; '.join(m['caveats'])}" if m["caveats"] else "") + "."
+    return {"verdict": "likely" if stale else "verified", "reason": reason, "model_id": m["id"], "name": t["name"], "address": t.get("line2"),
+            "distance_m": t.get("distance_m"), "alternatives_checked": len(tours), "captured": t.get("captured"), "age_years": t.get("age_years"),
+            "linked_model_id": linked, "linked_verdict": "suite tour" if linked == m["id"] else "other tour", "switched": m["id"] != linked, "alternative": None}
+
+
 async def run(ctx: RunContext, budget_limit: int = 6, focus: str | None = None, metric_ids: list[str] | None = None) -> AgentReport:
     ok, reason = available(ctx)
     if not ok:
         return _skipped(ctx, reason)
     linked = ctx.property["matterport_model_id"]
     auto_linked = bool(ctx.property.get("matterport_auto_model_id")) and ctx.property.get("matterport_auto_model_id") == linked
-    identity = await scan_identity.choose_scan(ctx.property, allow_switch=auto_linked)
+    identity = await _suite_tour_identity(ctx, linked, auto_linked) or await scan_identity.choose_scan(ctx.property, allow_switch=auto_linked)
     ctx.shared["scan_identity"] = identity
     if identity["verdict"] == "residential":
         return _skipped(ctx, f"The linked Matterport scan is an apartment-unit tour, not the commercial space: {identity['reason']} (Link a tour of the space on the building panel.)")

@@ -1,9 +1,9 @@
 "use client";
 
-import { Box, CheckCircle2, CircleAlert, Link2, Unlink } from "lucide-react";
+import { Box, CheckCircle2, CircleAlert, Link2, PlayCircle, Unlink } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import type { AgentReport, MatterportLink, PropertyDetail } from "@/lib/api-types";
+import type { AgentReport, BuildingTours, MatterportLink, PropertyDetail } from "@/lib/api-types";
 import { fmtSqft } from "@/lib/format";
 import { EvidenceChips } from "@/components/analysis/EvidenceContext";
 import { EmptyNote, Pill, Spinner } from "@/components/ui/primitives";
@@ -41,7 +41,13 @@ export function MatterportLinker({ property, onChange }: { property: PropertyDet
     setBusy(true);
     setError(null);
     try {
-      onChange(await fn());
+      const d = await fn();
+      const tours = property.matterport_tours ?? d.matterport_tours;
+      // Only the tour changed: keep the rest of the panel (e.g. the tiles computed for the user's request).
+      // Link responses have no search parameters, so retain this request's suite match too.
+      onChange({ ...property, matterport: d.matterport, matterport_tours: tours ? {
+        ...tours, tours: tours.tours.map((t) => ({ ...t, linked: t.id === d.matterport?.model_id })),
+      } : tours });
       setTour("");
     } catch (e) {
       setError((e as Error).message);
@@ -96,11 +102,48 @@ export function MatterportLinker({ property, onChange }: { property: PropertyDet
           </div>
         </form>
       )}
+      {property.matterport_tours && <TourList tours={property.matterport_tours} busy={busy} onPick={(id) => run(() => api.linkMatterport(property.id, id))} />}
       {error && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-rose-300">
           <CircleAlert size={12} className="mt-0.5 shrink-0" /> {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/** Every 3D tour of the building, labelled honestly against the suite for lease; pick any to view it. */
+function TourList({ tours, busy, onPick }: { tours: BuildingTours; busy: boolean; onPick: (id: string) => void }) {
+  if (!tours.tours.length) return <p className="mt-2 text-[11px] text-slate-500">{tours.note}</p>;
+  return (
+    <div className="mt-3 border-t border-white/[0.06] pt-2.5">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Tours in this building ({tours.tours.length})</span>
+      </div>
+      <p className={`mb-2 text-[11px] leading-snug ${tours.match?.confidence === "strong" ? "text-teal-200/90" : "text-amber-200/90"}`}>{tours.note}</p>
+      <ul className="space-y-1">
+        {tours.tours.map((t) => (
+          <li key={t.id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ring-inset ${t.linked ? "bg-sky-400/10 ring-sky-300/30" : "bg-white/[0.02] ring-white/[0.05]"}`}>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] text-slate-200" title={t.name}>{t.name}</div>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                {t.chips.map((c) => (
+                  <span key={c} className={`rounded px-1.5 py-px text-[10px] ${c === "your suite" ? "bg-teal-400/15 text-teal-200" : c === "not your suite" ? "bg-amber-400/10 text-amber-200/90" : "bg-white/[0.05] text-slate-400"}`}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {t.linked ? (
+              <span className="shrink-0 text-[10px] text-sky-300">Showing</span>
+            ) : (
+              <button onClick={() => onPick(t.id)} disabled={busy} className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-sky-200 disabled:opacity-40">
+                <PlayCircle size={12} /> View
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

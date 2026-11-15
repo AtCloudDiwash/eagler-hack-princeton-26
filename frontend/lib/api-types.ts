@@ -181,6 +181,28 @@ export type PropertyDetail = Candidate & {
   imagery: { collection: string | null; date: string | null; gsd_m: number | null } | null;
   matterport?: MatterportLink | null; // linked 3D tour (null when none)
   costar?: CostarSummary | null; // matched CoStar property: rentable area, spaces on the market, asking rents
+  matterport_tours?: BuildingTours | null; // every 3D tour of the building, labelled against the suite for lease
+};
+
+/** One 3D tour of the building (fetched live from the Matterport API). */
+export type BuildingTour = {
+  id: string;
+  name: string;
+  kind: "suite" | "floor" | "common area" | "apartment" | "building";
+  suites: string[];
+  floor: number | null;
+  captured: string | null;
+  area_sqft: number | null;
+  chips: string[]; // "Suite 1080", "floor 10", "2021", "not your suite"
+  embed_url: string;
+  linked: boolean;
+};
+
+export type BuildingTours = {
+  tours: BuildingTour[];
+  match: { id: string; confidence: "strong" | "possible"; signals: string[]; caveats: string[] } | null;
+  suite: string | null; // the listed suite the user would lease
+  note: string; // "No 3D tour of Suite 170; 2 tours of other parts of the building"
 };
 
 /** A Matterport tour linked to a building. The tour always embeds; interior data depends on `data`. */

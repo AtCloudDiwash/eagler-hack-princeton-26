@@ -82,7 +82,7 @@ async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:
     search for a scan of an actual suite in the building; if none is found that tour is unlinked. User-linked tours are kept."""
     from services import scan_identity
 
-    if prop.get("matterport_lookup_done"):
+    if prop.get("matterport_lookup_done") or prop.get("matterport_user_linked") or prop.get("matterport_user_unlinked"):
         return prop
     p = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
     scans = {s["id"]: s.get("caption") for s in (p or {}).get("matterport_scans") or [] if isinstance(s, dict) and s.get("id")}
@@ -137,10 +137,48 @@ async def property_detail(prop_id: str, business_type: str | None = None, sqft: 
         if rev.get("address"):
             prop["address"] = rev["address"]
             db.save_property(prop, raw)
-    prop = await _replace_amenity_scan(prop, raw)
     from services.fit_summary import intent_from_params
 
-    return _detail(prop, raw, intent_from_params(business_type, sqft, budget_amount, budget_period))
+    intent = intent_from_params(business_type, sqft, budget_amount, budget_period)
+    prop, tours_view = await _suite_tours(prop, raw, intent)
+    if not (tours_view and tours_view["match"]):
+        prop = await _replace_amenity_scan(prop, raw)
+        if tours_view:
+            tours_view = {**tours_view, "tours": [{**t, "linked": t["id"] == prop.get("matterport_model_id")} for t in tours_view["tours"]]}
+    detail = _detail(prop, raw, intent)
+    detail["matterport_tours"] = tours_view
+    return detail
+
+
+async def _suite_tours(prop: dict, raw: dict | None, intent, autolink: bool = True) -> tuple[dict, dict | None]:
+    """The building's 3D tours, fetched live and labelled against the suite the user would lease. When a tour of that
+    suite exists and the current tour was auto-linked (not the user's choice), link the suite's tour instead."""
+    from services import program as space_program
+    from services import suite_tours
+
+    rec = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
+    space = prop.get("best_space")
+    if intent and rec:  # the suite chosen for THIS request
+        prog = space_program.build(intent)
+        size = prog["size"]
+        space = costar.candidate_fields(rec, size["min_sqft"], size["max_sqft"], size["target_sqft"], prog["building"]["ground_floor"] == "required").get("best_space") or space
+    try:
+        tours = await asyncio.wait_for(suite_tours.building_tours(prop, rec), timeout=12)
+    except asyncio.TimeoutError:
+        return prop, None
+    view = suite_tours.for_property(tours, space, prop.get("matterport_model_id"))
+    m, linked = view["match"], prop.get("matterport_model_id")
+    auto = prop.get("matterport_auto_model_id")
+    # The user's own choice (pasted, or picked from the tour list) is never replaced: a link that differs from the
+    # auto-linked id, or (older records without an auto id) one that isn't among the building's known tours.
+    user_linked = prop.get("matterport_user_linked") or (bool(linked) and (auto != linked if auto else linked not in {t["id"] for t in tours}))
+    if autolink and not prop.get("matterport_user_unlinked") and m and m["confidence"] == "strong" and linked != m["id"] and not user_linked:
+        t = next(x for x in tours if x["id"] == m["id"])
+        prop = {**prop, "matterport_model_id": m["id"], "matterport_auto_model_id": m["id"], "matterport_lookup_done": True,
+                "matterport_note": f"Tour of Suite {view['suite']} ('{t['name']}')" + (f"; {'; '.join(m['caveats'])}." if m["caveats"] else ".")}
+        db.save_property(prop, raw)
+        view = suite_tours.for_property(tours, space, m["id"])
+    return prop, view
 
 
 @app.get("/api/properties/{prop_id}/neighborhood")
@@ -162,7 +200,13 @@ async def link_matterport(prop_id: str, req: MatterportLinkRequest) -> dict:
     stored = db.set_matterport_model(prop_id, model_id)
     if not stored:
         raise HTTPException(404, "Unknown property")
-    detail = _detail(*stored)
+    prop, raw = stored
+    prop = {**prop, "matterport_user_linked": True, "matterport_auto_model_id": None}
+    prop.pop("matterport_user_unlinked", None)
+    db.save_property(prop, raw)
+    prop, tours_view = await _suite_tours(prop, raw, None, autolink=False)
+    detail = _detail(prop, raw)
+    detail["matterport_tours"] = tours_view
     if matterport.data_mode(model_id) != "embed_only":
         try:
             scan = matterport.summarize(await asyncio.wait_for(matterport.fetch_model(model_id), timeout=30))
@@ -173,11 +217,17 @@ async def link_matterport(prop_id: str, req: MatterportLinkRequest) -> dict:
 
 
 @app.delete("/api/properties/{prop_id}/matterport")
-def unlink_matterport(prop_id: str) -> dict:
+async def unlink_matterport(prop_id: str) -> dict:
     stored = db.set_matterport_model(prop_id, None)
     if not stored:
         raise HTTPException(404, "Unknown property")
-    return _detail(*stored)
+    prop, raw = stored
+    prop = {**prop, "matterport_user_unlinked": True, "matterport_lookup_done": True}  # never auto-link a tour again here
+    db.save_property(prop, raw)
+    prop, tours_view = await _suite_tours(prop, raw, None, autolink=False)
+    detail = _detail(prop, raw)
+    detail["matterport_tours"] = tours_view
+    return detail
 
 
 @app.post("/api/analyses")
