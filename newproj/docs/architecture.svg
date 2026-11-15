@@ -1,0 +1,273 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1170" viewBox="0 0 1600 1170">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2dd4bf"/>
+    </marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a78bfa"/>
+    </marker>
+    <style>
+      text { font-family: Inter, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #e2e8f0; }
+      .h1 { font-size: 30px; font-weight: 700; }
+      .sub { font-size: 15px; fill: #94a3b8; }
+      .kick { font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .ph { font-size: 16px; font-weight: 700; }
+      .bh { font-size: 14.5px; font-weight: 650; }
+      .tx { font-size: 12.5px; fill: #cbd5e1; }
+      .mu { font-size: 12px; fill: #94a3b8; }
+      .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; fill: #a5f3fc; }
+      .monoS { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; fill: #cbd5e1; }
+      .badge { font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+      .panel { fill: #0f172a; stroke-width: 1.5; }
+      .box { fill: #15203a; stroke: #2a3a5c; stroke-width: 1; }
+      .chip { fill: #1b2a4a; stroke: #33507a; stroke-width: 1; }
+      .flow { stroke: #2dd4bf; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1170" fill="#0b1220"/>
+
+  <!-- Title -->
+  <text x="40" y="58" class="h1">Turnkey Matchmaker — System Architecture</text>
+  <text x="40" y="86" class="sub">Describe a business → discover buildings on a live Vexcel map → a team of AI agents vets one building → evidence-backed verdict, costs and compliance</text>
+
+  <!-- ============ FRONTEND ============ -->
+  <rect x="40" y="110" width="360" height="880" rx="14" class="panel" stroke="#2dd4bf"/>
+  <text x="60" y="138" class="kick" style="fill:#2dd4bf">FRONTEND</text>
+  <text x="60" y="160" class="ph">Next.js 15 · React 19 · Tailwind 4</text>
+  <text x="380" y="138" class="mono" text-anchor="end">:3001</text>
+
+  <rect x="60" y="178" width="320" height="180" rx="10" class="box"/>
+  <text x="76" y="202" class="bh">Discovery</text><text x="364" y="202" class="mono" text-anchor="end">/</text>
+  <text x="76" y="226" class="tx">SearchDock + IntentChips — describe the business</text>
+  <text x="76" y="248" class="tx">TurnkeyMap — MapLibre on proxied Vexcel tiles</text>
+  <text x="76" y="270" class="tx">CandidateRail — pre-screened buildings</text>
+  <text x="76" y="292" class="tx">PropertySheet — key facts + raw Vexcel JSON</text>
+  <text x="76" y="314" class="tx">Quick / Deep toggle → “Analyze this property”</text>
+  <text x="76" y="336" class="tx">ScanOverlay · HistoryDrawer</text>
+
+  <rect x="60" y="372" width="320" height="168" rx="10" class="box"/>
+  <text x="76" y="396" class="bh">Investigation</text><text x="364" y="396" class="mono" text-anchor="end">/analysis/[id]</text>
+  <text x="76" y="420" class="tx">InvestigationStage — live agent event log</text>
+  <text x="76" y="442" class="tx">Dashboard + tabs — verdict, score, confidence</text>
+  <text x="76" y="464" class="tx">Metrics · agent reports · evidence · costs</text>
+  <text x="76" y="486" class="tx">LocationTab — neighborhood on the map</text>
+  <text x="76" y="508" class="tx">EvidenceContext — every claim links to E#</text>
+
+  <rect x="60" y="554" width="320" height="74" rx="10" class="box"/>
+  <text x="76" y="578" class="bh">Compare</text><text x="364" y="578" class="mono" text-anchor="end">/compare</text>
+  <text x="76" y="602" class="tx">Side-by-side across saved analyses</text>
+
+  <rect x="60" y="642" width="320" height="118" rx="10" class="box"/>
+  <text x="76" y="666" class="bh">lib/</text>
+  <text x="76" y="690" class="tx"><tspan class="monoS">api.ts</tspan> — typed REST client</text>
+  <text x="76" y="712" class="tx"><tspan class="monoS">api-types.ts</tspan> — mirrors backend schemas</text>
+  <text x="76" y="734" class="tx">humanize · format · geo · places helpers</text>
+
+  <rect x="60" y="774" width="320" height="196" rx="10" fill="#0f2a2c" stroke="#1f5f5a"/>
+  <text x="76" y="798" class="bh" style="fill:#5eead4">No secrets in the browser</text>
+  <text x="76" y="824" class="tx">Only <tspan class="monoS">NEXT_PUBLIC_API_URL</tspan> is configured</text>
+  <text x="76" y="846" class="tx">Map tiles load through the backend</text>
+  <text x="76" y="868" class="tx">tile proxy, so the Vexcel key stays</text>
+  <text x="76" y="890" class="tx">in <tspan class="monoS">backend/.env</tspan></text>
+  <text x="76" y="922" class="tx">Shell.tsx — dark navy / charcoal</text>
+  <text x="76" y="944" class="tx">theme with a teal accent</text>
+
+  <!-- REST arrow -->
+  <line x1="384" y1="236" x2="466" y2="236" class="flow" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="425" y="222" class="mu" text-anchor="middle" style="fill:#5eead4">REST</text>
+  <text x="425" y="258" class="mu" text-anchor="middle" style="fill:#5eead4">JSON</text>
+
+  <!-- ============ BACKEND ============ -->
+  <rect x="450" y="110" width="740" height="880" rx="14" class="panel" stroke="#38bdf8"/>
+  <text x="470" y="138" class="kick" style="fill:#38bdf8">BACKEND</text>
+  <text x="470" y="160" class="ph">FastAPI · Pydantic · Python 3.12</text>
+  <text x="1170" y="138" class="mono" text-anchor="end">:8000</text>
+
+  <!-- routes -->
+  <rect x="470" y="176" width="700" height="120" rx="10" class="box"/>
+  <text x="486" y="200" class="bh">main.py — REST API</text>
+  <text x="486" y="224" class="mono">GET  /api/health</text>
+  <text x="486" y="243" class="mono">GET  /api/business-types</text>
+  <text x="486" y="262" class="mono">GET  /api/tiles/{z}/{x}/{y}  (tile proxy)</text>
+  <text x="486" y="281" class="mono">POST /api/search</text>
+  <text x="830" y="224" class="mono">GET  /api/properties/{id}</text>
+  <text x="830" y="243" class="mono">GET  /api/properties/{id}/neighborhood</text>
+  <text x="830" y="262" class="mono">POST /api/analyses  → background job</text>
+  <text x="830" y="281" class="mono">GET  /api/analyses[/{id}]  (UI polls)</text>
+
+  <line x1="640" y1="296" x2="640" y2="314" class="flow" marker-end="url(#arr)"/>
+  <line x1="1000" y1="296" x2="1000" y2="314" class="flow" marker-end="url(#arr)"/>
+
+  <!-- discovery -->
+  <rect x="470" y="316" width="340" height="234" rx="10" class="box"/>
+  <text x="486" y="340" class="bh">Discovery pipeline</text>
+  <text x="794" y="340" class="mu" text-anchor="end">no agents</text>
+  <text x="486" y="364" class="tx"><tspan class="monoS">intent.py</tspan> — rules + LLM extract business</text>
+  <text x="486" y="382" class="tx">type, seats / sq ft, place, requirements</text>
+  <text x="486" y="406" class="tx"><tspan class="monoS">discovery.py</tspan> — geocode, pull Vexcel parcels</text>
+  <text x="486" y="424" class="tx">around it, keep suitable building types</text>
+  <text x="486" y="448" class="tx">Deterministic pre-screen: type · size · roof · data</text>
+  <text x="486" y="472" class="tx">Outside geofence → OSM footprints (labelled)</text>
+  <text x="486" y="490" class="tx">No key → recorded Houston demo sample</text>
+  <text x="486" y="514" class="tx">Overpass prefetch for the whole search area,</text>
+  <text x="486" y="532" class="tx">cached in SQLite</text>
+
+  <!-- engine -->
+  <rect x="830" y="316" width="340" height="234" rx="10" fill="#1d1a3a" stroke="#6d5bd0"/>
+  <text x="846" y="340" class="bh" style="fill:#c4b5fd">multi_agent_engine.py</text>
+  <text x="1154" y="340" class="mu" text-anchor="end">background job</text>
+  <text x="846" y="364" class="tx">Context → Plan → Agents → Validate →</text>
+  <text x="846" y="382" class="tx">Conflicts → Follow-ups → Score → Narrative</text>
+  <rect x="846" y="398" width="96" height="28" rx="14" class="chip"/><text x="894" y="417" class="tx" text-anchor="middle">Vexcel</text>
+  <rect x="950" y="398" width="112" height="28" rx="14" class="chip"/><text x="1006" y="417" class="tx" text-anchor="middle">Neighborhood</text>
+  <rect x="1070" y="398" width="86" height="28" rx="14" class="chip"/><text x="1113" y="417" class="tx" text-anchor="middle">Cost</text>
+  <rect x="846" y="434" width="110" height="28" rx="14" class="chip"/><text x="901" y="453" class="tx" text-anchor="middle">Compliance</text>
+  <rect x="964" y="434" width="110" height="28" rx="14" class="chip" stroke-dasharray="4 3"/><text x="1019" y="453" class="tx" text-anchor="middle">Matterport</text>
+  <text x="846" y="488" class="tx">LangChain Deep Agents, one per domain</text>
+  <text x="846" y="508" class="tx">Live events → SQLite → polled by the UI</text>
+  <text x="846" y="534" class="mu" style="fill:#a78bfa">Details: see the Agent Architecture diagram</text>
+
+  <line x1="640" y1="550" x2="640" y2="574" class="flow" marker-end="url(#arr)"/>
+  <line x1="1000" y1="550" x2="1000" y2="574" class="flow" marker-end="url(#arr)"/>
+
+  <!-- adapters -->
+  <rect x="470" y="576" width="700" height="96" rx="10" class="box"/>
+  <text x="486" y="598" class="bh">Data adapters — services/</text>
+  <rect x="486" y="608" width="160" height="52" rx="8" class="chip"/>
+  <text x="498" y="628" class="monoS" style="fill:#a5f3fc">vexcel.py</text><text x="498" y="648" class="mu">tiles · property extract</text>
+  <rect x="656" y="608" width="160" height="52" rx="8" class="chip"/>
+  <text x="668" y="628" class="monoS" style="fill:#a5f3fc">geo.py</text><text x="668" y="648" class="mu">Nominatim · Census tract</text>
+  <rect x="826" y="608" width="160" height="52" rx="8" class="chip"/>
+  <text x="838" y="628" class="monoS" style="fill:#a5f3fc">neighborhood.py</text><text x="838" y="648" class="mu">Overpass places by radius</text>
+  <rect x="996" y="608" width="160" height="52" rx="8" class="chip"/>
+  <text x="1008" y="628" class="monoS" style="fill:#a5f3fc">external.py</text><text x="1008" y="648" class="mu">Census ACS demographics</text>
+
+  <!-- LLM layer -->
+  <rect x="470" y="690" width="700" height="102" rx="10" fill="#1d1a3a" stroke="#6d5bd0"/>
+  <text x="486" y="713" class="bh" style="fill:#c4b5fd">services/llm.py — FallbackChat</text>
+  <text x="1154" y="713" class="mu" text-anchor="end">used by intent.py · every agent · narrative</text>
+  <rect x="486" y="728" width="150" height="34" rx="17" class="chip"/><text x="561" y="750" class="tx" text-anchor="middle">Codex CLI</text>
+  <text x="652" y="750" class="tx" style="fill:#a78bfa">→</text>
+  <rect x="672" y="728" width="170" height="34" rx="17" class="chip"/><text x="757" y="750" class="tx" text-anchor="middle">Claude Code CLI</text>
+  <text x="858" y="750" class="tx" style="fill:#a78bfa">→</text>
+  <rect x="878" y="728" width="170" height="34" rx="17" class="chip"/><text x="963" y="750" class="tx" text-anchor="middle">Ollama (qwen3:8b)</text>
+  <text x="486" y="782" class="mu">Schema-constrained JSON · provider on a usage limit is skipped for a cooldown · per-analysis provider counts</text>
+
+  <!-- deterministic engines -->
+  <rect x="470" y="810" width="340" height="160" rx="10" class="box"/>
+  <text x="486" y="834" class="bh">Deterministic engines</text>
+  <text x="794" y="834" class="mu" text-anchor="end">Python only</text>
+  <text x="486" y="860" class="tx"><tspan class="monoS">rules.py</tspan> — verified jurisdiction rules</text>
+  <text x="486" y="878" class="tx">→ PASS / RISK / UNKNOWN with citations</text>
+  <text x="486" y="904" class="tx"><tspan class="monoS">costs.py</tspan> — cost bands → ranges, not quotes</text>
+  <text x="486" y="930" class="tx"><tspan class="monoS">scoring.py</tspan> — status → points × weights,</text>
+  <text x="486" y="948" class="tx">verdict thresholds, confidence</text>
+
+  <!-- config -->
+  <rect x="830" y="810" width="340" height="76" rx="10" class="box"/>
+  <text x="846" y="834" class="bh">config/ — YAML registry</text>
+  <text x="846" y="856" class="monoS">metrics · business_types · place_groups</text>
+  <text x="846" y="874" class="monoS">jurisdictions · costs</text>
+
+  <!-- sqlite -->
+  <rect x="830" y="896" width="340" height="74" rx="10" class="box"/>
+  <text x="846" y="920" class="bh">db.py — SQLite</text>
+  <text x="846" y="942" class="monoS">properties · analyses (status, mode,</text>
+  <text x="846" y="960" class="monoS">events, result) · cache (Overpass)</text>
+
+  <!-- ============ EXTERNAL ============ -->
+  <rect x="1240" y="110" width="320" height="880" rx="14" class="panel" stroke="#fbbf24"/>
+  <text x="1260" y="138" class="kick" style="fill:#fbbf24">EXTERNAL &amp; LOCAL</text>
+  <text x="1260" y="160" class="ph">Data providers and LLMs</text>
+
+  <rect x="1260" y="176" width="280" height="120" rx="10" class="box" stroke="#a37a1c"/>
+  <text x="1276" y="200" class="bh">Vexcel API</text>
+  <rect x="1470" y="187" width="56" height="18" rx="9" fill="#14532d"/><text x="1498" y="200" class="badge" text-anchor="middle" style="fill:#86efac">LIVE</text>
+  <text x="1276" y="224" class="tx"><tspan class="monoS">/ortho/tile</tspan> — aerial map tiles</text>
+  <text x="1276" y="246" class="tx"><tspan class="monoS">/property/extract</tspan> — parcels,</text>
+  <text x="1276" y="264" class="tx">roof, AI-detected attributes</text>
+  <text x="1276" y="286" class="mu">Key geofenced to Los Angeles + Houston</text>
+
+  <rect x="1260" y="310" width="280" height="100" rx="10" class="box" stroke="#a37a1c"/>
+  <text x="1276" y="334" class="bh">OpenStreetMap</text>
+  <rect x="1470" y="321" width="56" height="18" rx="9" fill="#14532d"/><text x="1498" y="334" class="badge" text-anchor="middle" style="fill:#86efac">LIVE</text>
+  <text x="1276" y="358" class="tx">Nominatim — geocoding</text>
+  <text x="1276" y="380" class="tx">Overpass — nearby places, footprints</text>
+  <text x="1276" y="400" class="mu">Volunteer-mapped: counts are lower bounds</text>
+
+  <rect x="1260" y="424" width="280" height="86" rx="10" class="box" stroke="#a37a1c"/>
+  <text x="1276" y="448" class="bh">US Census</text>
+  <rect x="1470" y="435" width="56" height="18" rx="9" fill="#14532d"/><text x="1498" y="448" class="badge" text-anchor="middle" style="fill:#86efac">LIVE</text>
+  <text x="1276" y="472" class="tx">Geocoder (tract) + ACS demographics</text>
+  <text x="1276" y="494" class="mu">Demographics need a free CENSUS_API_KEY</text>
+
+  <rect x="1260" y="524" width="280" height="70" rx="10" fill="#15203a" stroke="#6b5a2e" stroke-dasharray="6 4"/>
+  <text x="1276" y="548" class="bh">Matterport</text>
+  <rect x="1440" y="535" width="86" height="18" rx="9" fill="#3b2f12"/><text x="1483" y="548" class="badge" text-anchor="middle" style="fill:#fcd34d">OPTIONAL</text>
+  <text x="1276" y="572" class="tx">3D interior tours (none linked yet)</text>
+
+  <rect x="1260" y="606" width="280" height="70" rx="10" fill="#15203a" stroke="#4b5563" stroke-dasharray="6 4"/>
+  <text x="1276" y="630" class="bh" style="fill:#94a3b8">CoStar</text>
+  <rect x="1416" y="617" width="110" height="18" rx="9" fill="#27272a"/><text x="1471" y="630" class="badge" text-anchor="middle" style="fill:#a1a1aa">NOT CONNECTED</text>
+  <text x="1276" y="654" class="tx">Rent uses documented planning bands</text>
+
+  <rect x="1260" y="690" width="280" height="102" rx="10" fill="#1d1a3a" stroke="#6d5bd0"/>
+  <text x="1276" y="714" class="bh" style="fill:#c4b5fd">LLM CLIs on this machine</text>
+  <text x="1276" y="738" class="monoS">codex login</text>
+  <text x="1276" y="758" class="monoS">claude auth login</text>
+  <text x="1276" y="778" class="monoS">ollama pull qwen3:8b</text>
+
+  <!-- legend -->
+  <rect x="1260" y="810" width="280" height="160" rx="10" fill="none" stroke="#2a3a5c"/>
+  <text x="1276" y="834" class="bh">Legend</text>
+  <line x1="1278" y1="858" x2="1318" y2="858" class="flow" marker-end="url(#arr)"/><text x="1330" y="862" class="tx">request / data flow</text>
+  <line x1="1278" y1="884" x2="1318" y2="884" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrA)"/><text x="1330" y="888" class="tx">outbound API call</text>
+  <line x1="1278" y1="910" x2="1318" y2="910" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrV)"/><text x="1330" y="914" class="tx">LLM call (fallback chain)</text>
+  <rect x="1278" y="928" width="40" height="22" rx="5" fill="none" stroke="#6b5a2e" stroke-dasharray="5 3"/><text x="1330" y="944" class="tx">optional / not connected</text>
+
+  <!-- adapters → external (elbows in the gutter, non-crossing) -->
+  <path d="M1170 600 H1200 V236 H1256" stroke="#fbbf24" stroke-width="1.8" fill="none" marker-end="url(#arrA)"/>
+  <path d="M1170 620 H1212 V360 H1256" stroke="#fbbf24" stroke-width="1.8" fill="none" marker-end="url(#arrA)"/>
+  <path d="M1170 640 H1224 V467 H1256" stroke="#fbbf24" stroke-width="1.8" fill="none" marker-end="url(#arrA)"/>
+  <!-- LLM → providers -->
+  <line x1="1170" y1="741" x2="1256" y2="741" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrV)"/>
+
+  <!-- ============ USER JOURNEY ============ -->
+  <rect x="40" y="1012" width="1520" height="130" rx="14" fill="#0f172a" stroke="#1f2a44"/>
+  <text x="60" y="1040" class="kick" style="fill:#2dd4bf">USER JOURNEY</text>
+
+  <g>
+    <rect x="60" y="1056" width="264" height="66" rx="10" class="box"/>
+    <circle cx="84" cy="1089" r="13" fill="#2dd4bf"/><text x="84" y="1094" text-anchor="middle" style="font-size:13px;font-weight:700;fill:#0b1220">1</text>
+    <text x="106" y="1084" class="bh">Describe the business</text>
+    <text x="106" y="1104" class="mu">“restaurant, 60 seats, Houston”</text>
+
+    <line x1="326" y1="1089" x2="362" y2="1089" class="flow" marker-end="url(#arr)"/>
+    <rect x="364" y="1056" width="264" height="66" rx="10" class="box"/>
+    <circle cx="388" cy="1089" r="13" fill="#2dd4bf"/><text x="388" y="1094" text-anchor="middle" style="font-size:13px;font-weight:700;fill:#0b1220">2</text>
+    <text x="410" y="1084" class="bh">Discover buildings</text>
+    <text x="410" y="1104" class="mu">pre-screened on the Vexcel map</text>
+
+    <line x1="630" y1="1089" x2="666" y2="1089" class="flow" marker-end="url(#arr)"/>
+    <rect x="668" y="1056" width="264" height="66" rx="10" class="box"/>
+    <circle cx="692" cy="1089" r="13" fill="#2dd4bf"/><text x="692" y="1094" text-anchor="middle" style="font-size:13px;font-weight:700;fill:#0b1220">3</text>
+    <text x="714" y="1084" class="bh">Select a building</text>
+    <text x="714" y="1104" class="mu">facts, raw JSON, neighborhood</text>
+
+    <line x1="934" y1="1089" x2="970" y2="1089" class="flow" marker-end="url(#arr)"/>
+    <rect x="972" y="1056" width="264" height="66" rx="10" class="box"/>
+    <circle cx="996" cy="1089" r="13" fill="#2dd4bf"/><text x="996" y="1094" text-anchor="middle" style="font-size:13px;font-weight:700;fill:#0b1220">4</text>
+    <text x="1018" y="1084" class="bh">Agents investigate</text>
+    <text x="1018" y="1104" class="mu">Quick ≈ 52 s · Deep ≈ 139 s</text>
+
+    <line x1="1238" y1="1089" x2="1274" y2="1089" class="flow" marker-end="url(#arr)"/>
+    <rect x="1276" y="1056" width="264" height="66" rx="10" class="box"/>
+    <circle cx="1300" cy="1089" r="13" fill="#2dd4bf"/><text x="1300" y="1094" text-anchor="middle" style="font-size:13px;font-weight:700;fill:#0b1220">5</text>
+    <text x="1322" y="1084" class="bh">Dashboard &amp; compare</text>
+    <text x="1322" y="1104" class="mu">verdict, evidence, costs, rules</text>
+  </g>
+</svg>

@@ -252,3 +252,47 @@ def test_analysis_request_defaults_to_deep():
 
     assert AnalysisRequest(query="q", intent=Intent(), property_id="p").mode == "deep"
     assert AnalysisRequest(query="q", intent=Intent(), property_id="p", mode="quick").mode == "quick"
+
+
+def test_extra_requirements_are_folded_into_the_request(monkeypatch):
+    import asyncio
+
+    from services import intent as intent_mod
+
+    async def rules_only(q):
+        return intent_mod.parse_rules(q)
+
+    monkeypatch.setattr(intent_mod, "parse", rules_only)
+    base = intent_mod.parse_rules("I want to open a 40-seat restaurant in Houston with a budget of $12k/month")
+    combined = intent_mod.combine_request("I want to open a 40-seat restaurant in Houston", "needs parking, budget under $8k/month")
+    assert combined.endswith("Additional requirements: needs parking, budget under $8k/month")
+    refined = asyncio.run(intent_mod.refine(base, "I want to open a 40-seat restaurant in Houston", "needs parking, budget under $8k/month"))
+    assert refined.budget.amount == 8000 and refined.budget.period == "monthly"  # the later, more specific budget wins
+    assert "parking" in refined.requirements and refined.business_type == "restaurant" and refined.location_text == "Houston"
+    assert asyncio.run(intent_mod.refine(base, "q", "  ")) == base
+
+
+def test_requirement_checks_need_real_evidence(monkeypatch):
+    import asyncio
+
+    import multi_agent_engine as engine
+
+    ctx = _ctx()
+    ctx.intent = {**ctx.intent, "requirements": ["parking", "outdoor patio", "open late"]}
+    real = ctx.evidence.add("vexcel", "inspect_site_paving", "x", "paved 3,500 sq ft", {"hardscape_area_sqft": 3500})
+
+    class FakeLLM:
+        def with_structured_output(self, schema, **kw):
+            class R:
+                async def ainvoke(self, prompt):
+                    return schema(checks=[
+                        {"requirement": "parking", "status": "met", "rationale": "Paved lot.", "evidence_ids": [real]},
+                        {"requirement": "outdoor patio", "status": "unmet", "rationale": "Guess.", "evidence_ids": ["E99"]},
+                    ])
+            return R()
+
+    monkeypatch.setattr(engine, "chat_model", lambda *a, **k: FakeLLM())
+    checks = {c["requirement"]: c for c in asyncio.run(engine.requirement_checks(ctx))}
+    assert checks["parking"]["status"] == "met" and checks["parking"]["evidence_ids"] == [real]
+    assert checks["outdoor patio"]["status"] == "unknown"  # cited evidence that doesn't exist
+    assert checks["open late"]["status"] == "unknown"  # not evaluated by the model

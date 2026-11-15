@@ -190,7 +190,7 @@ def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], b
         f"{role}\n\n"
         f"USER'S ORIGINAL REQUEST (keep it central to every judgment): \"{ctx.query}\"\n"
         f"Business: {ctx.business['label']}. Space need: ~{ctx.target_sqft:,} sq ft ({ctx.target_basis}).\n"
-        + (f"Extra requirements from the user: {ctx.extra_requirements}\n" if ctx.extra_requirements else "")
+        + (f"Extra requirements from the user: {ctx.extra_requirements}\n" if ctx.extra_requirements and ctx.extra_requirements not in ctx.query else "")
         + (f"Requirements mentioned: {', '.join(ctx.intent.get('requirements') or [])}\n" if ctx.intent.get("requirements") else "")
         + f"\nYOUR METRICS (assess every one):\n{metrics_brief(metrics)}\n\n"
         + COMMON_RULES.format(budget=budget)

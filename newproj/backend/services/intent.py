@@ -123,6 +123,31 @@ async def parse(query: str) -> Intent:
     )
 
 
+def combine_request(query: str, extra: str | None) -> str:
+    """The user's full request: the search prompt plus anything added before Analyze."""
+    extra = (extra or "").strip()
+    return query if not extra else f"{query.strip().rstrip('.')}. Additional requirements: {extra}"
+
+
+async def refine(intent: Intent, query: str, extra: str | None) -> Intent:
+    """Fold the extra requirements typed at analysis time into the intent. The extra text is later and more
+    specific, so a budget / seats / size stated there wins; needs are merged. Business type and location stay."""
+    extra = (extra or "").strip()
+    if not extra:
+        return intent
+    extra_rules = parse_rules(extra)
+    full = await parse(combine_request(query, extra))  # LLM over the combined text (falls back to rules)
+    from_llm = full.parser == "llm"
+    budget = parse_budget(extra) or intent.budget or (full.budget if from_llm else None)
+    return intent.model_copy(update={
+        "seats": extra_rules.seats or (full.seats if from_llm and full.seats != intent.seats else None) or intent.seats,
+        "sqft": extra_rules.sqft or (full.sqft if from_llm and full.sqft != intent.sqft else None) or intent.sqft,
+        "budget": budget,
+        "requirements": _dedupe_requirements([*intent.requirements, *full.requirements, *extra_rules.requirements]),
+        "parser": "llm" if from_llm else intent.parser,
+    })
+
+
 def _dedupe_requirements(items: list[str]) -> list[str]:
     """Merge rule + LLM requirements, dropping ones contained in a longer phrase ("foot traffic" vs "good foot traffic")."""
     uniq = sorted({i.lower() for i in items}, key=len, reverse=True)

@@ -136,6 +136,8 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
           <BudgetCard costs={result.costs} />
         </motion.section>
 
+        {result.requirement_checks && result.requirement_checks.length > 0 && <RequirementChecks checks={result.requirement_checks} />}
+
         {/* Pros / cons */}
         <section className="grid gap-3 md:grid-cols-2">
           <ReasonList title="What works" icon={<ThumbsUp size={14} />} color="#34d399" items={pros} empty="No clear strengths recorded." />
@@ -335,5 +337,64 @@ function CostDrivers({ costs }: { costs: NonNullable<AnalysisResult["costs"]> })
         ))}
       </ul>
     </div>
+  );
+}
+
+
+const REQ_UI = {
+  met: { label: "Met", cls: "bg-emerald-400/10 text-emerald-300 ring-emerald-300/30", dot: "#34d399" },
+  unmet: { label: "Not met", cls: "bg-rose-400/10 text-rose-300 ring-rose-300/30", dot: "#fb7185" },
+  unknown: { label: "Unverified", cls: "bg-white/[0.04] text-slate-400 ring-white/10", dot: "#64748b" },
+} as const;
+
+/** The user's own stated needs (search + extra requirements), each met / not met / unverified, expandable. */
+function RequirementChecks({ checks }: { checks: NonNullable<AnalysisResult["requirement_checks"]> }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const current = checks.find((c) => c.requirement === open);
+  return (
+    <section className="glass rounded-3xl p-4 sm:p-5">
+      <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-slate-300">
+        <BadgeCheck size={14} className="text-teal-300" /> Your requirements
+        <span className="font-normal text-slate-500">· judged against the gathered evidence</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {checks.map((c) => {
+          const ui = REQ_UI[c.status];
+          const on = open === c.requirement;
+          return (
+            <button
+              key={c.requirement}
+              onClick={() => setOpen(on ? null : c.requirement)}
+              aria-expanded={on}
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] ring-1 ring-inset transition ${ui.cls} ${on ? "ring-2" : "hover:brightness-125"}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: ui.dot }} />
+              <span className="capitalize text-slate-100">{c.requirement}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">{ui.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <AnimatePresence initial={false}>
+        {current && (
+          <motion.div
+            key={current.requirement}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 rounded-2xl bg-white/[0.03] p-3 text-[12px] leading-relaxed text-slate-300 ring-1 ring-inset ring-white/[0.06]">
+              {current.rationale}
+              {current.evidence_ids.length > 0 && (
+                <div className="mt-2">
+                  <EvidenceChips ids={current.evidence_ids} />
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }

@@ -240,6 +240,9 @@ export type AnalysisResult = {
   open_questions: { question: string; why: string; suggested_source: string; agent: AgentName }[];
   conflicts: { description: string; agents: AgentName[]; resolution: string }[];
   followups_run: { agent: AgentName; question: string; outcome: string }[];
+  /** Each need the user stated (search prompt + extra requirements), judged against the evidence. */
+  requirement_checks?: { requirement: string; status: "met" | "unmet" | "unknown"; rationale: string; evidence_ids: string[] }[];
+  mode?: AnalysisMode;
   data_sources: { name: string; status: "used" | "unavailable" | "demo"; note: string }[];
 };
 

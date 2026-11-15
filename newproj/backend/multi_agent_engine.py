@@ -17,7 +17,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,7 +29,7 @@ from schemas import AgentMetricAssessment, AgentReport, AnalysisRequest, MetricR
 from services import costs as cost_engine
 from services import external, neighborhood, rules, scoring
 from services.geo import haversine_m
-from services.intent import target_sqft
+from services.intent import combine_request, refine, target_sqft
 from services.llm import AllProvidersFailedError, chat_model, model_label, on_fallback, track_usage
 from services.vexcel import key_facts, imagery_meta
 
@@ -257,12 +257,56 @@ def followup_candidates(ctx: RunContext, metrics: list[MetricResult], reports: d
 
 # ---------------------------------------------------------------- synthesis
 
+class _RequirementCheck(BaseModel):
+    requirement: str
+    status: Literal["met", "unmet", "unknown"] = Field(description="met/unmet only with direct evidence; otherwise unknown")
+    rationale: str = Field(description="One sentence; for unknown, say how to verify")
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class _RequirementChecks(BaseModel):
+    checks: list[_RequirementCheck]
+
+
+async def requirement_checks(ctx: RunContext) -> list[dict]:
+    """Judge each need the user stated (search prompt + extra requirements) against the gathered evidence.
+    Python validates citations: met/unmet without real evidence becomes unknown."""
+    needs = [r for r in ctx.intent.get("requirements") or [] if r.strip()]
+    if not needs:
+        return []
+    evidence = "\n".join(f"{e.id} [{e.tool}]: {e.summary}" for e in ctx.evidence.all())
+    prompt = (
+        f"User's request: \"{ctx.query}\"\n"
+        "For EACH stated requirement below, decide whether the selected property meets it, using ONLY the evidence "
+        "listed (cite ids). Use 'met' or 'unmet' only when evidence directly supports it; otherwise 'unknown' and say "
+        "how the user could verify it.\n"
+        f"Requirements: {json.dumps(needs)}\n\nEVIDENCE:\n{evidence}"
+    )
+    valid = ctx.evidence.ids()
+    try:
+        out: _RequirementChecks = await asyncio.wait_for(chat_model().with_structured_output(_RequirementChecks).ainvoke(prompt), timeout=120)
+        checks = {c.requirement.lower(): c for c in out.checks}
+    except Exception as err:  # noqa: BLE001 - checks are best effort; every need still appears as unknown
+        log.warning("requirement checks failed: %s", err)
+        checks = {}
+    result = []
+    for need in needs:
+        c = checks.get(need.lower()) or next((v for k, v in checks.items() if need.lower() in k or k in need.lower()), None)
+        if c is None:
+            result.append({"requirement": need, "status": "unknown", "rationale": "Could not be evaluated from the gathered evidence.", "evidence_ids": []})
+            continue
+        ids = [e for e in c.evidence_ids if e in valid]
+        status = c.status if (c.status == "unknown" or ids) else "unknown"
+        result.append({"requirement": need, "status": status, "rationale": c.rationale, "evidence_ids": ids})
+    return result
+
+
 class _Narrative(BaseModel):
     headline: str = Field(description="One specific sentence about THIS property for THIS business (not just the verdict label), e.g. naming the decisive strength and the main risk")
     explanation: str = Field(description="3-5 sentences: why, the decisive factors, and what to verify next. Only use facts given.")
 
 
-async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], reports: dict[str, AgentReport], costs: dict | None) -> tuple[str, str]:
+async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], reports: dict[str, AgentReport], costs: dict | None, req_checks: list[dict] | None = None) -> tuple[str, str]:
     digest = {
         "user_request": ctx.query,
         "address": ctx.property.get("address"),
@@ -272,6 +316,8 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
         "metrics": [{"name": m.name, "status": m.status, "weight": m.weight, "rationale": m.rationale[:220]} for m in sorted(metrics, key=lambda m: -m.weight)],
         "agent_summaries": {k: r.summary for k, r in reports.items() if r.summary},
         "costs": {"upfront": costs["upfront"], "monthly": costs["monthly_occupancy"]} if costs else None,
+        "budget": costs.get("budget") if costs else None,
+        "user_requirements": [{"requirement": c["requirement"], "status": c["status"], "why": c["rationale"]} for c in req_checks or []],
     }
     prompt = (
         "You are the lead analyst. Write the final recommendation for the user from this scored analysis. "
@@ -331,6 +377,13 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         if not stored:
             raise ValueError(f"Unknown property {req.property_id}")
         prop, feature = stored
+        if req.requirements and req.requirements.strip():
+            # One request everywhere: search prompt + what the user added before Analyze (re-parsed for budget,
+            # seats, size and needs). Stored so the dashboard and history show the full request.
+            log_.emit("engine", "plan", f"Adding your extra requirements to the request: \u201c{req.requirements.strip()[:120]}\u201d")
+            refined = await refine(req.intent, req.query, req.requirements)
+            req = req.model_copy(update={"intent": refined, "query": combine_request(req.query, req.requirements)})
+            db.update_analysis(analysis_id, query=req.query, intent=json.dumps(refined.model_dump()))
         ctx = await build_context(req, prop, feature, log_)
         db.update_analysis(analysis_id, property=json.dumps({**ctx.property, "key_facts": key_facts(feature), "raw": feature, "imagery": imagery_meta(feature)}))
 
@@ -450,8 +503,12 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
         cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
+        req_checks = await requirement_checks(ctx)
+        if req_checks:
+            summary = ", ".join(f"{c['requirement']}: {c['status']}" for c in req_checks)
+            log_.emit("engine", "validation", f"Checked your stated requirements — {summary}")
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
-        headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public)
+        headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public, req_checks)
 
         reg = metrics_registry()
         risks = []
@@ -459,6 +516,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             for f in r.findings:
                 if f.impact == "negative" and f.severity in {"medium", "high"}:
                     risks.append({"text": f"{f.title}: {f.detail}", "severity": f.severity, "agent": name})
+        for c in req_checks:
+            if c["status"] == "unmet":
+                risks.append({"text": f"Your requirement not met — {c['requirement']}: {c['rationale']}", "severity": "high", "agent": "engine"})
         risks.sort(key=lambda r: 0 if r["severity"] == "high" else 1)
         open_questions = []
         for name, r in reports.items():
@@ -480,6 +540,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         result = {
             "business_type": ctx.intent["business_type"],
             "mode": ctx.mode,
+            "requirement_checks": req_checks,
             "business_label": ctx.business["label"],
             "recommendation": {
                 "verdict": rec["verdict"], "label": rec["label"], "score": rec["score"], "confidence": rec["confidence"],
