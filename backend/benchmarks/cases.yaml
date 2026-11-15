@@ -1,0 +1,74 @@
+# Fixed benchmark for the analysis agents (Houston, inside Vexcel coverage). Each case pins the query, the
+# building (nearest Vexcel parcel to lat/lon) and the mode, so runs are comparable over time.
+# Expectations:
+#   core     - should hold for any decent version (regressions show here)
+#   upgrade  - targets for the agent upgrades (expected to fail on older versions)
+# Kinds: {metric: id, in: [statuses]} | {metric: id, not_in: [...]} | {evidence_tool: name}
+#        | {cost_flag: second_generation} | {budget_status: over|partly|within}
+
+cases:
+  - id: restaurant_downtown
+    query: "I want to open a 40-seat restaurant in Houston"
+    lat: 29.7579
+    lon: -95.3640
+    expect:
+      core:
+        - {metric: permitted_use, in: [strong, adequate]}
+        - {metric: customer_demand, in: [strong, adequate]}
+      upgrade:
+        - {evidence_tool: get_daytime_workers}
+        - {evidence_tool: check_flood_zone}
+
+  - id: restaurant_low_demand
+    query: "I want to open a 40-seat restaurant in Houston"
+    lat: 29.7627
+    lon: -95.3525
+    expect:
+      core:
+        - {metric: customer_demand, not_in: [strong]}
+      upgrade:
+        - {evidence_tool: get_daytime_workers}
+        - {metric: customer_demand, in: [weak]}
+
+  - id: dental_two_budgets
+    query: "Dental clinic in Houston with parking, budget $9k/month"
+    extra: "budget is under 80k dollars"
+    lat: 29.7645
+    lon: -95.3602
+    expect:
+      core:
+        - {metric: occupancy_cost, in: [weak]}
+        - {budget_status: over}
+      upgrade:
+        - {evidence_tool: check_flood_zone}
+
+  - id: gym_midtown
+    query: "Gym around 5,000 sq ft in Houston"
+    lat: 29.7470
+    lon: -95.3770
+    expect:
+      core:
+        - {metric: size_fit, not_in: [blocker]}
+        - {metric: permitted_use, in: [strong, adequate]}
+      upgrade:
+        - {evidence_tool: get_daytime_workers}
+
+  - id: retail_downtown
+    query: "Retail store in Houston with good foot traffic"
+    lat: 29.7560
+    lon: -95.3628
+    expect:
+      core:
+        - {metric: customer_demand, in: [strong, adequate]}
+      upgrade:
+        - {evidence_tool: get_daytime_workers}
+
+  - id: restaurant_second_generation
+    query: "I want to open a 40-seat restaurant in Houston"
+    lat: 29.75752
+    lon: -95.36546
+    expect:
+      core:
+        - {metric: permitted_use, in: [strong, adequate]}
+      upgrade:
+        - {cost_flag: second_generation}

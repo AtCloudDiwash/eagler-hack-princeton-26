@@ -15,7 +15,24 @@ from typing import ClassVar
 from services.cli_chat import PREAMBLE, CLIChatModel, LLMProviderError, ProviderExhaustedError
 
 _CANDIDATES = [str(Path.home() / ".local/bin/claude"), "/usr/local/bin/claude", "/opt/homebrew/bin/claude"]
+# Claude Code answers --json-schema through its own internal tool, and with our tools listed in the prompt it
+# sometimes tries to call them natively ("No such tool available") and then gives up. Spell out the contract.
+TOOL_CONTRACT = (
+    " The tools listed under 'TOOLS YOU CAN CALL' are NOT available to you as native tools and you must never try "
+    "to invoke them directly. To use one, return JSON with kind=\"tool_calls\" listing the calls; the system runs "
+    "them and shows you the results in the next turn. A tool is never 'unavailable' just because you cannot call it natively."
+)
 _LIMIT_WORDS = ("usage limit", "rate limit", "rate_limit", "quota", "overloaded", "credit balance", "limit reached")
+
+
+class NativeToolAttemptError(LLMProviderError):
+    """Claude tried to call a listed tool natively instead of returning kind=tool_calls; the reply is unusable."""
+
+
+RETRY_NOTE = (
+    "\n\n(Reminder: you cannot call the listed tools yourself. If you need one, answer with kind=\"tool_calls\" "
+    "and the system will run it.)"
+)
 
 
 class ClaudeUsageLimitError(ProviderExhaustedError):
@@ -44,13 +61,33 @@ class ChatClaudeCLI(CLIChatModel):
             "--tools", "",
             "--no-session-persistence",
             "--strict-mcp-config",
-            "--system-prompt", PREAMBLE,
+            "--system-prompt", PREAMBLE + TOOL_CONTRACT,
         ]
         if self.model:
             cmd += ["--model", self.model]
         if schema is not None:
             cmd += ["--json-schema", json.dumps(schema)]
         return cmd
+
+    NATIVE_TOOL_RETRIES: ClassVar[int] = 2  # Claude retries are ~5-10 s; falling through to local Ollama costs ~30 s per call
+
+    def _call_sync(self, prompt: str, schema: dict | None) -> str:
+        for attempt in range(self.NATIVE_TOOL_RETRIES + 1):
+            try:
+                return super()._call_sync(prompt if attempt == 0 else prompt + RETRY_NOTE, schema)
+            except NativeToolAttemptError:
+                if attempt == self.NATIVE_TOOL_RETRIES:
+                    raise  # falls through to the next provider
+        raise AssertionError("unreachable")
+
+    async def _call_async(self, prompt: str, schema: dict | None) -> str:
+        for attempt in range(self.NATIVE_TOOL_RETRIES + 1):
+            try:
+                return await super()._call_async(prompt if attempt == 0 else prompt + RETRY_NOTE, schema)
+            except NativeToolAttemptError:
+                if attempt == self.NATIVE_TOOL_RETRIES:
+                    raise
+        raise AssertionError("unreachable")
 
     def _extract(self, rc: int, stdout: str, stderr: str, out_path: str, schema: dict | None) -> str:
         try:
@@ -69,6 +106,8 @@ class ChatClaudeCLI(CLIChatModel):
             structured = data.get("structured_output")
             if structured is None:
                 raise LLMProviderError("claude -p returned no structured output")
+            if _is_tool_turn(schema) and _tried_native_tools(data, structured):
+                raise NativeToolAttemptError("claude tried to call agent tools natively")
             return json.dumps(structured)
         return str(data.get("result") or "")
 
@@ -86,3 +125,13 @@ async def claude_status(binary: str | None, model: str | None) -> dict:
         return {**base, "ok": False, "error": f"Could not check Claude login: {err}"}
     ok = bool(data.get("loggedIn"))
     return {**base, "ok": ok, "error": None if ok else "Not logged in: run `claude auth login`"}
+
+
+def _is_tool_turn(schema: dict) -> bool:
+    return "tool_calls" in (schema.get("properties") or {})
+
+
+def _tried_native_tools(data: dict, structured: dict) -> bool:
+    """A clean answer is one turn plus the structured-output turn; extra turns mean failed native tool calls."""
+    said_unavailable = "no such tool" in str(structured.get("content") or "").lower()
+    return said_unavailable or (structured.get("kind") == "final" and (data.get("num_turns") or 0) > 2)

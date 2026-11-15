@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Building2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { useState } from "react";
 import type { Candidate, SearchResponse } from "@/lib/api-types";
 import { fmtDistance, fmtFootprint, fmtNum, titleCase } from "@/lib/format";
@@ -34,6 +34,22 @@ export const candidateMeta = (c: Candidate) =>
     .filter(Boolean)
     .join(" · ");
 
+/** "Looks like: outdoor patio" chips for strong visual matches (top half of this search). */
+export function LooksLike({ c, max = 2 }: { c: Candidate; max?: number }) {
+  const strong = (c.visual_matches ?? []).filter((m) => m.pct >= 50).sort((a, b) => b.pct - a.pct).slice(0, max);
+  if (!strong.length) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {strong.map((m) => (
+        <span key={m.need} className="inline-flex items-center gap-1 rounded-full bg-fuchsia-400/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 ring-1 ring-inset ring-fuchsia-300/25" title="Similarity in Vexcel aerial imagery; agents verify it during analysis">
+          <Eye size={9} /> looks like {m.need}
+          <span className="font-mono text-fuchsia-200/60">top {Math.max(1, 100 - m.pct)}%</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const scoreColor = (s: number) => (s >= 85 ? "#34d399" : s >= 65 ? "#d4f53a" : s >= 45 ? "#fbbf24" : "#fb7185");
 
 function Card({ c, i, hovered, onHover, onSelect, compact = false }: { c: Candidate; i: number; hovered: boolean; onHover: (id: string | null) => void; onSelect: (c: Candidate) => void; compact?: boolean }) {
@@ -59,6 +75,7 @@ function Card({ c, i, hovered, onHover, onSelect, compact = false }: { c: Candid
           {c.best_space ? <span className="mr-1 rounded bg-emerald-400/15 px-1 text-[10px] font-semibold text-emerald-200">For lease</span> : null}
           {[candidateSize(c), candidateMeta(c)].filter(Boolean).join(" · ")}
         </div>
+        <LooksLike c={c} />
       </div>
       <ChevronRight size={15} className="shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-300" />
     </motion.button>

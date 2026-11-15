@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from agents.base import AgentReport, RunContext, ToolBudget, building_facts_result, run_agent, tracked_tool
 from config import costs_config
 from services import costs
+from services.geo import haversine_m, outer_ring, point_in_polygon
+
+PRIOR_USE_RADIUS_M = 30  # a mapped business this close to the building is treated as being in it
 
 ROLE = (
     "You investigate whether the selected property is financially feasible for the user's business. "
@@ -102,8 +105,45 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         build-out is evidence for second_generation=True."""
         return building_facts_result(ctx, group)
 
-    tools = [get_rent_assumption, list_cost_items, estimate_costs]
+    @tool
+    def check_prior_use() -> dict:
+        """Is this building already used for the same kind of business (OpenStreetMap places in or at the
+        building)? A second-generation space usually has the kitchen / plumbing / fit-out already in place."""
+        found = prior_use(ctx)
+        if found is None:
+            return {"summary": "Prior use unknown: nearby-place data unavailable", "data": None, "source": "OpenStreetMap (Overpass)"}
+        names = ", ".join(f"{p['name'] or p['category']} ({p['distance_m']} m)" for p in found[:3])
+        return {
+            "summary": f"Same kind of business already at this building: {names}" if found else "No same-kind business mapped at this building",
+            "data": {"second_generation_likely": bool(found), "places": found[:5]},
+            "source": "OpenStreetMap (Overpass)",
+            "guidance": ["OpenStreetMap can be out of date; confirm the existing kitchen/plumbing with the landlord before relying on it."],
+        }
+
+    tools = [get_rent_assumption, list_cost_items, check_prior_use, estimate_costs]
     return [*tools, get_building_facts] if (ctx.building or {}).get("facts") else tools
+
+
+def prior_use(ctx: RunContext) -> list[dict] | None:
+    """Same-kind businesses (this business's competitor place groups) inside the footprint or within ~30 m.
+    None when place data is unavailable (unknown, not 'no prior use')."""
+    sources = ctx.neighborhood.get("sources", [])
+    if not any(s["name"].startswith("OpenStreetMap") and s["status"] == "used" for s in sources):
+        return None
+    groups = set(ctx.business.get("place_roles", {}).get("competitors", []))
+    if not groups:
+        return []
+    ring = outer_ring(ctx.property.get("footprint"))
+    lat, lon = ctx.property["lat"], ctx.property["lon"]
+    hits = []
+    for p in ctx.neighborhood.get("places", []):
+        if p["group"] not in groups:
+            continue
+        inside = bool(ring) and point_in_polygon(p["lon"], p["lat"], ring)
+        d = haversine_m(lat, lon, p["lat"], p["lon"])
+        if inside or d <= PRIOR_USE_RADIUS_M:
+            hits.append({"name": p.get("name"), "category": p["category"], "distance_m": round(d), "inside_footprint": inside})
+    return sorted(hits, key=lambda h: h["distance_m"])
 
 
 def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
@@ -112,10 +152,12 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
         f"Assess financial feasibility for: \"{ctx.query}\".\n"
         f"Space need: ~{ctx.target_sqft:,} sq ft ({ctx.target_basis}). Building footprint (not rentable area): {ctx.property.get('area_sqft') or 'unknown'} sq ft.\n"
         + (f"CoStar: rentable building area {(ctx.property.get('rentable_sqft') or 0):,.0f} sq ft ({ctx.property.get('rentable_basis') or 'n/a'}); {ctx.property.get('space_count') or 0} space(s) on the market" + (f"; best fit {ctx.property['best_space']['sqft']:,.0f} sq ft" if ctx.property.get('best_space') else "") + ". Use a listed space's size for leased_sqft when it fits the need.\n" if ctx.property.get("rentable_sqft") or ctx.property.get("space_count") else "")
-        + (f"USER'S BUDGET: ${ctx.intent['budget']['amount']:,.0f} ({ctx.intent['budget']['period']}). Judge feasibility against it.\n" if ctx.intent.get("budget") else "The user did not state a budget; judge against typical budgets for this business.\n")
+        + ("USER'S BUDGET: " + " and ".join(f"${b['amount']:,.0f} {b['period']}" for b in costs.user_budgets(ctx.intent)) + ". Judge feasibility against each.\n"
+           if costs.user_budgets(ctx.intent) else "The user did not state a budget; judge against typical budgets for this business.\n")
         + _recorded_hint(ctx)
         + f"Findings from other agents (cite their evidence ids when they trigger a cost):\n{upstream}\n\n"
-        "Steps: check the rent assumption and available cost items, decide which items the evidence triggers "
+        "Steps: check the rent assumption, whether the building already hosts this kind of business (check_prior_use: "
+        "a second-generation space keeps much of its fit-out), and the available cost items; decide which items the evidence triggers "
         "(and which are uncertain), then call estimate_costs once with your chosen items. If an item depends on "
         "an unknown (e.g., HVAC not detected), include it as a contingency-style item and say it is an assumption."
     )
@@ -124,6 +166,68 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
+def _latest(ctx: RunContext, tool: str, predicate=lambda d: True) -> tuple[str, dict] | None:
+    for e in reversed(ctx.evidence.all()):
+        if e.tool == tool and isinstance(e.data, dict) and predicate(e.data):
+            return e.id, e.data
+    return None
+
+
+def pick_adders(ctx: RunContext) -> list[dict]:
+    """Quick mode: choose conversion items deterministically from the evidence other agents gathered.
+    Every item cites the evidence that triggered it; unverified conditions are labelled as allowances."""
+    use = ctx.business["zoning_use"]
+    out: list[dict] = []
+    roof_eq = _latest(ctx, "inspect_roof", lambda d: any("ac-unit" in k for k in d))
+    roof_cond = _latest(ctx, "inspect_roof", lambda d: any("condition" in k for k in d))
+    parking = _latest(ctx, "compute_parking_requirement")
+    reqs = _latest(ctx, "list_use_requirements")
+    req_ids = {i["id"] for i in (reqs[1].get("items", []) if reqs else [])}
+    ac_units = None
+    if roof_eq:
+        ac_units = next((v for k, v in roof_eq[1].items() if k.endswith("ac-unit.count")), None)
+
+    def add(item: str, reason: str, evidence: tuple[str, dict] | None, quantity: int = 1) -> None:
+        out.append({"id": item, "quantity": quantity, "reason": reason, "evidence_ids": [evidence[0]] if evidence else []})
+
+    second_gen = bool(prior_use(ctx))
+    if use == "restaurant" and not second_gen:  # a second-generation restaurant usually keeps its hood and interceptor
+        add("hood_exhaust", "Commercial kitchen exhaust is required and no existing hood is verified (allowance).", roof_eq)
+        if "grease_interceptor" in req_ids:
+            add("grease_interceptor", "Food service requires a grease interceptor.", reqs)
+    if ac_units in (0, None):
+        add("hvac_rtu", "No rooftop AC units detected; HVAC capacity unverified (allowance).", roof_eq)
+    if roof_cond:
+        cond = next((v for k, v in roof_cond[1].items() if k.endswith("condition") or k.endswith("precise-value")), None)
+        if isinstance(cond, (int, float)) and cond <= 2.5:
+            add("roof_repair", f"Roof condition {cond}/5 suggests repair before fit-out.", roof_cond)
+    if parking and parking[1].get("status") == "risk":
+        add("parking_agreement", "Likely parking shortfall vs the city minimum.", parking)
+    if use in {"restaurant", "medical_office", "gym", "retail", "office"} and req_ids & {"ada_tas", "ada_cbc11b", "ada"}:
+        add("ada_upgrades", "Public-facing use: budget for accessible entry/restrooms (allowance).", reqs)
+    if use == "medical_office":
+        add("operatory_plumbing", "Each operatory needs water, vacuum and air.", None, quantity=max(3, round(ctx.target_sqft / 500)))
+        add("electrical_upgrade", "Dental equipment needs dedicated circuits (allowance).", None)
+    if use == "gym" and not second_gen:
+        add("rubber_flooring", "Free-weight areas need impact flooring.", None)
+        add("locker_showers", "Members expect locker rooms with showers.", None)
+    return out
+
+
+
+
 async def run(ctx: RunContext, budget_limit: int = 5, focus: str | None = None, metric_ids: list[str] | None = None) -> AgentReport:
     budget = ToolBudget(budget_limit, ctx.shared.setdefault("seen:cost", {}))
-    return await run_agent(ctx, "cost", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget, metric_ids=metric_ids)
+    tools = build_tools(ctx, budget)
+    if ctx.mode == "quick" and not focus:
+        calls = [
+            ("get_rent_assumption", {}),
+            ("check_prior_use", {}),
+            ("estimate_costs", {"leased_sqft": ctx.target_sqft, "adders": pick_adders(ctx), "second_generation": bool(prior_use(ctx))}),
+        ]
+        task = task_prompt(ctx) + (
+            "\n\nQUICK MODE: the estimate below already uses conversion items chosen from the evidence. Review whether "
+            "they fit this business and budget and explain the result; call estimate_costs again only if an item is clearly wrong."
+        )
+        return await run_agent(ctx, "cost", ROLE, task, tools, budget, metric_ids=metric_ids, prefetch_calls=calls, extra_tool_calls=1, max_model_calls=3)
+    return await run_agent(ctx, "cost", ROLE, task_prompt(ctx, focus), tools, budget, metric_ids=metric_ids)

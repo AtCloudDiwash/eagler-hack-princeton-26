@@ -3,17 +3,17 @@
 import { motion } from "motion/react";
 import {
   ArrowLeft, ArrowUpDown, Building2, CalendarDays, Camera, Car, ChefHat, Database, DollarSign, Droplets, Fan, Hammer, Home, Layers3,
-  MapPinned, MoveVertical, Receipt, Ruler, Sparkles,
+  MapPinned, Microscope, MoveVertical, Receipt, Ruler, Sparkles, Zap,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { Candidate, KeyFact, Neighborhood, PropertyDetail, SpaceProgram } from "@/lib/api-types";
+import type { AnalysisMode, Candidate, KeyFact, Neighborhood, PropertyDetail, SpaceProgram } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtSqft, titleCase } from "@/lib/format";
 import { groupIdForLabel, placeMeta } from "@/lib/places";
 import { FieldExplorer } from "@/components/ui/JsonView";
 import { Collapsible, ScoreRing, Spinner, StatTile } from "@/components/ui/primitives";
 import { MatterportLinker } from "@/components/matterport/Matterport";
 import CostarPanel from "./CostarPanel";
-import { candidateTitle } from "./CandidateRail";
+import { candidateTitle, LooksLike } from "./CandidateRail";
 
 type Props = {
   candidate: Candidate;
@@ -31,6 +31,8 @@ type Props = {
   requirements: string;
   setRequirements: (s: string) => void;
   onAnalyze: () => void;
+  mode: AnalysisMode;
+  setMode: (m: AnalysisMode) => void;
   analyzing: boolean;
   analyzeError: string | null;
   onBack: () => void;
@@ -104,6 +106,7 @@ export default function PropertySheet(p: Props) {
         </div>
         )}
 
+        <LooksLike c={p.candidate} max={3} />
         {p.candidate.match_reasons.length > 0 && (
           <ul className="space-y-1">
             {p.candidate.match_reasons.slice(0, 3).map((r) => (
@@ -217,6 +220,7 @@ export default function PropertySheet(p: Props) {
           className="w-full rounded-xl bg-white/[0.04] px-3 py-2.5 text-[12px] text-slate-100 ring-1 ring-inset ring-white/[0.06] placeholder:text-slate-500 focus:outline-none focus:ring-teal-300/40"
         />
         {p.analyzeError && <p className="text-xs text-rose-300">{p.analyzeError}</p>}
+        <ModeToggle mode={p.mode} setMode={p.setMode} />
         <motion.button
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
@@ -229,7 +233,7 @@ export default function PropertySheet(p: Props) {
           <span className="relative">Analyze this property</span>
         </motion.button>
         <p className="text-center text-[10px] text-slate-500">
-          {p.detail?.matterport ? "5 AI agents check building, interior, area, rules & cost" : "4 AI agents check building, area, rules & cost"} · about 2 min
+          {p.detail?.matterport ? "5 AI agents: building, interior, area, rules & cost" : "4 AI agents: building, area, rules & cost"} · {MODES[p.mode].caption}
         </p>
       </div>
     </div>
@@ -259,3 +263,43 @@ const HIGHLIGHT_ICONS: Record<string, [ReactNode, string]> = {
   lot: [<MapPinned key="i" size={11} />, "#f472b6"],
   imagery: [<Camera key="i" size={11} />, "#a78bfa"],
 };
+const MODES: Record<AnalysisMode, { label: string; time: string; caption: string; icon: typeof Zap }> = {
+  quick: {
+    label: "Quick",
+    time: "~1 min",
+    icon: Zap,
+    caption: "Fast answer: agents start from pre-gathered evidence and keep reports brief",
+  },
+  deep: {
+    label: "Deep report",
+    time: "~2 min",
+    icon: Microscope,
+    caption: "Full investigation: each agent decides what to examine, with follow-ups",
+  },
+};
+
+/** Quick / Deep switch above the Analyze button. */
+function ModeToggle({ mode, setMode }: { mode: AnalysisMode; setMode: (m: AnalysisMode) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Analysis depth" className="grid grid-cols-2 gap-1 rounded-xl bg-white/[0.04] p-1 ring-1 ring-inset ring-white/[0.06]">
+      {(Object.keys(MODES) as AnalysisMode[]).map((m) => {
+        const { label, time, icon: Icon } = MODES[m];
+        const on = mode === m;
+        return (
+          <button
+            key={m}
+            role="radio"
+            aria-checked={on}
+            onClick={() => setMode(m)}
+            className={`relative flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[12px] font-medium transition-colors ${on ? "text-ink-950" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            {on && <motion.span layoutId="analysis-mode" className="absolute inset-0 rounded-lg bg-teal-300" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+            <Icon size={13} className="relative" />
+            <span className="relative">{label}</span>
+            <span className={`relative font-mono text-[10px] ${on ? "text-ink-950/70" : "text-slate-500"}`}>{time}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

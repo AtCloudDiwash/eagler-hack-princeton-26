@@ -16,11 +16,12 @@ LLM provider is exhausted does the analysis stop. Everything runs inside one dea
 from __future__ import annotations
 
 import asyncio
+import re
 import inspect
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,7 +35,7 @@ from services import external, matterport, neighborhood, rules, scoring
 from services import program as space_program
 from services import verdicts as verdict_engine
 from services.geo import haversine_m
-from services.intent import target_sqft
+from services.intent import combine_request, refine, target_sqft
 from services.llm import AllProvidersFailedError, chat_model, model_label, on_fallback, track_usage
 from services.vexcel import key_facts, imagery_meta
 
@@ -107,6 +108,7 @@ async def build_context(req: AnalysisRequest, prop: dict, feature: dict | None, 
         target_sqft=sq,
         target_basis=basis,
         extra_requirements=req.requirements,
+        mode=req.mode,
         evidence=EvidenceStore(),
         emit=log_.emit,
         program=space_program.build(req.intent),
@@ -283,12 +285,87 @@ def followup_candidates(ctx: RunContext, metrics: list[MetricResult], reports: d
 
 # ---------------------------------------------------------------- synthesis
 
+class _RequirementCheck(BaseModel):
+    requirement: str
+    status: Literal["met", "unmet", "unknown"] = Field(description="met/unmet only with direct evidence; otherwise unknown")
+    rationale: str = Field(description="One sentence; for unknown, say how to verify")
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class _RequirementChecks(BaseModel):
+    checks: list[_RequirementCheck]
+
+
+def need_checks(ctx: RunContext, reports: dict[str, AgentReport], checks: list[dict]) -> list[dict]:
+    """The space program's needs as requirement checks: the owning agent's evidenced report wins, otherwise the
+    deterministic site check (pass -> met, risk -> unmet), otherwise unknown."""
+    out = []
+    for n in (ctx.program or {}).get("needs", []):
+        rep = next((x for r in reports.values() for x in r.needs if x.need_id == n["id"] and x.status != "unknown" and x.evidence_ids), None)
+        site = next((c for c in checks if c["id"] == n["id"] and c["status"] != "unknown"), None)
+        if rep:
+            status, why, ids = rep.status, rep.detail, rep.evidence_ids
+        elif site:
+            status, why, ids = ("met" if site["status"] == "pass" else "unmet"), site["detail"], []
+        else:
+            status, why, ids = "unknown", "Not settled by the gathered evidence; verify on a site visit or with the landlord.", []
+        out.append({"requirement": n["label"], "status": status, "rationale": why, "evidence_ids": ids, "priority": n["priority"], "need_id": n["id"]})
+    return out
+
+
+_STOP = {"a", "an", "the", "and", "or", "of", "to", "for", "with", "near", "good", "nearby", "lots", "some", "space", "area"}
+
+
+def _covered(requirement: str, labels: set[str]) -> bool:
+    words = {w for w in re.findall(r"[a-z]+", requirement.lower()) if w not in _STOP}
+    return any(requirement.lower() in label or label in requirement.lower() or words & {w for w in re.findall(r"[a-z]+", label) if w not in _STOP} for label in labels)
+
+
+async def requirement_checks(ctx: RunContext, reports: dict[str, AgentReport] | None = None, metrics: list[MetricResult] | None = None, skip: set[str] | None = None) -> list[dict]:
+    """Judge each need the user stated (search prompt + extra requirements) against the gathered evidence and
+    the agents' cited findings. Python validates citations: met/unmet without real evidence becomes unknown."""
+    needs = [r for r in ctx.intent.get("requirements") or [] if r.strip() and not _covered(r, skip or set())]
+    if not needs:
+        return []  # everything was covered by the space program's needs: no extra LLM call
+    evidence = "\n".join(f"{e.id} [{e.tool}]: {e.summary}" for e in ctx.evidence.all())
+    findings = "\n".join(
+        f"- [{name}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'})"
+        for name, r in (reports or {}).items() for f in r.findings
+    )
+    judged = "\n".join(f"- {m.name}: {m.status}. {m.rationale[:200]} (evidence {', '.join(m.evidence_ids) or 'none'})" for m in metrics or [] if m.status != "unknown")
+    prompt = (
+        f"User's request: \"{ctx.query}\"\n"
+        "For EACH stated requirement below, decide whether the selected property meets it. Use the evidence and the "
+        "agents' cited findings and metric judgments; cite evidence ids. Use 'met' or 'unmet' only when evidence "
+        "supports it (an agent finding counts if it cites evidence); otherwise 'unknown' and say how to verify it.\n"
+        f"Requirements: {json.dumps(needs)}\n\nAGENT FINDINGS:\n{findings or '(none)'}\n\nMETRIC JUDGMENTS:\n{judged or '(none)'}"
+        f"\n\nEVIDENCE:\n{evidence}"
+    )
+    valid = ctx.evidence.ids()
+    try:
+        out: _RequirementChecks = await asyncio.wait_for(chat_model().with_structured_output(_RequirementChecks).ainvoke(prompt), timeout=120)
+        checks = {c.requirement.lower(): c for c in out.checks}
+    except Exception as err:  # noqa: BLE001 - checks are best effort; every need still appears as unknown
+        log.warning("requirement checks failed: %s", err)
+        checks = {}
+    result = []
+    for need in needs:
+        c = checks.get(need.lower()) or next((v for k, v in checks.items() if need.lower() in k or k in need.lower()), None)
+        if c is None:
+            result.append({"requirement": need, "status": "unknown", "rationale": "Could not be evaluated from the gathered evidence.", "evidence_ids": []})
+            continue
+        ids = [e for e in c.evidence_ids if e in valid]
+        status = c.status if (c.status == "unknown" or ids) else "unknown"
+        result.append({"requirement": need, "status": status, "rationale": c.rationale, "evidence_ids": ids})
+    return result
+
+
 class _Narrative(BaseModel):
     headline: str = Field(description="One specific sentence about THIS property for THIS business (not just the verdict label), e.g. naming the decisive strength and the main risk")
     explanation: str = Field(description="3-5 sentences: why, the decisive factors, and what to verify next. Only use facts given.")
 
 
-async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], reports: dict[str, AgentReport], costs: dict | None) -> tuple[str, str]:
+async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], reports: dict[str, AgentReport], costs: dict | None, req_checks: list[dict] | None = None) -> tuple[str, str]:
     digest = {
         "user_request": ctx.query,
         "address": ctx.property.get("address"),
@@ -298,11 +375,17 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
         "metrics": [{"name": m.name, "status": m.status, "weight": m.weight, "rationale": m.rationale[:220]} for m in sorted(metrics, key=lambda m: -m.weight)],
         "agent_summaries": {k: r.summary for k, r in reports.items() if r.summary},
         "costs": {"upfront": costs["upfront"], "monthly": costs["monthly_occupancy"]} if costs else None,
+        "budget": costs.get("budget") if costs else None,
+        "user_requirements": [{"requirement": c["requirement"], "status": c["status"], "why": c["rationale"]} for c in req_checks or []],
+        "verdict_caps": rec.get("caps", []),
     }
     prompt = (
         "You are the lead analyst. Write the final recommendation for the user from this scored analysis. "
-        "The headline must be specific to this property and business, in the form '<decisive strength(s)>, but <main risk or unknown>', in your own words. "
-        "Do not change the verdict or invent numbers; mention the 2-3 decisive factors and the most important thing to verify.\n"
+        "Judge it against what the user asked for: their request and stated requirements come first. "
+        "The headline must be specific to this property and business, in the form '<decisive strength(s)>, but <main risk or unknown>', in your own words; "
+        "if a stated requirement or budget is unmet, that IS the main risk and must be named. "
+        "In the explanation, say plainly which of the user's requirements are met, unmet or still unverified, then the 2-3 other decisive factors "
+        "and the most important thing to verify. Do not change the verdict (verdict_caps explains any cap) or invent numbers.\n"
         + json.dumps(digest, default=str)
     )
     try:
@@ -312,9 +395,11 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
     except Exception as err:  # noqa: BLE001
         log.warning("narrative failed: %s", err)
         top = sorted([m for m in metrics if m.status != "unknown"], key=lambda m: -m.weight)[:3]
+        needs = " ".join(f"Your requirement '{c['requirement']}': {c['status']}." for c in req_checks or [])
+        caps = " ".join(rec.get("caps", []))
         return (
             f"{rec['label']} for a {ctx.business['label'].lower()} (score {rec['score']}, confidence {rec['confidence']}%).",
-            " ".join(f"{m.name}: {m.status}." for m in top) + " (Narrative generation unavailable; summary built from scored metrics.)",
+            " ".join(x for x in (caps, needs, " ".join(f"{m.name}: {m.status}." for m in top)) if x) + " (Narrative generation unavailable; summary built from scored metrics.)",
         )
 
 
@@ -336,7 +421,7 @@ def site_checks(ctx: RunContext) -> list[dict]:
 def compliance_items(ctx: RunContext) -> list[dict]:
     items: dict[str, dict] = {}
     for e in ctx.evidence.all():
-        if e.tool in {"check_permitted_use", "compute_parking_requirement"} and isinstance(e.data, dict):
+        if e.tool in {"check_permitted_use", "compute_parking_requirement", "check_flood_zone"} and isinstance(e.data, dict):
             d = e.data
             items[d["id"]] = {"id": d["id"], "rule": d["rule"], "status": d["status"], "detail": d["detail"], "citation": d.get("citation"), "url": d.get("url"), "evidence_ids": [e.id]}
         if e.tool == "list_use_requirements" and isinstance(e.data, dict):
@@ -365,6 +450,13 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         if not stored:
             raise ValueError(f"Unknown property {req.property_id}")
         prop, feature = stored
+        if req.requirements and req.requirements.strip():
+            # One request everywhere: search prompt + what the user added before Analyze (re-parsed for budget,
+            # seats, size and needs). Stored so the dashboard and history show the full request.
+            log_.emit("engine", "plan", f"Adding your extra requirements to the request: \u201c{req.requirements.strip()[:120]}\u201d")
+            refined = await refine(req.intent, req.query, req.requirements)
+            req = req.model_copy(update={"intent": refined, "query": combine_request(req.query, req.requirements)})
+            db.update_analysis(analysis_id, query=req.query, intent=json.dumps(refined.model_dump()))
         ctx = await build_context(req, prop, feature, log_)
         db.update_analysis(analysis_id, property=json.dumps({**ctx.property, "key_facts": key_facts(feature), "raw": feature, "imagery": imagery_meta(feature), "matterport": matterport.link_info(ctx.property)}))
 
@@ -380,41 +472,79 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         for agent, action, why in plan:
             log_.emit("engine", "plan", f"{AGENT_LABELS[agent]}: {'will run' if action == 'run' else 'skipped'} — {why}")
 
-        # ---- phase 1: independent investigations, concurrently
-        log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood, Compliance" + (" and Matterport" if mp_ok else "") + " agents investigating in parallel")
-        phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
-        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError) and r.exhausted), None)
-        if limit_hit:
-            raise limit_hit  # every provider is out: nothing more can be investigated
-        for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
-            if isinstance(rep, BaseException):
-                log_.emit(name, "error", f"Crashed: {rep}")
-                reports[name] = AgentReport(agent=name, label=AGENT_LABELS[name], status="failed", error=str(rep))
-            else:
-                reports[name] = rep
 
-        # ---- share findings with the dependent Cost Agent
-        lines, shared_ids = [], set()
-        for name in ("vexcel", "compliance", "matterport", "neighborhood"):
-            r = reports[name]
-            for f in r.findings:
-                if f.impact == "negative" or f.severity != "low":
-                    lines.append(f"- [{AGENT_LABELS[name]}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'}; {f.kind})")
-                    shared_ids.update(f.evidence_ids)
-            for q in r.missing_information[:3]:
-                lines.append(f"- [{AGENT_LABELS[name]}] UNKNOWN: {q}")
-        ctx.shared["upstream_findings"] = "\n".join(lines[:24])
-        ctx.shared["visible:cost"] = shared_ids  # the Cost Agent may cite the evidence behind the findings it was given
-        log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
-        try:
-            reports["cost"] = await cost_agent.run(ctx)
-        except AllProvidersFailedError as err:
-            if err.exhausted:
-                raise
-            reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
-        except Exception as err:  # noqa: BLE001
-            reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
+        def collect(names: list[str], results: list) -> None:
+            limit_hit = next((r for r in results if isinstance(r, AllProvidersFailedError) and r.exhausted), None)
+            if limit_hit:
+                raise limit_hit  # every provider is out: nothing more can be investigated
+            for name, rep in zip(names, results):
+                if isinstance(rep, BaseException):
+                    log_.emit(name, "error", f"Crashed: {rep}")
+                    reports[name] = AgentReport(agent=name, label=AGENT_LABELS[name], status="failed", error=str(rep))
+                else:
+                    reports[name] = rep
+
+        def share_upstream(names: tuple[str, ...]) -> int:
+            lines, shared_ids = [], set()
+            for name in names:
+                r = reports.get(name)
+                if not r:
+                    continue
+                for f in r.findings:
+                    if f.impact == "negative" or f.severity != "low":
+                        lines.append(f"- [{AGENT_LABELS[name]}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'}; {f.kind})")
+                        shared_ids.update(f.evidence_ids)
+                for q in r.missing_information[:3]:
+                    lines.append(f"- [{AGENT_LABELS[name]}] UNKNOWN: {q}")
+            ctx.shared["upstream_findings"] = "\n".join(lines[:24])
+            ctx.shared["visible:cost"] = shared_ids  # the Cost Agent may cite the evidence behind the findings it was given
+            return len(lines)
+
+        async def run_cost() -> AgentReport:
+            try:
+                return await cost_agent.run(ctx)
+            except AllProvidersFailedError as err:
+                if err.exhausted:
+                    raise
+                return AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
+            except Exception as err:  # noqa: BLE001
+                return AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
+
+        if ctx.mode == "quick":
+            # Quick: agents start from pre-gathered evidence. The Cost agent only needs the building and rules
+            # evidence (not the other agents' write-ups), so it starts as soon as that evidence exists.
+            log_.emit("engine", "plan", "Quick mode: agents start from pre-gathered evidence; Cost starts once building + rules evidence is in")
+            for name in ("vexcel", "compliance"):
+                ctx.shared[f"prefetched:{name}"] = asyncio.Event()
+            tasks = {name: asyncio.create_task(mod.run(ctx)) for name, mod in
+                     (("vexcel", vexcel_agent), ("compliance", compliance_agent), ("neighborhood", neighborhood_agent), ("matterport", matterport_agent))}
+
+            async def evidence_ready(name: str) -> None:
+                waiter = asyncio.create_task(ctx.shared[f"prefetched:{name}"].wait())
+                await asyncio.wait({tasks[name], waiter}, return_when=asyncio.FIRST_COMPLETED)  # finished/skipped also counts
+                waiter.cancel()
+
+            await asyncio.gather(evidence_ready("vexcel"), evidence_ready("compliance"))
+            upstream = [e for e in ctx.evidence.all() if e.agent in ("vexcel", "compliance")]
+            ctx.shared["upstream_findings"] = "\n".join(f"- [{AGENT_LABELS[e.agent]}] {e.id} {e.tool}: {e.summary}" for e in upstream[:24])
+            ctx.shared["visible:cost"] = {e.id for e in upstream}
+            log_.emit("engine", "plan", f"Cost Agent starts with {len(upstream)} evidence items from Vexcel + Compliance")
+            t_cost = asyncio.create_task(run_cost())
+            order = ["vexcel", "compliance", "neighborhood", "matterport"]
+            collect(order, await asyncio.gather(*(tasks[n] for n in order), return_exceptions=True))
+            collect(["cost"], [(await asyncio.gather(t_cost, return_exceptions=True))[0]])
+        else:
+            # ---- phase 1: independent investigations, concurrently
+            log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood, Compliance" + (" and Matterport" if mp_ok else "") + " agents investigating in parallel")
+            collect(
+                ["vexcel", "neighborhood", "compliance", "matterport"],
+                await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True),
+            )
+            # ---- share findings with the dependent Cost Agent
+            n = share_upstream(("vexcel", "compliance", "matterport", "neighborhood"))
+            log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {n} upstream findings")
+            reports["cost"] = await run_cost()
 
         # Guarantee a cost estimate exists (deterministic, no adders) if the agent never produced one.
         if not _evidence_data(ctx, "estimate_costs"):
@@ -428,7 +558,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
 
         # ---- targeted follow-ups that could change the recommendation
         followups_run = []
-        for m in followup_candidates(ctx, metrics, reports):
+        for m in followup_candidates(ctx, metrics, reports) if ctx.mode == "deep" else []:
             if ctx.deadline and ctx.deadline - time.time() < 120:
                 log_.emit("engine", "followup", f"Skipped follow-up on {m.name}: not enough time left before the analysis deadline")
                 break
@@ -461,23 +591,36 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             metrics, conflicts = merge_metrics(ctx, reports, log_)
         reconcile_findings(reports, metrics, ctx.shared.get("overridden_metrics", {}))
 
-        # ---- score (Python) + evidence quality
-        rec = scoring.overall(_scoring_rows(metrics))
+        # ---- the user's needs and budgets, judged BEFORE scoring so they count
+        cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]  # the agent's estimate, or the engine's program-size recompute
+        cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
+        budgets = cost_engine.budget_checks(cost_data, ctx.intent, ctx.intent["business_type"])
+        primary = ctx.intent.get("budget")
+        cost_public["budget"] = next((c for c in budgets if primary and c["period"] == primary["period"]), budgets[0])
+        cost_public["budgets"] = budgets  # every stated budget (e.g. monthly and upfront), each checked
         checks = site_checks(ctx)
         gaps = must_have_gaps(ctx, reports, checks)
+        # Needs from the space program are reported by the agents; only requirements it doesn't cover need an LLM check.
+        req_checks = need_checks(ctx, reports, checks)
+        covered = {c["requirement"].lower() for c in req_checks}
+        req_checks += await requirement_checks(ctx, reports, metrics, skip=covered)
+        if req_checks:
+            log_.emit("engine", "validation", "Checked your stated needs — " + ", ".join(f"{c['requirement']}: {c['status']}" for c in req_checks))
+
+        # ---- score (Python): metrics + your needs, then caps for unmet must-haves / blown budgets
+        rec = scoring.overall(_scoring_rows(metrics) + scoring.requirement_rows(req_checks))
+        rec = scoring.cap_for_requirements(rec, req_checks, budgets)
         if gaps and rec["verdict"] == "recommended":
-            rec = {**rec, "verdict": "conditional", "label": scoring.VERDICT_LABELS["conditional"]}
-            log_.emit("engine", "validation", f"Verdict capped at '{rec['label']}': must-have not met ({'; '.join(gaps)[:200]})")
+            rec = {**rec, "verdict": "conditional", "label": scoring.VERDICT_LABELS["conditional"], "caps": [*rec["caps"], *(f"Must-have not met — {g}" for g in gaps)]}
+        for reason in rec["caps"]:
+            log_.emit("engine", "validation", f"Verdict capped at '{rec['label']}': {reason[:200]}")
         if "evidence_quality" in ctx.business["metrics"]:
             eq = scoring.evidence_quality_status(rec["confidence"])
             metrics.append(MetricResult(id="evidence_quality", name="Evidence quality", category="common", group="Confidence", owner_agent="engine", weight=0, status=eq, score=float(scoring.STATUS_POINTS[eq]), why_it_matters=ctx.business["metrics"]["evidence_quality"]["why"], rationale=f"{rec['confidence']}% of the weighted metrics are backed by verified evidence.", evidence_ids=[]))
         log_.emit("engine", "validation", f"Scored {len(metrics)} metrics in Python: score {rec['score']}, confidence {rec['confidence']}% → {rec['label']}")
 
-        cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]  # the agent's estimate, or the engine's program-size recompute
-        cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
-        cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
-        headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public)
+        headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public, req_checks)
 
         reg = metrics_registry()
         risks = []
@@ -485,6 +628,9 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             for f in r.findings:
                 if f.impact == "negative" and f.severity in {"medium", "high"}:
                     risks.append({"text": f"{f.title}: {f.detail}", "severity": f.severity, "agent": name})
+        for c in req_checks:
+            if c["status"] == "unmet":
+                risks.append({"text": f"Your requirement not met — {c['requirement']}: {c['rationale']}", "severity": "high", "agent": "engine"})
         risks.sort(key=lambda r: 0 if r["severity"] == "high" else 1)
         open_questions = []
         for name, r in reports.items():
@@ -506,12 +652,14 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         ]
         result = {
             "business_type": ctx.intent["business_type"],
+            "mode": ctx.mode,
+            "requirement_checks": req_checks,
             "business_label": ctx.business["label"],
             "recommendation": {
                 "verdict": rec["verdict"], "label": rec["label"], "score": rec["score"], "confidence": rec["confidence"],
                 "headline": headline, "explanation": explanation,
                 "key_reasons": [*({"text": f"Must-have not met — {g}", "impact": "negative", "metric_id": None, "evidence_ids": []} for g in gaps), *key_reasons(metrics)],
-                "dealbreakers": [f"{reg[b]['name']} is a blocker" for b in rec["blockers"]],
+                "dealbreakers": [f"{reg[b]['name']} is a blocker" for b in rec["blockers"]] + [c for c in rec["caps"] if not c.startswith("Must-have not met")],
             },
             "metrics": [m.model_dump() for m in metrics],
             "agents": [reports[a].model_dump() for a in ("vexcel", "neighborhood", "compliance", "cost", "matterport") if a in reports],

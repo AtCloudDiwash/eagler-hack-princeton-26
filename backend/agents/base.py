@@ -107,6 +107,7 @@ class RunContext:
     program: dict = field(default_factory=dict)  # services/program.py: what the user's request implies
     deadline: float | None = None  # epoch seconds by which the whole analysis must finish
     building: dict = field(default_factory=dict)  # services/building_facts.py output for the selected property
+    mode: str = "deep"  # "quick" = pre-gathered evidence, fewer model calls, brief reports; "deep" = full investigation
 
     def time_left(self, cap: float) -> float:
         """Seconds an operation may take: `cap`, shortened to fit the analysis deadline (never below 20 s)."""
@@ -263,7 +264,7 @@ COMMON_RULES = """How to investigate:
 5. Separate facts (directly in tool data) from inferences (your reasoning) and assumptions (gaps you filled).
 6. "Not detected in imagery" is NOT the same as "absent". Treat it as an open question and say how to verify it.
 7. If evidence is insufficient, use status "unknown", add the question to missing_information, and suggest how to resolve it in followups.
-8. Explain why each finding matters for the user's specific business, not in general.
+8. Explain why each finding matters for the user's specific business and stated needs, not in general.
 9. Finish by returning your structured report (AgentOutput) with one metric assessment per assigned metric id, and one `needs` entry per need listed under NEEDS YOU MUST CHECK (met / unmet only with evidence, otherwise unknown)."""
 
 
@@ -298,17 +299,41 @@ def program_brief(ctx: RunContext, agent: str) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+QUICK_RULES = """
+QUICK MODE (the user asked for a fast answer):
+- The key evidence for your metrics is already gathered below the request (cite its E-ids). Call a tool only if
+  something critical for THIS business, or a need you must check, is still missing evidence.
+- Keep the report brief: at most 3 findings, one-sentence details and rationales, at most 3 missing_information
+  items. Still report every need you must check in `needs`."""
+
+
+def requirements_brief(ctx: RunContext) -> str:
+    """Fallback when no space program was built: the user's stated needs and budgets as primary goals."""
+    needs = [r for r in ctx.intent.get("requirements") or [] if r.strip()]
+    budgets = [f"${b['amount']:,.0f} {b['period']}" for b in ctx.intent.get("budgets") or [] if b.get("amount")]
+    if not needs and not budgets:
+        return ""
+    lines = [f"- {n}" for n in needs] + [f"- budget: {b}" for b in budgets]
+    return (
+        "\nTHE USER'S STATED REQUIREMENTS (primary goals; each one is checked and an unmet one caps the verdict):\n"
+        + "\n".join(lines)
+        + "\nFor every requirement your tools can speak to, gather evidence and add a finding titled "
+        "'Requirement: <requirement>' that says met / not met / unclear, citing evidence ids. Skip ones outside your domain.\n"
+    )
+
+
 def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], budget: int) -> str:
     return (
         f"You are the {AGENT_LABELS[agent]} on a commercial-property investigation team.\n"
         f"{role}\n\n"
         f"USER'S ORIGINAL REQUEST (keep it central to every judgment): \"{ctx.query}\"\n"
         f"Business: {ctx.business['label']}. Space need: ~{ctx.target_sqft:,} sq ft ({ctx.target_basis}).\n"
-        + (f"Extra requirements from the user: {ctx.extra_requirements}\n" if ctx.extra_requirements else "")
-        + (f"Requirements mentioned: {', '.join(ctx.intent.get('requirements') or [])}\n" if ctx.intent.get("requirements") else "")
-        + "\n" + program_brief(ctx, agent)
+        + (f"Extra requirements from the user: {ctx.extra_requirements}\n" if ctx.extra_requirements and ctx.extra_requirements not in ctx.query else "")
+        + (f"Requirements mentioned: {', '.join(ctx.intent.get('requirements') or [])}\n" if ctx.intent.get("requirements") and not ctx.program else "")
+        + "\n" + (program_brief(ctx, agent) or requirements_brief(ctx))
         + f"YOUR METRICS (assess every one):\n{metrics_brief(metrics)}\n\n"
         + COMMON_RULES.format(budget=budget)
+        + (QUICK_RULES if ctx.mode == "quick" else "")
     )
 
 
@@ -361,15 +386,47 @@ def _transcript(messages: list) -> str:
     return "\n".join(parts)
 
 
-async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: list[StructuredTool], budget: ToolBudget, model: Any = None, metric_ids: list[str] | None = None) -> AgentReport:
+def prefetch(tools: list[StructuredTool], calls: list[tuple[str, dict]]) -> str:
+    """Quick mode: run the given tool calls up front (they still register evidence and emit events) and
+    return a block summarizing the results for the agent's first prompt."""
+    by_name = {t.name: t for t in tools}
+    lines = []
+    for name, args in calls:
+        if name not in by_name:
+            continue
+        try:
+            out = json.loads(by_name[name].invoke(args))
+        except Exception as err:  # noqa: BLE001 - a failed prefetch just isn't included
+            log.warning("prefetch %s failed: %s", name, err)
+            continue
+        if out.get("evidence_id"):
+            lines.append(f"{out['evidence_id']} [{name}]: {out.get('summary', '')}")
+    return "PRE-GATHERED EVIDENCE (cite these ids):\n" + "\n".join(lines) if lines else ""
+
+
+async def run_agent(
+    ctx: RunContext, agent: str, role: str, task: str, tools: list[StructuredTool], budget: ToolBudget,
+    model: Any = None, metric_ids: list[str] | None = None,
+    prefetch_calls: list[tuple[str, dict]] | None = None, extra_tool_calls: int = 2, max_model_calls: int | None = None,
+) -> AgentReport:
     """Run one Deep Agent investigation and return a validated AgentReport.
 
     Never raises, except AllProvidersFailedError with `exhausted=True` (every LLM provider is out, so the
     whole analysis should stop). `model` replaces the LLM (tests use a scripted fake); `metric_ids` narrows a
-    follow-up to the metrics it is about."""
+    follow-up to the metrics it is about. With `prefetch_calls` (Quick mode) those tools run first and their
+    results go into the task, the tool budget becomes what was used plus `extra_tool_calls`, and
+    `max_model_calls` caps the agent's LLM calls."""
     start = time.time()
     metrics = [m for m in ctx.metrics_for(agent) if metric_ids is None or m["id"] in metric_ids]
     ctx.emit(agent, "start", f"{AGENT_LABELS[agent]} started — {len(metrics)} metrics to assess", {"metrics": [m["id"] for m in metrics]})
+    if prefetch_calls:
+        block = await asyncio.to_thread(prefetch, tools, prefetch_calls)
+        budget.limit = budget.used + extra_tool_calls
+        ready = ctx.shared.get(f"prefetched:{agent}")
+        if isinstance(ready, asyncio.Event):
+            ready.set()  # dependents (Cost) can start from this evidence without waiting for the write-up
+        if block:
+            task = f"{task}\n\n{block}"
     output: AgentOutput | None = None
     latest: dict = {}  # the newest streamed graph state: survives a timeout so partial work is kept
     error: str | None = None
@@ -379,9 +436,9 @@ async def run_agent(ctx: RunContext, agent: str, role: str, task: str, tools: li
         graph = create_deep_agent(
             model=llm,
             tools=tools,
-            system_prompt=system_prompt(agent, role, ctx, metrics, budget.limit),
+            system_prompt=system_prompt(agent, role, ctx, metrics, budget.limit - budget.used),
             response_format=ToolStrategy(AgentOutput),
-            middleware=[ModelCallLimitMiddleware(run_limit=settings.agent_max_model_calls, exit_behavior="end")],
+            middleware=[ModelCallLimitMiddleware(run_limit=max_model_calls or settings.agent_max_model_calls, exit_behavior="end")],
             name=f"{agent}_agent",
         )
 

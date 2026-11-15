@@ -111,13 +111,13 @@ customer_demand:
   category: common
   owner: neighborhood
   description: People and activity near the property that generate customers for this business.
-  evidence_hint: Demand generators for this business (offices, residents, schools, hotels...), residential buildings, transit stops, demographics if available.
+  evidence_hint: Measured demand first - daytime workers (get_daytime_workers) and employed residents with their earnings mix (get_residents) in this business's catchment, judged against the business benchmark - then demand-generator places, residential buildings and demographics if available.
   status_guide:
-    strong: Dense, relevant demand generators within the business's catchment radius.
+    strong: Workers and/or residents at or above the business's 'strong' benchmark, plus relevant demand generators.
     adequate: Moderate demand.
-    weak: Few relevant generators.
+    weak: Workers and residents below the 'weak' benchmark, or few relevant generators.
     blocker: Not used.
-  evidence_tools: [count_places, get_building_mix, get_demographics]
+  evidence_tools: [count_places, get_building_mix, get_demographics, get_daytime_workers, get_residents]
 
 competition:
   name: Competition & clustering
@@ -125,14 +125,14 @@ competition:
   category: dynamic
   owner: neighborhood
   description: "Same-category businesses nearby: saturation risk vs. a proven destination cluster."
-  evidence_hint: Count and names of direct competitors in the catchment radius, and what that implies for this business.
+  evidence_hint: Direct competitors (find_direct_competitors) - same business type, and same cuisine/shop kind when the user named one - with chains vs independents and distance to the nearest; weigh against measured demand.
   status_guide:
     strong: Healthy cluster or clear gap in supply relative to demand.
     adequate: Some competition, manageable.
-    weak: Saturated with direct competitors relative to demand.
+    weak: Many same-kind competitors relative to measured demand (saturation).
     blocker: Not used.
   resolver: places_required
-  evidence_tools: [count_places]
+  evidence_tools: [count_places, find_direct_competitors]
 
 accessibility_transit:
   name: Access & transit
@@ -140,13 +140,13 @@ accessibility_transit:
   category: common
   owner: neighborhood
   description: How customers/patients/staff reach the site (transit stops, walkability, parking supply around).
-  evidence_hint: Bus stops and rail stations within ~400 m, public parking facilities nearby, surrounding paved area.
+  evidence_hint: Real walking reach (get_walkable_reach) - places and transit actually reachable on foot vs a straight-line circle - plus bus/rail stops and public parking (get_access_options).
   status_guide:
     strong: Multiple transit options and nearby public parking.
     adequate: Some access options.
-    weak: Poor access for this business's customers.
+    weak: Poor access for this business's customers, or a large share of the catchment cut off by barriers.
     blocker: Not used.
-  evidence_tools: [get_access_options]
+  evidence_tools: [get_access_options, get_walkable_reach]
 
 area_character:
   name: Surrounding area fit
@@ -294,6 +294,21 @@ conversion_risk:
     blocker: Not used.
   resolver: cost_engine_uncertainty
   evidence_tools: [estimate_costs]
+
+flood_risk:
+  name: Flood risk
+  group: Compliance
+  category: common
+  owner: compliance
+  description: FEMA flood hazard zone at the address and the rules and insurance it triggers.
+  evidence_hint: check_flood_zone tool (FEMA National Flood Hazard Layer + the city's floodplain rule).
+  status_guide:
+    strong: Area of minimal flood hazard (zone X).
+    adequate: 500-year (0.2% yearly) floodplain, or floodplain rules unlikely to affect a tenant fit-out.
+    weak: Special Flood Hazard Area (zone A/AE/AO/AH/V/VE) - insurance and possible elevation rules.
+    blocker: Not used (flood risk is managed, not prohibited).
+  resolver: fema_flood
+  evidence_tools: [check_flood_zone]
 
 evidence_quality:
   name: Evidence quality

@@ -185,6 +185,9 @@ planning checks with citations (`config/occupancy_codes.yaml`); local amendments
 | Vexcel `/ortho/tile`, `/property/extract` | Live (key geofenced to Los Angeles + Houston) or labelled demo sample |
 | OpenStreetMap Nominatim / Overpass | Geocoding, places (volunteer-mapped; counts are lower bounds) |
 | US Census geocoder + ACS | Tract always; demographics with a free `CENSUS_API_KEY` |
+| US Census LEHD LODES 2023 | Daytime workers and employed residents near the site (public download, ~27 MB per state, cached in `backend/data/`) |
+| OSRM foot routing (routing.openstreetmap.de) | Walking reach, so highways and bayous inside a radius aren't counted as walkable |
+| FEMA National Flood Hazard Layer | Flood zone at the address (Compliance agent), cached per location |
 | Verified rule set | Houston (no zoning, §26-492 parking, health/grease/ADA); others report `unknown` |
 | CoStar (sponsor kit) | Rentable Building Area (RBA; GLA for retail), spaces on the market with each suite's rentable sq ft, floor and asking rent, and CoStar's Matterport scans. Matched to buildings by location; listed properties near the search are added as candidates; a net asking rent replaces the planning rent band in the cost engine. Build the index once: `python scripts/build_costar_index.py [kit path]` (licensed, gitignored). Kit snapshot, not live availability. |
 | Building size fields | `area_sqft` = Vexcel **building footprint** (outline from above, ~one floor), `floor_area_est_sqft` = footprint × stories, `parcel_sqft` = the lot, `rentable_sqft` = CoStar RBA/GLA, `best_space.sqft` = the listed suite that fits |

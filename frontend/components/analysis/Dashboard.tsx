@@ -58,7 +58,7 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
             <Link href="/" className="flex items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.06] hover:text-white">
               <ArrowLeft size={14} /> <span className="hidden sm:inline">Another building</span>
             </Link>
-            <Link href={`/compare?ids=${encodeURIComponent(analysis.id)}`} className="flex items-center gap-1.5 rounded-xl bg-teal-300 px-3 py-1.5 text-[11px] font-semibold text-ink-950 hover:bg-teal-200">
+            <Link href={analysis.search_id ? `/compare?search=${encodeURIComponent(analysis.search_id)}` : `/compare?ids=${encodeURIComponent(analysis.id)}`} className="flex items-center gap-1.5 rounded-xl bg-teal-300 px-3 py-1.5 text-[11px] font-semibold text-ink-950 hover:bg-teal-200">
               <Scale size={13} /> Compare
             </Link>
           </div>
@@ -66,7 +66,8 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
         {/* Compact score bar once the hero scrolls away */}
         <AnimatePresence>
           {compact && (
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="absolute inset-x-0 top-full overflow-hidden border-b border-white/[0.06] bg-ink-950/95 backdrop-blur-xl">
+            // Overlay just below the sticky header: it must not change layout height, or the page jitters.
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="absolute inset-x-0 top-full overflow-hidden border-b border-white/[0.06] bg-ink-950/95 shadow-lg shadow-black/30 backdrop-blur-xl">
               <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2">
                 <ScoreRing value={rec.score} size={34} color={v.color} animateIn={false} />
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${v.bg} ${v.text}`}>{rec.label || v.label}</span>
@@ -100,6 +101,14 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
                     {duration != null ? ` · analyzed in ${fmtClock(duration)}` : ""}
                     {demo ? " · sample" : ""}
                   </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset ${
+                      analysis.mode === "quick" ? "bg-teal-300/10 text-teal-200 ring-teal-300/30" : "bg-white/[0.04] text-slate-400 ring-white/10"
+                    }`}
+                    title={analysis.mode === "quick" ? "Quick response: agents started from pre-gathered evidence" : "Deep report: full investigation with follow-ups"}
+                  >
+                    {analysis.mode === "quick" ? "Quick" : "Deep report"}
+                  </span>
                 </div>
                 <h1 className="mt-2 text-xl font-semibold leading-snug tracking-tight text-slate-50 sm:text-[22px]">{rec.headline}</h1>
                 <p className="mt-1.5 flex items-center gap-1.5 truncate text-[12px] text-slate-400">
@@ -125,11 +134,13 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
               </div>
             )}
             {rec.dealbreakers.length > 0 && (
-              <div className="relative mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200 ring-1 ring-inset ring-rose-400/25">Dealbreaker: {rec.dealbreakers.join(" · ")}</div>
+              <div className="relative mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200 ring-1 ring-inset ring-rose-400/25">Why the verdict is limited: {rec.dealbreakers.join(" · ")}</div>
             )}
           </div>
           <BudgetCard costs={result.costs} />
         </motion.section>
+
+        <RequirementChecks checks={result.requirement_checks ?? []} request={analysis.base_query ?? analysis.query} extra={analysis.extra_requirements ?? null} />
 
         {/* Pros / cons */}
         <section className="grid gap-3 md:grid-cols-2">
@@ -291,6 +302,18 @@ function BudgetCard({ costs }: { costs: Costs | null }) {
         <span>$0</span>
         <span>▲ budget</span>
       </div>
+      {(costs.budgets ?? []).filter((x) => x.period !== b.period).map((x) => {
+        const xu = BUDGET_UI[x.status];
+        return (
+          <div key={x.period} className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-[11px] ring-1 ring-inset ring-white/[0.06]">
+            <span className="text-slate-300">
+              Also: <span className="font-semibold text-slate-100">{fmtMoney(x.amount)}</span> {periodLabel(x.period)}
+              <span className="text-slate-500"> · estimate {fmtRange(x.compare_low, x.compare_high)}</span>
+            </span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${xu.cls}`}>{xu.label}</span>
+          </div>
+        );
+      })}
       {costs.monthly_occupancy && b.period !== "monthly" && (
         <div className="mt-3 text-[12px] text-slate-300">
           {fmtRange(costs.monthly_occupancy.low, costs.monthly_occupancy.high)} <span className="text-[11px] text-slate-500">per month to occupy</span>
@@ -335,5 +358,73 @@ function CostDrivers({ costs }: { costs: NonNullable<AnalysisResult["costs"]> })
         ))}
       </ul>
     </div>
+  );
+}
+
+
+const REQ_UI = {
+  met: { label: "Met", cls: "bg-emerald-400/10 text-emerald-300 ring-emerald-300/30", dot: "#34d399" },
+  unmet: { label: "Not met", cls: "bg-rose-400/10 text-rose-300 ring-rose-300/30", dot: "#fb7185" },
+  unknown: { label: "Unverified", cls: "bg-white/[0.04] text-slate-400 ring-white/10", dot: "#64748b" },
+} as const;
+
+/** The user's own stated needs (search + extra requirements), each met / not met / unverified, expandable. */
+/** The user's request (search prompt + extra requirements) and how each stated need was judged. These checks
+ *  count toward the score and an unmet one caps the verdict. */
+function RequirementChecks({ checks, request, extra }: { checks: NonNullable<AnalysisResult["requirement_checks"]>; request: string; extra: string | null }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const current = checks.find((c) => c.requirement === open);
+  return (
+    <section className="glass rounded-3xl p-4 sm:p-5">
+      <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-slate-300">
+        <BadgeCheck size={14} className="text-teal-300" /> Your request
+        <span className="font-normal text-slate-500">· what this analysis was judged against</span>
+      </div>
+      <p className="text-[13px] leading-relaxed text-slate-200">“{request}”</p>
+      {extra && <p className="mt-1 text-[12px] text-slate-400">Extra requirements: {extra}</p>}
+      {checks.length === 0 ? (
+        <p className="mt-2 text-[11px] text-slate-500">No specific needs were picked out of your request, so it was judged on the standard checks for this business.</p>
+      ) : (
+        <p className="mb-2 mt-3 text-[11px] text-slate-500">Each need below counts toward the score; an unmet one caps the verdict.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {checks.map((c) => {
+          const ui = REQ_UI[c.status];
+          const on = open === c.requirement;
+          return (
+            <button
+              key={c.requirement}
+              onClick={() => setOpen(on ? null : c.requirement)}
+              aria-expanded={on}
+              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] ring-1 ring-inset transition ${ui.cls} ${on ? "ring-2" : "hover:brightness-125"}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: ui.dot }} />
+              <span className="capitalize text-slate-100">{c.requirement}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">{ui.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <AnimatePresence initial={false}>
+        {current && (
+          <motion.div
+            key={current.requirement}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 rounded-2xl bg-white/[0.03] p-3 text-[12px] leading-relaxed text-slate-300 ring-1 ring-inset ring-white/[0.06]">
+              {current.rationale}
+              {current.evidence_ids.length > 0 && (
+                <div className="mt-2">
+                  <EvidenceChips ids={current.evidence_ids} />
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }

@@ -20,7 +20,7 @@ def test_old_database_migrates_and_stores_history_separately(tmp_path, monkeypat
     try:
         assert db.get_analysis("old")["conversation_history"] == []
         history = [{"role": "user", "text": "need parking"}, {"role": "user", "text": "drop parking"}]
-        db.create_analysis("new", "final request", {"needs": []}, {}, 500, history)
+        db.create_analysis("new", "final request", {"needs": []}, {}, 500, conversation_history=history)
         saved = db.get_analysis("new")
         assert saved["query"] == "final request" and saved["intent"]["needs"] == []
         assert saved["conversation_history"] == history

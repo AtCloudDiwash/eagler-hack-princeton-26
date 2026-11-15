@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import re
+import uuid
 
 import httpx
 
 import db
 from config import business, settings
 from schemas import Candidate, Intent, SearchResponse
-from services import costs, costar, external, program as space_program, sizing, vexcel
+from services import costs, costar, external, program as space_program, sizing, vexcel, visual
 from services.geo import centroid, haversine_m, in_coverage, property_id
 from services.intent import parse
 
@@ -297,7 +298,10 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
     if not location_text:
         location_text = "Houston, TX"
         notes.append("No location in the query, so the search defaults to Houston, TX (inside Vexcel coverage).")
-    place = await locate(location_text, notes)
+    try:
+        place = await locate(location_text, notes)
+    except httpx.HTTPError as err:
+        return SearchResponse(intent=intent, location=None, data_mode="osm_only", candidates=[], notes=[f"The place lookup (OpenStreetMap) is unavailable right now ({type(err).__name__}). Try again in a few seconds."])
     if not place:
         return SearchResponse(intent=intent, location=None, data_mode="osm_only", candidates=[], notes=[f"Could not find “{location_text}”. Try adding the state."], program=space_program.build(intent))
     lat, lon = place["lat"], place["lon"]
@@ -321,7 +325,7 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
     if extras or intent.avoid:
         notes.append("Needs to check during analysis (not used to rank discovery): " + "; ".join([*extras, *intent.avoid]) + ".")
     covered = in_coverage(lat, lon)
-    location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered}
+    location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered, "display_name": place.get("display_name")}
 
     cfg = business(intent.business_type)
     allowed = set(cfg["suitable_building_types"]) | set(cfg.get("acceptable_building_types", []))
@@ -364,7 +368,7 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
         external.prefetch_places(lat, lon, radius_m=external.PLACES_RADIUS_M + int(radius * 1.42))
     prog = space_program.build(intent)
     listed = attach_costar(candidates, lat, lon, cfg, prog, notes, radius)
-    scored: list[Candidate] = []
+    eligible: list[dict] = []
     seen_ids: set[str] = set()
     ground_only = any(n.id == "ground_floor" and n.priority == "must" for n in intent.needs)
     unknown_ground = 0
@@ -381,19 +385,27 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
         seen_ids.add(c["id"])
         if c.get("building_type") and c["building_type"] not in allowed and c.get("costar_id") not in listed:
             continue  # a CoStar lease listing for this use outranks Vexcel's building class
+        if (not c.get("lat") and not c.get("lon")) or (not c.get("building_type") and not c.get("area_sqft") and not c.get("costar_id")):
+            continue  # no structure (empty lot / parking) or no geometry
         if c.get("_too_low"):
-            continue  # roof under 8 ft: canopy/kiosk/shed rather than a leasable building
+            continue  # roof under 8 ft on a small footprint: canopy/kiosk/shed rather than a leasable building
         if near_places:
             c["distance_m"] = round(sum(haversine_m(p["lat"], p["lon"], c["lat"], c["lon"]) for p in near_places) / len(near_places))
         else:
             c["distance_m"] = round(haversine_m(lat, lon, c["lat"], c["lon"]))
         distance_label = "requested landmarks (average distance)" if len(near_places) > 1 else place["name"]
         c["match_score"], c["match_reasons"] = prescreen(c, intent, prog, raws.get(c["id"]), distance_label)
-        scored.append(Candidate(**c))
+        eligible.append(c)
     if ground_only:
         notes.append(f"Ground-floor only: excluded {unknown_ground} building(s) with unconfirmed floor; only confirmed street-level matches are shown.")
-    # A selected vacancy comes from non-pending CoStar spaces. space_count also includes
-    # pending leases, so it must not qualify a property for the available-first group.
+    if data_mode != "osm_only":
+        # Visual needs ("outdoor patio", "parking lot"...) re-rank by similarity in Vexcel imagery.
+        note = await visual.apply(eligible, intent, lat, lon, radius * 2, query)
+        if note:
+            notes.append(note)
+    scored = [Candidate(**c) for c in eligible]
+    # Buildings with an available listed suite first, then by fit score, then nearest. A selected vacancy comes from
+    # non-pending CoStar spaces; space_count also includes pending leases, so it must not qualify for the first group.
     scored.sort(key=lambda c: (not bool(c.best_space), -c.match_score, c.distance_m or 0))
     top = scored[:25]
     from services.scan_identity import default_scan  # no network: picks among CoStar's scans by caption only
@@ -413,4 +425,7 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
         notes.append("CoStar data isn't loaded (run scripts/build_costar_index.py), so rentable area and spaces on the market are unknown; candidates are existing buildings, not confirmed vacancies.")
     elif not any(c.space_count for c in top):
         notes.append("No CoStar-listed spaces in this area for this use; candidates are existing buildings that suit the use, not confirmed vacancies.")
-    return SearchResponse(intent=intent, location=location, data_mode=data_mode, candidates=top, notes=notes, program=prog)
+    search_id = uuid.uuid4().hex[:12]
+    db.save_search(search_id, query, intent.model_dump(), location, data_mode, [c.id for c in top],
+                   {c.id: {"match_score": c.match_score, "match_reasons": c.match_reasons} for c in top})
+    return SearchResponse(intent=intent, location=location, data_mode=data_mode, candidates=top, notes=notes, program=prog, search_id=search_id)

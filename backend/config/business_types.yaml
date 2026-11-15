@@ -116,6 +116,12 @@ restaurant:
     competitors: [food_drink]
     demand: [offices, lodging, education, entertainment, retail]
     access: [transit, parking]
+  neighborhood:
+    # Situational signals: only these extra tools are offered to the Neighborhood agent for this business.
+    signals: [daytime_workers, residents, competitors, walk_access]
+    competitors: {match: {amenity: [restaurant, fast_food, cafe, food_court]}, kind_by: cuisine}
+    # Planning heuristics at the default catchment radius (scaled by area for other radii). Not market data.
+    benchmarks: {daytime_workers: {strong: 8000, weak: 1500}, employed_residents: {strong: 3000, weak: 600}}
   metrics:
     occupancy_requirements: {weight: 5, why: "Seats and staff set the occupancy class: 50+ people means assembly rules (two exits, more restrooms) and 100+ means sprinklers."}
     permitted_use: {weight: 14, why: "A restaurant needs food-service use allowed at the address before anything else matters."}
@@ -134,6 +140,7 @@ restaurant:
     interior_layout: {weight: 3, why: "Dining-room and kitchen layout drive seat count and workflow."}
     conversion_risk: {weight: 4, why: "Unknown kitchen and HVAC conditions are the usual source of restaurant budget overruns."}
     area_character: {weight: 3, why: "Commercial, mixed-use streets support restaurant traffic."}
+    flood_risk: {weight: 4, why: "Flooding can shut a kitchen for months; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 dental_clinic:
@@ -183,6 +190,10 @@ dental_clinic:
     competitors: [dental_medical]
     demand: [residential_services, retail, offices, education]
     access: [parking, transit]
+  neighborhood:
+    signals: [residents, competitors]
+    competitors: {match: {amenity: [dentist], healthcare: [dentist]}}
+    benchmarks: {employed_residents: {strong: 10000, weak: 2500}, daytime_workers: {strong: 15000, weak: 3000}}
   metrics:
     occupancy_requirements: {weight: 4, why: "Operatory count drives restroom, exit and accessibility needs for patients."}
     permitted_use: {weight: 14, why: "Medical/dental use must be allowed (clinic class) at the address."}
@@ -199,6 +210,7 @@ dental_clinic:
     interior_layout: {weight: 4, why: "Corridors and room sizes determine operatory count."}
     conversion_risk: {weight: 4, why: "Plumbing in slab is the classic dental budget surprise."}
     area_character: {weight: 3, why: "Residential and retail mix supports patient visits."}
+    flood_risk: {weight: 4, why: "Flood damage to clinical equipment is costly; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 gym:
@@ -257,6 +269,10 @@ gym:
     competitors: [fitness]
     demand: [residential_services, offices, education, retail]
     access: [parking, transit]
+  neighborhood:
+    signals: [residents, daytime_workers, competitors]
+    competitors: {match: {leisure: [fitness_centre, sports_centre]}}
+    benchmarks: {employed_residents: {strong: 8000, weak: 2000}, daytime_workers: {strong: 10000, weak: 2000}}
   metrics:
     occupancy_requirements: {weight: 5, why: "Class size and floor area set the occupant load: 50+ people means assembly rules, two exits and more restrooms."}
     size_fit: {weight: 14, why: "Equipment floors and classes need large, open floor area."}
@@ -273,6 +289,7 @@ gym:
     accessibility_ada: {weight: 3, why: "Public-facing facility must be accessible."}
     parking_requirement: {weight: 4, why: "Assembly/recreation uses often carry parking minimums."}
     conversion_risk: {weight: 3, why: "Showers and locker rooms add plumbing unknowns."}
+    flood_risk: {weight: 4, why: "Large ground floors flood easily; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 office:
@@ -322,6 +339,9 @@ office:
     competitors: []
     demand: [food_drink, retail, lodging]
     access: [transit, parking]
+  neighborhood:
+    signals: [walk_access]
+    benchmarks: {}
   metrics:
     occupancy_requirements: {weight: 3, why: "Headcount sets restroom count and whether one exit is enough."}
     permitted_use: {weight: 12, why: "Office use must be allowed at the address."}
@@ -336,6 +356,7 @@ office:
     parking_requirement: {weight: 4, why: "Office parking minimums apply in many cities."}
     hvac_ventilation: {weight: 5, why: "Comfort cooling for dense occupancy."}
     interior_layout: {weight: 4, why: "Open vs. private offices drive build-out."}
+    flood_risk: {weight: 4, why: "Flood zones add insurance cost and can disrupt operations."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
 
 retail:
@@ -387,6 +408,10 @@ retail:
     competitors: [retail]
     demand: [food_drink, offices, lodging, residential_services, entertainment]
     access: [parking, transit]
+  neighborhood:
+    signals: [daytime_workers, residents, competitors, walk_access]
+    competitors: {match: {shop: ["*"]}, kind_by: shop}
+    benchmarks: {daytime_workers: {strong: 10000, weak: 2000}, employed_residents: {strong: 5000, weak: 1000}}
   metrics:
     occupancy_requirements: {weight: 3, why: "Sales-floor size sets occupant load, exits and restroom needs."}
     customer_demand: {weight: 15, why: "Foot traffic and nearby shoppers drive sales."}
@@ -400,4 +425,5 @@ retail:
     building_condition: {weight: 5, why: "Condition affects storefront appeal and repair risk."}
     accessibility_ada: {weight: 5, why: "Public-facing stores must be accessible."}
     parking_requirement: {weight: 4, why: "Retail parking minimums apply in many cities."}
+    flood_risk: {weight: 4, why: "Flooding destroys inventory; flood zones add insurance cost and rules for major work."}
     evidence_quality: {weight: 0, why: "Shown for transparency; drives confidence, not the score."}
