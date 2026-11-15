@@ -7,6 +7,7 @@ import type {
   ChatTurn,
   Health,
   Intent,
+  MapContext,
   Neighborhood,
   PropertyDetail,
   RefineResponse,
@@ -55,18 +56,14 @@ export const api = {
   search: (query: string, signal?: AbortSignal) =>
     request<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify({ query }), signal }),
   /** Apply a follow-up ("make it 60 seats", "which ones have parking?") to the current search. */
-  refine: (body: { intent: Intent; message: string; history: ChatTurn[]; matches: Record<string, unknown>[] }, signal?: AbortSignal) =>
+  refine: (body: { intent: Intent; message: string; history: ChatTurn[]; matches: Record<string, unknown>[]; property_id?: string; center?: { lat: number; lon: number }; map_context?: MapContext }, signal?: AbortSignal) =>
     request<RefineResponse>("/api/search/refine", { method: "POST", body: JSON.stringify(body), signal }),
   /** With the user's request, the detail's panel tiles describe what this building offers that request. */
-  property: (id: string, signal?: AbortSignal, forRequest?: { business_type: string; sqft?: number; budget?: { amount: number; period: string } | null }) => {
+  property: (id: string, signal?: AbortSignal, forRequest?: Intent, selection?: Record<string, unknown> | null) => {
     const q = new URLSearchParams();
     if (forRequest) {
-      q.set("business_type", forRequest.business_type);
-      if (forRequest.sqft) q.set("sqft", String(Math.round(forRequest.sqft)));
-      if (forRequest.budget) {
-        q.set("budget_amount", String(forRequest.budget.amount));
-        q.set("budget_period", forRequest.budget.period);
-      }
+      q.set("search_intent", JSON.stringify(forRequest));
+      if (selection) q.set("selection", JSON.stringify(selection));
     }
     return request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}${q.size ? `?${q}` : ""}`, { signal });
   },

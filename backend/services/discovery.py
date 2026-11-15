@@ -15,7 +15,7 @@ import httpx
 import db
 from config import business, settings
 from schemas import Candidate, Intent, SearchResponse
-from services import costar, external, program as space_program, sizing, vexcel
+from services import costs, costar, external, program as space_program, sizing, vexcel
 from services.geo import centroid, haversine_m, in_coverage, property_id
 from services.intent import parse
 
@@ -66,6 +66,8 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
         rent = f" at ${best['rent_per_sqft_yr']:.2f}/sq ft/yr" if best.get("rent_per_sqft_yr") else ""
         floor = f", {best['floor'].lower()}" if best.get("floor") else ""
         sq = f"{best['sqft_min']:,.0f}-{best['sqft']:,.0f}" if best.get("sqft_min") else f"{best['sqft']:,.0f}"
+        if best.get("suggested_portion"):
+            sq = f"{best['sqft']:,.0f} proposed ({best['sqft_min']:,.0f}–{best['sqft_max']:,.0f} advertised; confirm division)"
         reasons.insert(0, f"On the market (CoStar): {('Suite ' + str(best['suite'])) if best.get('suite') else 'a space'} with {sq} rentable sq ft{floor}{rent}")
         if best.get("ground_floor") is False and ground_required:
             score -= 20
@@ -128,6 +130,16 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
                     reasons.append(f"{chk['label']}: {chk['detail']}")
             elif chk["status"] == "pass" and chk["id"] in must | {"ceiling"}:
                 reasons.append(f"{chk['label']}: {chk['detail']}")
+    if intent.budget:
+        from services.fit_summary import NET_SERVICE, _jurisdiction
+        jkey, _ = _jurisdiction(c.get("address"))
+        rate = (best or {}).get("rent_per_sqft_yr")
+        rent_band = {"per_sqft_low": rate, "per_sqft_high": rate, "source": "CoStar listing"} if rate and best.get("service") in NET_SERVICE else None
+        est = costs.estimate(intent.business_type, (best or {}).get("sqft") or size["target_sqft"], jkey, [], False, rent_band)
+        check = costs.budget_check(est, intent.budget.model_dump(), intent.business_type)
+        # Preserve the existing 0–100 scale while allowing affordability to affect ordering.
+        score = score * 0.85 + {"within": 15, "partly": 7, "over": 0}[check["status"]]
+        reasons.append(f"Budget (planning estimate): {check['status']}; {check['note']}")
     return max(0, min(round(score), 100)), reasons
 
 
@@ -289,6 +301,25 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
     if not place:
         return SearchResponse(intent=intent, location=None, data_mode="osm_only", candidates=[], notes=[f"Could not find “{location_text}”. Try adding the state."], program=space_program.build(intent))
     lat, lon = place["lat"], place["lon"]
+    near_places = []
+    for text in intent.near:
+        try:
+            anchor = await external.geocode(f"{text}, {location_text}")
+        except (httpx.HTTPError, ValueError):
+            anchor = None
+        if anchor:
+            near_places.append(anchor)
+        else:
+            notes.append(f"Could not locate “{text}”; it did not affect ranking.")
+    if near_places:
+        # Search around the requested landmark, rather than ranking only downtown buildings.
+        lat, lon = near_places[0]["lat"], near_places[0]["lon"]
+        place = near_places[0]
+        notes.append("Proximity ranking uses: " + ", ".join(p["name"] for p in near_places) + ".")
+    labels = {n.label.lower() for n in intent.needs}
+    extras = [r for r in intent.requirements if r.lower() not in labels]
+    if extras or intent.avoid:
+        notes.append("Needs to check during analysis (not used to rank discovery): " + "; ".join([*extras, *intent.avoid]) + ".")
     covered = in_coverage(lat, lon)
     location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered}
 
@@ -335,7 +366,16 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
     listed = attach_costar(candidates, lat, lon, cfg, prog, notes, radius)
     scored: list[Candidate] = []
     seen_ids: set[str] = set()
+    ground_only = any(n.id == "ground_floor" and n.priority == "must" for n in intent.needs)
+    unknown_ground = 0
     for c in candidates:
+        if ground_only:
+            ground = (c.get("best_space") or {}).get("ground_floor")
+            if ground is None and c.get("stories_est") == 1 and c.get("costar_id"):
+                ground = True
+            if ground is not True:
+                unknown_ground += ground is None
+                continue
         if c["id"] in seen_ids:
             continue  # stacked parcels (condos, multi-structure lots) can share a centroid
         seen_ids.add(c["id"])
@@ -343,16 +383,19 @@ async def search(query: str, intent: Intent | None = None) -> SearchResponse:
             continue  # a CoStar lease listing for this use outranks Vexcel's building class
         if c.get("_too_low"):
             continue  # roof under 8 ft: canopy/kiosk/shed rather than a leasable building
-        c["distance_m"] = round(haversine_m(lat, lon, c["lat"], c["lon"]))
-        c["match_score"], c["match_reasons"] = prescreen(c, intent, prog, raws.get(c["id"]), place["name"])
+        if near_places:
+            c["distance_m"] = round(sum(haversine_m(p["lat"], p["lon"], c["lat"], c["lon"]) for p in near_places) / len(near_places))
+        else:
+            c["distance_m"] = round(haversine_m(lat, lon, c["lat"], c["lon"]))
+        distance_label = "requested landmarks (average distance)" if len(near_places) > 1 else place["name"]
+        c["match_score"], c["match_reasons"] = prescreen(c, intent, prog, raws.get(c["id"]), distance_label)
         scored.append(Candidate(**c))
-    # By fit score (a listed suite in range already scores its size and evidence in full), then nearest first.
-    # Keep some other listed buildings in the list too (spaces can often be combined/divided).
-    scored.sort(key=lambda c: (-c.match_score, c.distance_m or 0))
+    if ground_only:
+        notes.append(f"Ground-floor only: excluded {unknown_ground} building(s) with unconfirmed floor; only confirmed street-level matches are shown.")
+    # A selected vacancy comes from non-pending CoStar spaces. space_count also includes
+    # pending leases, so it must not qualify a property for the available-first group.
+    scored.sort(key=lambda c: (not bool(c.best_space), -c.match_score, c.distance_m or 0))
     top = scored[:25]
-    extra_listed = [c for c in scored[25:] if c.space_count][: max(0, 8 - sum(1 for c in top if c.space_count))]
-    if extra_listed:
-        top = top[: 25 - len(extra_listed)] + extra_listed
     from services.scan_identity import default_scan  # no network: picks among CoStar's scans by caption only
 
     for c in top:

@@ -119,9 +119,12 @@ export type Candidate = {
 };
 
 export type CostarSpace = {
+  listing_id?: number | string;
   suite: string | null;
   floor: string | null;
   sqft: number | null;
+  sqft_max?: number | null;
+  suggested_portion?: boolean;
   sqft_min?: number | null; // divisible listing: smallest part offered
   rent_per_sqft_yr: number | null; // asking, normalised to $/sq ft/yr
   service: string | null; // TripleNet, FullService, ...
@@ -161,11 +164,52 @@ export type SearchResponse = {
 };
 
 /** One turn of the refine-as-you-go conversation on the discovery page. */
-export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[] };
+export type ChatTurn = {
+  role: "user" | "agent";
+  text: string;
+  changes?: string[];
+  failed?: boolean;
+  interaction?: MapInteraction;
+  places?: Place[]; // result cards for map answers
+  suggestions?: string[]; // follow-up questions the user can tap
+};
+
+/** How a map question was handled; each type has one predictable response (backend services/discovery_chat). */
+export type MapInteraction =
+  | "find_nearby" | "find_nearest" | "find_by_description" | "explore_surroundings"
+  | "inspect" | "adjust_results" | "control_view" | "back";
+
+/** What "it", "there" and "around here" refer to in a follow-up: a clicked/found place. */
+export type MapAnchor = { kind: "place" | "area" | "view"; id?: string | null; label: string; lat: number; lon: number };
+
+/** The map's conversational state sent with every follow-up. */
+export type MapContext = {
+  anchor?: MapAnchor | null;
+  radius_m?: number | null;
+  interaction?: MapInteraction | null;
+  places?: Pick<Place, "id" | "name" | "group" | "category" | "lat" | "lon">[];
+};
 
 /** POST /api/search/refine: a follow-up either changes the search (re-run, new results) or is answered. */
+export type MapAction = {
+  kind: "places" | "areas" | "focus" | "zoom" | "layer" | "tilt" | "fit" | "clear" | "back" | "radius";
+  interaction?: MapInteraction | null;
+  anchor?: MapAnchor | null;
+  radius_m?: number | null;
+  suggestions?: string[];
+  summary?: { group: string; label: string; count: number }[];
+  places?: Place[];
+  groups?: string[];
+  areas?: GeoJSON.FeatureCollection;
+  focus?: { lat: number; lon: number };
+  zoom_delta?: number;
+  layer?: "aerial" | "map";
+  tilt?: boolean;
+};
+
 export type RefineResponse = {
-  action: "refine" | "answer";
+  action: "refine" | "answer" | "map";
+  map_action?: MapAction | null;
   reply: string;
   changes: string[]; // what changed in the search ("60 seats", "+ On-site parking (must)", "Budget $8,000 monthly")
   result: SearchResponse | null; // new results when action === "refine"
@@ -252,6 +296,8 @@ export type Neighborhood = {
 // ---------------------------------------------------------------- analysis
 
 export type AnalysisRequest = {
+  selection?: Record<string, unknown> | null;
+  conversation_history?: ChatTurn[];
   query: string;
   intent: Intent;
   property_id: string;

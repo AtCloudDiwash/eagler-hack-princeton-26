@@ -120,3 +120,22 @@ def test_manual_tour_choice_and_unlink_survive_search(monkeypatch):
     stored, raw = db.get_property(candidate["id"])
     prop, _ = asyncio.run(main._suite_tours(stored, raw, None))
     assert prop["matterport_model_id"] is None and prop["matterport_user_unlinked"]
+
+
+def test_resolved_selection_is_used_for_tour_label(monkeypatch):
+    from schemas import Intent
+    from services import costar
+
+    tours = [{"id": "Chosen12345", "name": "Suite 1080", "suites": ["1080"], "kind": "suite", "distance_m": 10}]
+    async def building_tours(*args):
+        return tours
+    monkeypatch.setattr(suite_tours, "building_tours", building_tours)
+    monkeypatch.setattr(costar, "match", lambda *args: REC)
+    def unexpected_reselection(*args):
+        raise AssertionError("A resolved selection must not be rebuilt from thin sizing params")
+    monkeypatch.setattr(costar, "candidate_fields", unexpected_reselection)
+    prop = {**PROP, "_selection_resolved": True, "best_space": {"suite": "1080", "sqft": 5482},
+            "matterport_user_unlinked": True}
+    _, view = asyncio.run(suite_tours.resolve_property(prop, None, Intent(sqft=1200)))
+    assert view["match"]["id"] == "Chosen12345"
+    assert "your suite" in view["tours"][0]["chips"]

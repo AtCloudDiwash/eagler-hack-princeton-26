@@ -230,3 +230,35 @@ def for_property(tours: list[dict], space: dict | None, linked: str | None) -> d
     else:
         note = f"{len(tours)} tour{'s' if len(tours) != 1 else ''} of this building."
     return {"tours": items, "match": m, "suite": suite, "note": note}
+
+
+async def resolve_property(prop: dict, raw: dict | None, intent, autolink: bool = True) -> tuple[dict, dict | None]:
+    """The building's 3D tours, fetched live and labelled against the suite the user would lease. When a tour of that
+    suite exists and the current tour was auto-linked (not the user's choice), link the suite's tour instead."""
+    import asyncio
+    from services import costar
+    from services import program as space_program
+
+    rec = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
+    space = prop.get("best_space")
+    if intent and rec and not prop.get("_selection_resolved"):  # the suite chosen for THIS request
+        prog = space_program.build(intent)
+        size = prog["size"]
+        space = costar.candidate_fields(rec, size["min_sqft"], size["max_sqft"], size["target_sqft"], prog["building"]["ground_floor"] == "required").get("best_space") or space
+    try:
+        tours = await asyncio.wait_for(building_tours(prop, rec), timeout=12)
+    except asyncio.TimeoutError:
+        return prop, None
+    view = for_property(tours, space, prop.get("matterport_model_id"))
+    m, linked = view["match"], prop.get("matterport_model_id")
+    auto = prop.get("matterport_auto_model_id")
+    # The user's own choice (pasted, or picked from the tour list) is never replaced: a link that differs from the
+    # auto-linked id, or (older records without an auto id) one that isn't among the building's known tours.
+    user_linked = prop.get("matterport_user_linked") or (bool(linked) and (auto != linked if auto else linked not in {t["id"] for t in tours}))
+    if autolink and not prop.get("matterport_user_unlinked") and m and m["confidence"] == "strong" and linked != m["id"] and not user_linked:
+        t = next(x for x in tours if x["id"] == m["id"])
+        prop = {**prop, "matterport_model_id": m["id"], "matterport_auto_model_id": m["id"], "matterport_lookup_done": True,
+                "matterport_note": f"Tour of Suite {view['suite']} ('{t['name']}')" + (f"; {'; '.join(m['caveats'])}." if m["caveats"] else ".")}
+        db.save_property(prop, raw)
+        view = for_property(tours, space, m["id"])
+    return prop, view

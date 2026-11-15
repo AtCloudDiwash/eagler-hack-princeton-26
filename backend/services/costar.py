@@ -83,12 +83,13 @@ def candidate_fields(p: dict, need_min: int, need_max: int, target: int, ground_
     rank = lambda x: ({True: 0, None: 1, False: 2}[is_ground_floor(x.get("floor"))] if ground_floor else 0, abs((x["sqft"] or 0) - target))  # noqa: E731
     open_spaces = _available_spaces(p)
     best = min(s["fitting_spaces"] or open_spaces, key=rank) if s["fitting_spaces"] or open_spaces else None
+    best = space_at_target(best, target) if best else None
     return {
         "costar_id": p["id"], "building_name": p.get("name"),
         "rentable_sqft": p.get("rentable_sqft"), "rentable_basis": p.get("rentable_basis"),
         "available_sqft": s["available_sqft"], "space_count": s["space_count"],
-        "best_space": {**{k: best.get(k) for k in ("suite", "floor", "sqft", "rent_per_sqft_yr", "service", "use", "available_on")},
-                       "sqft_min": best.get("sqft_min") if (best.get("sqft_min") or 0) < (best.get("sqft") or 0) else None,
+        "best_space": {**{k: best.get(k) for k in ("listing_id", "suite", "floor", "sqft", "sqft_max", "suggested_portion", "rent_per_sqft_yr", "service", "use", "available_on")},
+                       "sqft_min": best.get("sqft_min") if (best.get("sqft_min") or 0) < (best.get("sqft_max") or best.get("sqft") or 0) else None,
                        "ground_floor": is_ground_floor(best.get("floor"))} if best else None,
         "closest_space_sqft": None,
         "asking_rent_per_sqft_yr": s["asking_rent_per_sqft_yr"],
@@ -142,15 +143,21 @@ def _available_spaces(p: dict) -> list[dict]:
     ]
 
 
-def summarize(p: dict, need_min: int | None = None, need_max: int | None = None) -> dict:
+def summarize(p: dict, need_min: int | None = None, need_max: int | None = None, *, selected_space: dict | None = None) -> dict:
     """Readable leasing summary; with a size range, the spaces that fit it."""
     spaces = []
     for l in p["lease_listings"]:
         for s in l["spaces"]:
             sq = s.get("sqft_max") or s.get("sqft_min")
             spaces.append({**s, "sqft": sq, "rent_per_sqft_yr": _yearly_rate(s), "listing_id": l["listing_id"]})
-    spaces.sort(key=lambda s: s["sqft"] or 0)
-    total_avail = sum(s["sqft"] or 0 for s in spaces if not s["lease_pending"]) or None
+    def selected(space: dict) -> bool:
+        return bool(selected_space) and all(space.get(k) == selected_space.get(k) for k in ("listing_id", "suite", "floor"))
+
+    # Carry the resolved suite's proposed area into the leasing list, and keep
+    # it visible even when the building has more than the displayed 20 spaces.
+    spaces = [{**space, **selected_space} if selected(space) else space for space in spaces]
+    spaces.sort(key=lambda space: (not selected(space), space["sqft"] or 0))
+    total_avail = sum(s.get("sqft_max") or s["sqft"] or 0 for s in spaces if not s["lease_pending"]) or None
     fits = [s for s in spaces if s["sqft"] and need_min and need_max and (s.get("sqft_min") or s["sqft"]) <= need_max and s["sqft"] >= need_min and not s["lease_pending"]]
     rents = [s["rent_per_sqft_yr"] for s in spaces if s["rent_per_sqft_yr"]]
     return {
@@ -167,3 +174,37 @@ def summarize(p: dict, need_min: int | None = None, need_max: int | None = None)
         "listing_condition": next((l["condition"] for l in p["lease_listings"] if l.get("condition")), None),
         "note": "CoStar kit snapshot: availability and asking rents are as recorded in the kit, not live. Asking rent is not the achieved rent; check the service type (NNN vs gross).",
     }
+
+
+def selected_fields(prop: dict, intent, selection: dict | None = None) -> dict:
+    """Resolve a request's selection from the index, never trust client rent/area values."""
+    from services import program
+    rec = match(prop["lat"], prop["lon"], prop.get("footprint"))
+    if not rec:
+        if selection:
+            raise ValueError("The selected listing is no longer available; search again.")
+        return prop
+    prog = program.build(intent)
+    size = prog["size"]
+    fields = candidate_fields(rec, size["min_sqft"], size["max_sqft"], size["target_sqft"], prog["building"]["ground_floor"] == "required")
+    if selection:
+        if not isinstance(selection, dict) or not all(k in selection for k in ("listing_id", "suite", "floor")):
+            raise ValueError("Invalid suite selection; search again.")
+        spaces = _available_spaces(rec)
+        chosen = next((s for s in spaces if all(s.get(k) == selection.get(k) for k in ("listing_id", "suite", "floor"))), None)
+        if not chosen:
+            raise ValueError("The selected listing is no longer available; search again.")
+        fields["best_space"] = {**space_at_target(chosen, size["target_sqft"]), "ground_floor": is_ground_floor(chosen.get("floor"))}
+    return {**prop, **fields, "_selection_resolved": True}
+
+
+def space_at_target(space: dict, target: int) -> dict:
+    """A proposed leasable portion of this suite, never the listing/building total.
+
+    Preserve the advertised bounds; division is a proposal requiring landlord confirmation.
+    Fixed-size suites retain their recorded area even when outside the requested band.
+    """
+    high = space.get("sqft_max") or space.get("sqft")
+    low = space.get("sqft_min") or high
+    proposed = min(max(target, low), high)
+    return {**space, "sqft": proposed, "sqft_max": high, "suggested_portion": low < high and proposed < high}

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { BusinessTypeInfo, Candidate, ChatTurn, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
+import type { BusinessTypeInfo, Candidate, ChatTurn, Neighborhood, PropertyDetail, SearchResponse, Place, MapAction, MapAnchor, MapInteraction } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtFootprint } from "@/lib/format";
 import { heightFor, type LngLat } from "@/lib/geo";
 import { useMedia } from "@/lib/useMedia";
@@ -19,6 +19,8 @@ import CandidateRail, { candidateTitle } from "@/components/discovery/CandidateR
 import PropertySheet from "@/components/discovery/PropertySheet";
 import HistoryDrawer from "@/components/discovery/HistoryDrawer";
 import RefineThread from "@/components/discovery/RefineThread";
+import MapContextStrip from "@/components/discovery/MapContextStrip";
+import { placeMeta } from "@/lib/places";
 
 const TurnkeyMap = dynamic(() => import("@/components/map/TurnkeyMap"), {
   ssr: false,
@@ -26,13 +28,30 @@ const TurnkeyMap = dynamic(() => import("@/components/map/TurnkeyMap"), {
 });
 
 const SESSION_KEY = "turnkey:discovery";
+/** One restorable map state for "Back": what the conversation was showing and what it was about. */
+type MapSnapshot = {
+  places: Place[] | null;
+  areas: GeoJSON.FeatureCollection | undefined;
+  groups: Set<string> | null;
+  anchor: MapAnchor | null;
+  radius: number | null;
+  interaction: MapInteraction | null;
+};
+
 type Saved = { query: string; result: SearchResponse; selectedId: string | null; radius: number | null; turns?: ChatTurn[] };
+
+/** Every outer-ring vertex of the imagery-match polygons (to frame them). */
+function areaPoints(areas: GeoJSON.FeatureCollection): LngLat[] {
+  return areas.features.flatMap((f) => f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.flatMap((p) => p[0]) : []) as LngLat[];
+}
 
 /** What the agent says after a search: what it found and that the user can keep refining. */
 function foundMessage(r: SearchResponse): string {
   const size = r.program ? ` (~${r.program.size.target_sqft.toLocaleString()} sq ft)` : "";
   const where = r.location?.name ? ` near ${r.location.name.split(",")[0]}` : "";
-  const listed = r.candidates.filter((c) => c.best_space).length;
+  const listed = r.candidates.filter((c) => c.best_space?.sqft != null && r.program &&
+    (c.best_space.sqft_min || c.best_space.sqft) <= r.program.size.max_sqft &&
+    c.best_space.sqft >= r.program.size.min_sqft).length;
   if (!r.candidates.length) return `I couldn't find buildings for a ${r.intent.business_label.toLowerCase()}${where}. Try another area or a different size.`;
   return `Found ${r.candidates.length} buildings for a ${r.intent.business_label.toLowerCase()}${size}${where}` + (listed ? `, ${listed} with a space listed in your size range` : "") +
     ". Tell me what to change (size, budget, area, must-haves) or ask about them. When one looks right, open it and analyze.";
@@ -41,7 +60,7 @@ function foundMessage(r: SearchResponse): string {
 /** The matches the agent can talk about (it never sees more than this). */
 function matchSummary(r: SearchResponse): Record<string, unknown>[] {
   return r.candidates.slice(0, 12).map((c) => ({
-    title: candidateTitle(c), fit: c.match_score, building_type: c.building_type, stories: c.stories_est,
+    id: c.id, lat: c.lat, lon: c.lon, title: candidateTitle(c), fit: c.match_score, building_type: c.building_type, stories: c.stories_est,
     listed_space: c.best_space ? { suite: c.best_space.suite, sqft: c.best_space.sqft, floor: c.best_space.floor, rent_per_sqft_yr: c.best_space.rent_per_sqft_yr } : null,
     spaces_on_market: c.space_count, reasons: c.match_reasons.slice(0, 3),
   }));
@@ -70,6 +89,17 @@ export default function DiscoveryPage() {
   const [neighborhood, setNeighborhood] = useState<Neighborhood | null>(null);
   const [nbLoading, setNbLoading] = useState(false);
   const [nbError, setNbError] = useState<string | null>(null);
+  const [chatPlaces, setChatPlaces] = useState<Place[] | null>(null);
+  const [chatAreas, setChatAreas] = useState<GeoJSON.FeatureCollection | undefined>();
+  const [chatFit, setChatFit] = useState<{ points: LngLat[]; key: string } | null>(null);
+  // Conversational map state: what "it"/"there" means, how far to look, the last interaction, and Back history.
+  const [anchor, setAnchor] = useState<MapAnchor | null>(null);
+  const [chatRadius, setChatRadius] = useState<number | null>(null);
+  const [lastInteraction, setLastInteraction] = useState<MapInteraction | null>(null);
+  const [mapStack, setMapStack] = useState<MapSnapshot[]>([]);
+  const [hoverPlaceId, setHoverPlaceId] = useState<string | null>(null);
+  const [zoomCommand, setZoomCommand] = useState<{ delta: number; key: string } | null>(null);
+  const mapView = useRef<{ lat: number; lon: number; zoom: number } | null>(null);
   const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null);
 
   const [requirements, setRequirements] = useState("");
@@ -93,6 +123,11 @@ export default function DiscoveryPage() {
 
   const selectCandidate = useCallback(
     (c: Candidate, opts?: { radius?: number }) => {
+      setChatPlaces(null);
+      setChatAreas(undefined);
+      setChatFit(null);
+      setAnchor(null);
+      setMapStack([]);
       setSelected(c);
       setDetail(null);
       setDetailError(null);
@@ -160,28 +195,110 @@ export default function DiscoveryPage() {
     }
   }
 
+  function snapshot(): MapSnapshot {
+    return { places: chatPlaces, areas: chatAreas, groups: visibleGroups, anchor, radius: chatRadius, interaction: lastInteraction };
+  }
+
+  function fitToPlaces(places: Place[] | null, areas: GeoJSON.FeatureCollection | undefined, key: string) {
+    if (places?.length) setChatFit({ points: places.map((p) => [p.lon, p.lat]), key });
+    else if (areas) setChatFit({ points: areaPoints(areas), key });
+    else setChatFit(null);
+  }
+
+  /** Back: restore the previous map results, anchor and radius. */
+  function goBack(): boolean {
+    const prev = mapStack[mapStack.length - 1];
+    if (!prev) return false;
+    setMapStack((s) => s.slice(0, -1));
+    setChatPlaces(prev.places); setChatAreas(prev.areas); setVisibleGroups(prev.groups);
+    setAnchor(prev.anchor); setChatRadius(prev.radius); setLastInteraction(prev.interaction);
+    fitToPlaces(prev.places, prev.areas, `back-${Date.now()}`);
+    return true;
+  }
+
+  /** A place card or map dot was clicked: center it and make it what follow-ups refer to. */
+  function focusPlace(p: Place) {
+    if (anchor?.id === p.id) return;
+    setMapStack((s) => [...s, snapshot()]);
+    setAnchor({ kind: "place", id: p.id, label: p.name || placeMeta(p.group).label, lat: p.lat, lon: p.lon });
+    setChatFit(null);
+    setFocus({ lat: p.lat, lon: p.lon, zoom: 17, key: `place-${p.id}-${Date.now()}` });
+  }
+
+  function applyMapAction(action: MapAction): string | null {
+    const key = `chat-${Date.now()}`;
+    if (action.kind === "back") return goBack() ? null : "There is nothing earlier to go back to.";
+    // Results and anchors are restorable; camera tweaks are not worth a Back step.
+    if (action.places || action.areas || action.anchor) setMapStack((s) => [...s.slice(-19), snapshot()]);
+    if (action.interaction) setLastInteraction(action.interaction);
+    if (action.anchor !== undefined && action.anchor !== null) setAnchor(action.anchor);
+    if (action.kind === "radius" || action.radius_m != null) setChatRadius(action.radius_m ?? null);
+    if (action.kind === "zoom") setZoomCommand({ delta: action.zoom_delta ?? 0, key });
+    if (action.layer) setLayer(action.layer);
+    if (action.tilt != null) setTilt(action.tilt);
+    if (action.kind === "clear" || action.kind === "fit") {
+      setChatPlaces(null); setChatAreas(undefined); setVisibleGroups(null); setChatFit(null); setAnchor(null);
+    }
+    if (action.kind === "fit" && result) setChatFit({ points: result.candidates.map((c) => [c.lon, c.lat]), key });
+    if (action.places) {
+      setChatPlaces(action.places); setChatAreas(undefined);
+      setVisibleGroups(new Set(action.groups));
+      setChatFit({ points: action.places.map((p) => [p.lon, p.lat]), key });
+    }
+    if (action.areas) {
+      setChatAreas(action.areas); setChatPlaces([]); setVisibleGroups(null);
+      setChatFit({ points: areaPoints(action.areas), key });
+    }
+    if (action.focus) {
+      setChatFit(null);
+      setFocus({ ...action.focus, zoom: 17, key });
+    }
+    return null;
+  }
+
   /** A follow-up on the current results: the agent changes the search (and it re-runs) or answers a question. */
   async function runRefine(message: string) {
     if (!result) return;
     searchAbort.current?.abort();
     const ctrl = new AbortController();
     searchAbort.current = ctrl;
-    const history = turns;
-    setTurns([...history, { role: "user", text: message }]);
+    const history = turns.filter((t) => !t.failed);
+    setTurns([...turns, { role: "user", text: message }]);
     setRefineText("");
     setRefining(true);
     setSearchError(null);
     try {
-      const r = await api.refine({ intent: result.intent, message, history, matches: matchSummary(result) }, ctrl.signal);
+      const center = selected ? { lat: selected.lat, lon: selected.lon } : mapView.current ?? result.location ?? undefined;
+      const map_context = {
+        anchor,
+        radius_m: chatRadius,
+        interaction: lastInteraction,
+        places: (chatPlaces ?? []).slice(0, 30).map(({ id, name, group, category, lat, lon }) => ({ id, name, group, category, lat, lon })),
+      };
+      const r = await api.refine({ intent: result.intent, message, history, matches: matchSummary(result), property_id: selected?.id, center, map_context }, ctrl.signal);
+      const mapNote = r.map_action ? applyMapAction(r.map_action) : null;
+      if (r.map_action) {
+        const a = r.map_action;
+        setTurns((t) => [...t, {
+          role: "agent",
+          text: mapNote ?? r.reply,
+          interaction: a.interaction ?? undefined,
+          places: a.kind === "places" && a.places && a.places.length > 1 ? a.places.slice(0, 6) : undefined,
+          suggestions: a.suggestions,
+        }]);
+        return;
+      }
       const changes = r.changes.length ? r.changes : undefined;
       if (r.result) {
+        setChatPlaces(null); setChatAreas(undefined); setChatFit(null); setVisibleGroups(null);
+        setAnchor(null); setMapStack([]); setLastInteraction(null);
         setSelected(null);
         setDetail(null);
         setNeighborhood(null);
         setResult(r.result);
         setFitKey(`refine-${Date.now()}`);
         setRiseKey(`refine-${Date.now()}`);
-        const count = ` ${r.result.candidates.length} matches now` + (r.result.candidates.some((c) => c.best_space) ? `, ${r.result.candidates.filter((c) => c.best_space).length} with a listed space.` : ".");
+        const count = ` ${r.result.candidates.length} matches available` + (r.result.candidates.some((c) => c.best_space) ? `, ${r.result.candidates.filter((c) => c.best_space).length} with a listed space.` : ".");
         setTurns((t) => [...t, { role: "agent", text: `${r.reply}${count}`, changes }]);
         if (r.result.candidates.length === 0 && r.result.location) setFocus({ lat: r.result.location.lat, lon: r.result.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
       } else {
@@ -189,7 +306,8 @@ export default function DiscoveryPage() {
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        setTurns((t) => [...t, { role: "agent", text: `Sorry, that didn't go through (${(e as Error).message}). Try again.` }]);
+        setRefineText(message);
+        setTurns((t) => [...t.map((turn, i) => i === t.length - 1 ? { ...turn, failed: true } : turn), { role: "agent", failed: true, text: `Sorry, that didn't go through (${(e as Error).message}). Try again.` }]);
       }
     } finally {
       if (searchAbort.current === ctrl) setRefining(false);
@@ -200,9 +318,9 @@ export default function DiscoveryPage() {
     if (!selected) return;
     const ctrl = new AbortController();
     setDetailLoading(true);
-    const forRequest = result ? { business_type: result.intent.business_type, sqft: result.program?.size.target_sqft, budget: result.intent.budget } : undefined;
+    const forRequest = result?.intent;
     api
-      .property(selected.id, ctrl.signal, forRequest)
+      .property(selected.id, ctrl.signal, forRequest, selected.best_space)
       .then(setDetail)
       .catch((e: Error) => e.name !== "AbortError" && setDetailError(e.message))
       .finally(() => !ctrl.signal.aborted && setDetailLoading(false));
@@ -233,10 +351,12 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      // The agents get the whole conversation, so refinements ("ground floor only", "$8k a month") reach them too.
-      const said = turns.filter((t) => t.role === "user").map((t) => t.text);
-      const fullQuery = said.length > 1 ? `${said[0]} (then: ${said.slice(1).join("; ")})` : query;
-      const { id } = await api.startAnalysis({ query: fullQuery, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined });
+      const { id } = await api.startAnalysis({
+        query: `Find a property for this final effective request: ${JSON.stringify(result.intent)}`,
+        intent: result.intent, selection: selected.best_space,
+        conversation_history: turns, property_id: selected.id,
+        radius_m: radius, requirements: requirements.trim() || undefined,
+      });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);
@@ -264,6 +384,8 @@ export default function DiscoveryPage() {
     setRequirements("");
     setAnalyzeError(null);
     setAnalyzing(false);
+    setChatPlaces(null); setChatAreas(undefined); setChatFit(null);
+    setAnchor(null); setChatRadius(null); setLastInteraction(null); setMapStack([]);
     setRadius(400);
     setFitKey(null);
     setRiseKey(null);
@@ -285,6 +407,7 @@ export default function DiscoveryPage() {
     return list;
   }, [candidates, selected, neighborhood]);
 
+  const shownPlaces = chatPlaces ?? (selected ? neighborhood?.places : undefined);
   const fitPoints = useMemo<LngLat[]>(() => candidates.map((c) => [c.lon, c.lat]), [candidates]);
   const hovered = candidates.find((c) => c.id === hoveredId && c.id !== selected?.id);
   const padding = desktop
@@ -298,7 +421,11 @@ export default function DiscoveryPage() {
         layer={layer}
         tilt={tilt}
         buildings={buildings}
-        places={selected ? neighborhood?.places : undefined}
+        places={shownPlaces}
+        searchAreas={chatAreas}
+        zoomCommand={zoomCommand}
+        onViewChange={(view) => { mapView.current = view; }}
+        highlightGroups={chatPlaces ? [...new Set(chatPlaces.map((p) => p.group))] : undefined}
         visibleGroups={visibleGroups}
         ring={selected ? { center: [selected.lon, selected.lat], radius, color: "#a78bfa" } : null}
         ringKey={selected?.id}
@@ -311,10 +438,18 @@ export default function DiscoveryPage() {
           const c = candidates.find((x) => x.id === id);
           if (c) selectCandidate(c);
         }}
+        onPlaceSelect={result ? (id) => {
+          const pl = shownPlaces?.find((x) => x.id === id);
+          if (pl) focusPlace(pl);
+        } : undefined}
+        activePlaceId={hoverPlaceId ?? (anchor?.kind === "place" ? anchor.id : null)}
         focus={focus}
-        fit={fitKey && !selected ? { points: fitPoints, key: fitKey } : null}
+        fit={chatFit ?? (fitKey && !selected ? { points: fitPoints, key: fitKey } : null)}
         padding={padding}
-        markers={
+        markers={[...(chatPlaces ?? []).slice(0, 8).filter((p) => p.id !== anchor?.id).map((p) => ({ id: `chat-${p.id}`, lon: p.lon, lat: p.lat, node: <div className={`glass rounded-lg px-2 py-1 text-xs text-slate-100 ${p.id === hoverPlaceId ? "ring-1 ring-teal-300" : ""}`}>{p.name || placeMeta(p.group).label} · {fmtDistance(p.distance_m)}</div> })), ...(
+          anchor?.kind === "place"
+            ? [{ id: `anchor-${anchor.id}`, lon: anchor.lon, lat: anchor.lat, node: <div className="rounded-lg bg-teal-400/90 px-2 py-1 text-xs font-medium text-ink-950 shadow-lg">{anchor.label}</div> }]
+            : []), ...(
           hovered
             ? [
                 {
@@ -334,7 +469,7 @@ export default function DiscoveryPage() {
                   ),
                 },
               ]
-            : []
+            : [])]
         }
       />
 
@@ -474,7 +609,19 @@ export default function DiscoveryPage() {
                   <p className="mt-1 text-sm text-slate-300/80 drop-shadow">AI agents check the building, the neighborhood, the rules and the cost.</p>
                 </motion.div>
               )}
-              {result && <RefineThread turns={turns} thinking={refining} onNewSearch={resetAll} />}
+              {result && <RefineThread turns={turns} thinking={refining} onNewSearch={resetAll} onPlace={focusPlace} onHoverPlace={setHoverPlaceId} onSuggest={(text) => { if (/^back$/i.test(text) && goBack()) return; runRefine(text); }} activePlaceId={anchor?.id ?? null}
+                context={<MapContextStrip
+                    around={anchor?.label ?? (selected ? candidateTitle(selected) : result.location?.name?.split(",")[0] ?? "Map view")}
+                    aroundIsPlace={anchor?.kind === "place"}
+                    onClearAround={() => { setMapStack((s) => [...s, snapshot()]); setAnchor(null); }}
+                    radius={chatRadius}
+                    onRadius={setChatRadius}
+                    showing={chatPlaces?.length ? [...new Set(chatPlaces.map((p) => placeMeta(p.group).label))] : chatAreas ? ["Imagery matches"] : []}
+                    onClearShowing={() => { setMapStack((s) => [...s, snapshot()]); setChatPlaces(null); setChatAreas(undefined); setVisibleGroups(null); setAnchor(null); }}
+                    canBack={mapStack.length > 0}
+                    onBack={goBack}
+                  />}
+              />}
               {result ? (
                 <SearchDock key="refine" mode="refine" query={refineText} setQuery={setRefineText} onSearch={runRefine} loading={refining || searching} idle={false} />
               ) : (
