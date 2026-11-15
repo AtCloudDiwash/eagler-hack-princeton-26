@@ -123,6 +123,8 @@ export type CostarSpace = {
   suite: string | null;
   floor: string | null;
   sqft: number | null;
+  sqft_max?: number | null;
+  suggested_portion?: boolean;
   sqft_min?: number | null; // divisible listing: smallest part offered
   rent_per_sqft_yr: number | null; // asking, normalised to $/sq ft/yr
   service: string | null; // TripleNet, FullService, ...

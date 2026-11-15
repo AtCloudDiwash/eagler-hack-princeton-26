@@ -131,3 +131,37 @@ def test_pending_leases_do_not_supply_an_available_space():
     fields = costar.candidate_fields(rec, 1500, 4000, 1800)
     assert fields["space_count"] == 2
     assert fields["best_space"] is None
+
+
+def test_divisible_suite_uses_requested_portion_not_maximum_area():
+    from copy import deepcopy
+
+    rec = deepcopy(PROPS[0])
+    rec['lease_listings'][0]['spaces'] = [{**rec['lease_listings'][0]['spaces'][0], 'suite': 'Ground retail', 'sqft_min': 500, 'sqft_max': 10000}]
+    fields = costar.candidate_fields(rec, 970, 1280, 1110, True)
+    assert fields['best_space']['sqft'] == 1110
+    assert fields['best_space']['sqft_max'] == 10000
+    assert fields['best_space']['suite'] == 'Ground retail'
+
+
+def test_suggested_portion_survives_selection_and_drives_cost_tiles(monkeypatch):
+    from copy import deepcopy
+    from schemas import Intent
+    from services import fit_summary
+
+    rec = deepcopy(PROPS[0])
+    rec['lease_listings'][0]['spaces'] = [{**rec['lease_listings'][0]['spaces'][0], 'suite': 'Ground floor retail', 'sqft_min': 500, 'sqft_max': 10000}]
+    monkeypatch.setattr(costar, 'match', lambda *args: rec)
+    intent = Intent(sqft=1200)
+    fields = costar.candidate_fields(rec, 1000, 1500, 1200, True)
+    prop = {'id': 'divisible', 'lat': 29.76, 'lon': -95.37, **fields}
+    resolved = costar.selected_fields(prop, intent, fields['best_space'])
+    tiles = fit_summary.tiles(resolved, None, intent)
+    space = next(t for t in tiles if t['id'] == 'space')
+    monthly = next(t for t in tiles if t['id'] == 'monthly')
+    assert space['value'] == '1,200 sq ft' and space['sub'] == 'Ground floor retail'
+    assert '10,000' in space['hint'] and 'landlord confirmation' in space['hint']
+    assert '1,200 sq ft' in monthly['hint']
+    # Below the advertised minimum, suggest the minimum with the same division caveat.
+    prop = costar.selected_fields(prop, Intent(sqft=300), fields['best_space'])
+    assert next(t for t in fit_summary.tiles(prop, None, Intent(sqft=300)) if t['id'] == 'space')['value'] == '500 sq ft'

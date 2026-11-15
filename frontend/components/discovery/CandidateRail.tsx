@@ -20,7 +20,7 @@ export const candidateTitle = (c: Candidate) => c.building_name || c.address || 
 /** The size line: listed space beats rentable area beats the aerial footprint. */
 export const candidateSize = (c: Candidate) =>
   c.best_space?.sqft
-    ? `${c.best_space.sqft_min ? `${fmtNum(c.best_space.sqft_min)}–` : ""}${fmtNum(c.best_space.sqft)} sq ft available`
+    ? `${fmtNum(c.best_space.sqft)} sq ft ${c.best_space.suggested_portion ? "suggested portion" : "available"}`
     : c.rentable_sqft
       ? `${fmtNum(c.rentable_sqft)} sq ft rentable`
       : fmtFootprint(c.area_sqft);
