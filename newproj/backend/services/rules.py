@@ -38,7 +38,8 @@ def permitted_use(jur: dict, business_type: str) -> dict:
     }
 
 
-def parking_requirement(jur: dict, business_type: str, gfa_sqft: float | None, lat: float, lon: float, paved_sqft: float | None) -> dict:
+def parking_requirement(jur: dict, business_type: str, gfa_sqft: float | None, lat: float, lon: float, paved_sqft: float | None, recorded_spaces: int | None = None) -> dict:
+    """`recorded_spaces`: the building's parking count from CoStar, used instead of the paved-area estimate."""
     use = business(business_type)["zoning_use"]
     p = jur["parking"]
     out = {"id": "parking_requirement", "rule": "Off-street parking minimum", "citation": p.get("citation"), "url": p.get("url"), "evidence": {}}
@@ -55,7 +56,8 @@ def parking_requirement(jur: dict, business_type: str, gfa_sqft: float | None, l
         out.update(status="unknown", detail=f"Requires {ratio} spaces per 1,000 sq ft GFA, but the leased floor area is unknown.")
         return out
     required = math.ceil(gfa_sqft / 1000 * ratio)
-    provided = math.floor(paved_sqft / SQFT_PER_SPACE) if paved_sqft else 0
+    recorded = int(recorded_spaces) if isinstance(recorded_spaces, (int, float)) and recorded_spaces > 0 else None
+    provided = recorded if recorded is not None else (math.floor(paved_sqft / SQFT_PER_SPACE) if paved_sqft else 0)
     out["evidence"] = {
         "ratio_per_1000_sqft": ratio,
         "gfa_sqft_assumed": round(gfa_sqft),
@@ -63,15 +65,18 @@ def parking_requirement(jur: dict, business_type: str, gfa_sqft: float | None, l
         "paved_area_sqft": round(paved_sqft) if paved_sqft else None,
         "estimated_onsite_spaces": provided,
         "sqft_per_space_assumption": SQFT_PER_SPACE,
+        **({"recorded_spaces": recorded, "spaces_source": "CoStar building record"} if recorded is not None else {}),
     }
+    where = f"CoStar lists {recorded} spaces at the building (shared with other tenants)" if recorded is not None else f"paved area suggests ~{provided} on site"
     if provided >= required:
-        out.update(status="pass", detail=f"Needs ~{required} spaces ({ratio}/1,000 sq ft × {gfa_sqft:,.0f} sq ft); paved area suggests ~{provided} on site.")
+        out.update(status="pass", detail=f"Needs ~{required} spaces ({ratio}/1,000 sq ft × {gfa_sqft:,.0f} sq ft); {where}.")
     else:
         out.update(
             status="risk",
             detail=(
-                f"Needs ~{required} spaces ({ratio}/1,000 sq ft × {gfa_sqft:,.0f} sq ft) but paved area suggests only ~{provided} on site "
-                "(shared parking, a parking agreement or a variance may be needed). Not all paving is striped parking."
+                f"Needs ~{required} spaces ({ratio}/1,000 sq ft × {gfa_sqft:,.0f} sq ft) but {where.replace('suggests', 'suggests only')} "
+                "(shared parking, a parking agreement or a variance may be needed)."
+                + ("" if recorded is not None else " Not all paving is striped parking.")
             ),
         )
     return out
@@ -85,7 +90,9 @@ def use_requirements(jur: dict, business_type: str) -> list[dict]:
         items.append({
             "id": r["id"],
             "rule": r["rule"],
-            "status": "risk",  # an action/approval is required; the site's status is unverified
+            # An approval/action is required and the site's status is unverified. A rule entry may declare
+            # `status: pass` when it is satisfied by default (e.g. a routine registration).
+            "status": r.get("status", "risk"),
             "detail": r["detail"].strip(),
             "citation": r.get("citation"),
             "url": r.get("url"),

@@ -20,8 +20,10 @@ def rent_band(jurisdiction_key: str, business_type: str) -> dict:
     return {"per_sqft_low": band["low"], "per_sqft_high": band["high"], "source": table.get("source", cfg["_default"]["source"])}
 
 
-def estimate(business_type: str, sqft: float, jurisdiction_key: str, adders: list[dict], second_generation: bool = False) -> dict:
-    """adders: [{id, quantity, reason, evidence_ids}]. Returns a Costs dict (see api-types.ts)."""
+def estimate(business_type: str, sqft: float, jurisdiction_key: str, adders: list[dict], second_generation: bool = False, rent_override: dict | None = None) -> dict:
+    """adders: [{id, quantity, reason, evidence_ids}]. rent_override: a real net asking rent for this space
+    ({per_sqft_low, per_sqft_high, source}, e.g. a CoStar listing) used instead of the planning band.
+    Returns a Costs dict (see api-types.ts)."""
     cfg = costs_config()
     use = business(business_type)["zoning_use"]
     sqft = max(float(sqft), 300.0)
@@ -68,7 +70,9 @@ def estimate(business_type: str, sqft: float, jurisdiction_key: str, adders: lis
     fit_low = sum(l["low"] for l in lines)
     fit_high = sum(l["high"] for l in lines)
 
-    rent = rent_band(jurisdiction_key, business_type)
+    rent = rent_override or rent_band(jurisdiction_key, business_type)
+    if rent_override:
+        assumptions.append(f"Base rent from {rent_override['source']} instead of the planning band.")
     nnn = cfg["nnn_per_sqft_year"]
     lease = cfg["lease"]
     annual_low, annual_high = sqft * rent["per_sqft_low"], sqft * rent["per_sqft_high"]

@@ -4,16 +4,19 @@
   2. Plan which agents are needed and why.
   3. Phase 1 (concurrent): Vexcel, Neighborhood, Compliance (+ Matterport if available).
   4. Share their findings with the Cost Agent (phase 2), which depends on them.
-  5. Validate: evidence citations, rule-governed metrics (agents cannot override verified rules or the
-     cost engine), "not detected" never treated as a blocker.
+  5. Validate: evidence citations (an agent may only cite what it saw), metric verdicts settled by data
+     (services/verdicts.py: verified rules, the cost engine, the CoStar building record, aerial and interior
+     data — agents may be more cautious, never less), "not detected" never treated as a blocker.
   6. Detect contradictions between agents and resolve them with explicit precedence.
   7. Targeted follow-ups for unknown, high-weight metrics whose resolution could change the verdict.
   8. Score in Python, then ask the LLM for a narrative grounded in the scored results.
-A failing agent never fails the analysis: its metrics become "unknown" and confidence drops.
+A failing agent never fails the analysis: its metrics become "unknown" and confidence drops. Only when every
+LLM provider is exhausted does the analysis stop. Everything runs inside one deadline (ANALYSIS_TIMEOUT_S).
 """
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import time
@@ -27,7 +30,9 @@ from agents.base import AGENT_LABELS, EvidenceStore, RunContext
 from config import business, metrics_registry, settings
 from schemas import AgentMetricAssessment, AgentReport, AnalysisRequest, MetricResult
 from services import costs as cost_engine
-from services import external, neighborhood, rules, scoring
+from services import external, matterport, neighborhood, rules, scoring
+from services import program as space_program
+from services import verdicts as verdict_engine
 from services.geo import haversine_m
 from services.intent import target_sqft
 from services.llm import AllProvidersFailedError, chat_model, model_label, on_fallback, track_usage
@@ -35,18 +40,26 @@ from services.vexcel import key_facts, imagery_meta
 
 log = logging.getLogger("turnkey.engine")
 MAX_FOLLOWUPS = 2
-FOLLOWUP_AGENTS = {"vexcel": vexcel_agent, "neighborhood": neighborhood_agent, "compliance": compliance_agent}
+FOLLOWUP_AGENTS = {"vexcel": vexcel_agent, "neighborhood": neighborhood_agent, "compliance": compliance_agent, "matterport": matterport_agent}
 
 
 class EventLog:
+    FLUSH_EVERY_S = 0.4  # progress is polled by the UI; batching keeps DB writes linear instead of one per event
+
     def __init__(self, analysis_id: str) -> None:
         self.analysis_id = analysis_id
         self.start = time.time()
         self.events: list[dict] = []
+        self._flushed = 0.0
 
     def emit(self, agent: str, type_: str, message: str, data: dict | None = None) -> None:
         self.events.append({"t": round(time.time() - self.start, 1), "agent": agent, "type": type_, "message": message, "data": data})
-        db.update_analysis(self.analysis_id, events=self.events)
+        if type_ in {"start", "done", "error", "skipped", "followup"} or time.time() - self._flushed >= self.FLUSH_EVERY_S:
+            self.flush()
+
+    def flush(self) -> None:
+        self._flushed = time.time()
+        db.update_analysis(self.analysis_id, events=list(self.events))
 
 
 # ---------------------------------------------------------------- context
@@ -70,6 +83,13 @@ async def build_context(req: AnalysisRequest, prop: dict, feature: dict | None, 
     prop = {**prop, "address": prop.get("address") or rev.get("address"), "city": rev.get("city"), "state": rev.get("state")}
     jkey, jur = rules.jurisdiction_for(rev.get("city"), rev.get("state"))
     sq, basis = target_sqft(req.intent)
+    building: dict = {}
+    try:
+        from services import building_facts  # CoStar building record + Vexcel attributes as named facts
+
+        building = building_facts.facts(prop, feature) or {}
+    except Exception as err:  # noqa: BLE001 - facts are an enrichment; the analysis runs without them
+        log.warning("building facts unavailable: %s", err)
     return RunContext(
         query=req.query,
         intent=intent,
@@ -85,6 +105,9 @@ async def build_context(req: AnalysisRequest, prop: dict, feature: dict | None, 
         extra_requirements=req.requirements,
         evidence=EvidenceStore(),
         emit=log_.emit,
+        program=space_program.build(req.intent),
+        deadline=log_.start + settings.analysis_timeout_s,
+        building=building,
     )
 
 
@@ -94,25 +117,9 @@ def _evidence_data(ctx: RunContext, tool: str) -> list[tuple[str, Any]]:
     return [(e.id, e.data) for e in ctx.evidence.all() if e.tool == tool]
 
 
-# Which tools produce evidence for which metric (used to link uncited evidence and to spot uninvestigated metrics).
-METRIC_TOOLS: dict[str, tuple[str, ...]] = {
-    "size_fit": ("check_size_fit", "get_building_overview"),
-    "building_condition": ("inspect_roof",),
-    "hvac_ventilation": ("inspect_roof",),
-    "onsite_parking": ("inspect_site_paving",),
-    "medical_infrastructure": ("get_building_overview",),
-    "structural_floor": ("get_building_overview",),
-    "customer_demand": ("count_places", "get_building_mix", "get_demographics"),
-    "competition": ("count_places",),
-    "accessibility_transit": ("get_access_options",),
-    "area_character": ("get_building_mix",),
-    "permitted_use": ("check_permitted_use",),
-    "parking_requirement": ("compute_parking_requirement",),
-    "health_permitting": ("list_use_requirements",),
-    "accessibility_ada": ("check_accessibility_signals", "list_use_requirements"),
-    "occupancy_cost": ("estimate_costs",),
-    "conversion_risk": ("estimate_costs",),
-}
+def metric_tools(mid: str) -> tuple[str, ...]:
+    """Tools whose results support a metric (config/metrics.yaml `evidence_tools`)."""
+    return tuple(metrics_registry().get(mid, {}).get("evidence_tools") or ())
 
 
 def _relevant(mid: str, e: Any) -> bool:
@@ -123,16 +130,22 @@ def _relevant(mid: str, e: Any) -> bool:
     if e.tool == "inspect_roof":
         keys = " ".join(data)
         return ("ac-unit" in keys or "roof-vent" in keys) if mid == "hvac_ventilation" else ("condition" in keys or "defects" in keys)
-    return data is not None
+    return e.data is not None
 
 
 def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventLog) -> tuple[list[MetricResult], list[dict]]:
-    """Combine agent assessments into metric results; enforce rule/cost-engine precedence; record conflicts."""
+    """Combine agent assessments with the data-settled verdicts into metric results, and record conflicts.
+
+    Verdicts are computed once per analysis (services/verdicts.settle); combining them with the agents'
+    assessments is pure, so merging again after follow-ups gives a consistent result."""
     reg = metrics_registry()
+    verdicts = verdict_engine.settle(ctx)
     conflicts: list[dict] = []
     assessed: dict[str, tuple[str, AgentMetricAssessment]] = {}
     for agent, rep in reports.items():
         for a in rep.metric_assessments:
+            if a.status == "unknown" and a.metric_id in assessed:
+                continue  # a gap filled with 'unknown' never replaces a real assessment
             assessed[a.metric_id] = (agent, a)
 
     # Agents sometimes run the right tool but forget to cite it. Link evidence from the tools that a metric
@@ -140,63 +153,41 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
     for mid, (owner, a) in list(assessed.items()):
         if a.evidence_ids or a.status == "unknown":
             continue
-        tools = METRIC_TOOLS.get(mid, ())
+        tools = metric_tools(mid)
         linked = [e.id for e in ctx.evidence.all() if e.agent == owner and e.tool in tools and _relevant(mid, e)]
         if linked:
             assessed[mid] = (owner, a.model_copy(update={"evidence_ids": linked}))
             log_.emit("engine", "validation", f"{reg[mid]['name']}: {AGENT_LABELS[owner]} cited no evidence; linked {', '.join(linked)} from the tool(s) it ran")
 
-    def override(mid: str, status: str, reason: str, evidence_ids: list[str]) -> None:
+    merged: dict[str, tuple[str, AgentMetricAssessment]] = {}
+    overridden: dict[str, str] = {}
+    for mid in [*assessed, *[m for m in verdicts if m not in assessed]]:
+        if mid not in reg:
+            continue
         owner, a = assessed.get(mid, (reg[mid]["owner"], None))
-        if a is None:
-            assessed[mid] = (owner, AgentMetricAssessment(metric_id=mid, status=status, rationale=reason, evidence_ids=evidence_ids))
-            return
-        if a.status != status:
-            conflicts.append({"description": f"{reg[mid]['name']}: {AGENT_LABELS[owner]} said '{a.status}', but {reason}", "agents": [owner, "engine"], "resolution": f"Set to '{status}' — verified rules and the cost engine take precedence over agent judgment."})
-            log_.emit("engine", "validation", f"{reg[mid]['name']}: '{a.status}' → '{status}' ({reason})")
-        assessed[mid] = (owner, a.model_copy(update={"status": status, "evidence_ids": sorted({*a.evidence_ids, *evidence_ids})}))
+        result, conflict = verdict_engine.apply(mid, owner, a, verdicts.get(mid), AGENT_LABELS[owner])
+        if result is None:
+            continue
+        merged[mid] = (result.owner, result.assessment)
+        if result.overridden:
+            overridden[mid] = result.assessment.status
+        if conflict:
+            v = verdicts[mid]
+            conflicts.append({"description": f"{reg[mid]['name']}: {conflict}", "agents": [owner, "engine"], "resolution": f"Set to '{v.status}' — verified rules, the cost engine and recorded building data take precedence over agent judgment (an agent may only be more cautious)."})
+            log_.emit("engine", "validation", f"{reg[mid]['name']}: '{a.status if a else 'none'}' → '{v.status}' ({v.source})")
 
-    # Permitted use is governed by the verified rule result.
-    for eid, data in _evidence_data(ctx, "check_permitted_use")[-1:]:
-        rule_status = {"pass": "strong", "risk": "adequate", "fail": "blocker", "unknown": "unknown"}[data["status"]]
-        if rule_status == "strong" and assessed.get("permitted_use", (None, None))[1] and assessed["permitted_use"][1].status == "adequate":
-            rule_status = "adequate"  # agent may be more cautious (e.g., deed-restriction check pending), never less
-        override("permitted_use", rule_status, f"the verified rule result is '{data['status']}'", [eid])
-    if not _evidence_data(ctx, "check_permitted_use") and "permitted_use" in ctx.business["metrics"]:
-        item = rules.permitted_use(ctx.jurisdiction, ctx.intent["business_type"])
-        eid = ctx.evidence.add("engine", "check_permitted_use", item.get("citation") or "Verified rule set", f"Permitted use: {item['status'].upper()}", item, item.get("url"))
-        override("permitted_use", {"pass": "adequate", "risk": "adequate", "fail": "blocker", "unknown": "unknown"}[item["status"]], "the engine ran the rule check the agent skipped", [eid])
-
-    for eid, data in _evidence_data(ctx, "compute_parking_requirement")[-1:]:
-        allowed = {"pass": {"strong"}, "risk": {"weak", "adequate"}, "unknown": {"unknown"}}[data["status"]]
-        current = assessed.get("parking_requirement", (None, None))[1]
-        if not current or current.status not in allowed:
-            override("parking_requirement", {"pass": "strong", "risk": "weak", "unknown": "unknown"}[data["status"]], f"the parking rule computation is '{data['status']}'", [eid])
-
-    # Cost metrics are computed by the deterministic engine.
-    est = _evidence_data(ctx, "estimate_costs")
-    if est:
-        eid, data = est[-1]
-        if ctx.intent.get("budget"):
-            check = cost_engine.budget_check(data, ctx.intent["budget"], ctx.intent["business_type"])
-            override("occupancy_cost", cost_engine.budget_status(check), f"the estimate is '{check['status']}' your stated budget", [eid])
-        else:
-            override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
-        if "conversion_risk" in ctx.business["metrics"]:
-            override("conversion_risk", cost_engine.conversion_risk_status(data), "the cost engine's uncertainty share says otherwise", [eid])
-
-    # "Not detected" is never a blocker: a blocker without evidence is downgraded.
-    for mid, (owner, a) in list(assessed.items()):
+    # "Not detected" is never a blocker: a blocker without evidence (or on a metric that cannot block) is downgraded.
+    for mid, (owner, a) in list(merged.items()):
         if a.status == "blocker" and (not a.evidence_ids or not reg.get(mid, {}).get("hard_block")):
-            override(mid, "weak", "a blocker needs direct evidence of impossibility (or this metric cannot block)", a.evidence_ids)
-
-    # Place-based conclusions need place data: without OpenStreetMap results, competition is unknown.
-    places_ok = any(src["name"].startswith("OpenStreetMap") and src["status"] == "used" for src in ctx.neighborhood.get("sources", []))
-    if not places_ok and "competition" in assessed and assessed["competition"][1].status != "unknown":
-        override("competition", "unknown", "nearby-place data was unavailable, so competition cannot be judged", [])
+            reason = "a blocker needs direct evidence of impossibility (or this metric cannot block)"
+            conflicts.append({"description": f"{reg[mid]['name']}: {AGENT_LABELS[owner]} said 'blocker', but {reason}", "agents": [owner, "engine"], "resolution": "Set to 'weak'."})
+            log_.emit("engine", "validation", f"{reg[mid]['name']}: 'blocker' → 'weak' ({reason})")
+            merged[mid] = (owner, a.model_copy(update={"status": "weak"}))
+            overridden[mid] = "weak"
+    ctx.shared["overridden_metrics"] = overridden
 
     # Cross-agent contradiction: on-site parking looks fine but the legal minimum is not met.
-    op, pr = assessed.get("onsite_parking"), assessed.get("parking_requirement")
+    op, pr = merged.get("onsite_parking"), merged.get("parking_requirement")
     if op and pr and op[1].status in {"strong", "adequate"} and pr[1].status == "weak":
         conflicts.append({"description": "Vexcel Agent rated on-site parking acceptable, but the Compliance Agent found the legal minimum is likely not met.", "agents": ["vexcel", "compliance"], "resolution": "Both kept: practical parking may suffice for customers, but the permit risk stands until a parking agreement or variance is confirmed."})
 
@@ -206,7 +197,7 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
         m = reg.get(mid)
         if not m:
             continue
-        owner, a = assessed.get(mid, (m["owner"], None))
+        owner, a = merged.get(mid, (m["owner"], None))
         if mid == "evidence_quality":
             continue  # computed after scoring
         if a is None:
@@ -222,6 +213,35 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
     return results, conflicts
 
 
+def reconcile_findings(reports: dict[str, AgentReport], metrics: list[MetricResult], overridden: dict[str, str]) -> None:
+    """Drop agent findings that argue the opposite of a metric the engine settled (e.g. "Permitted use: strong"
+    after the verified rule says otherwise), so risks, the Cost Agent's inputs and the dashboard stay consistent."""
+    if not overridden:
+        return
+    for rep in reports.values():
+        kept = []
+        for f in rep.findings:
+            linked = [m for m in f.metric_ids if m in overridden]
+            if linked and len(linked) == len(f.metric_ids):
+                status = overridden[linked[0]]
+                if (f.impact == "positive" and status in {"weak", "blocker"}) or (f.impact == "negative" and status == "strong"):
+                    continue
+            kept.append(f)
+        rep.findings = kept
+
+
+def must_have_gaps(ctx: RunContext, reports: dict[str, AgentReport], checks: list[dict]) -> list[str]:
+    """Must-have needs the evidence shows are not met (a site check at 'risk' or an evidenced 'unmet')."""
+    musts = {n["id"]: n for n in (ctx.program or {}).get("needs", []) if n["priority"] == "must"}
+    gaps = []
+    for nid, n in musts.items():
+        check = next((c for c in checks if c["id"] == nid), None)
+        unmet = next((x for r in reports.values() for x in r.needs if x.need_id == nid and x.status == "unmet" and x.evidence_ids), None)
+        if (check and check["status"] == "risk") or unmet:
+            gaps.append(f"{n['label']}: {check['detail'] if check and check['status'] == 'risk' else unmet.detail}")
+    return gaps
+
+
 def _scoring_rows(metrics: list[MetricResult]) -> list[dict]:
     reg = metrics_registry()
     return [{"id": m.id, "weight": m.weight, "status": m.status, "score": m.score, "evidence_ids": m.evidence_ids, "hard_block": reg[m.id].get("hard_block", False)} for m in metrics]
@@ -230,8 +250,11 @@ def _scoring_rows(metrics: list[MetricResult]) -> list[dict]:
 def followup_candidates(ctx: RunContext, metrics: list[MetricResult], reports: dict[str, AgentReport]) -> list[MetricResult]:
     """Unknown/unverified metrics whose resolution could flip the verdict, owned by an agent that can dig further."""
     base = scoring.overall(_scoring_rows(metrics))["verdict"]
+    settled = {mid for mid, v in ctx.shared.get("verdicts", {}).items() if v.kind == "authoritative"}
     out = []
     for m in sorted(metrics, key=lambda m: -m.weight):
+        if m.id in settled:
+            continue  # already decided by data; another LLM pass cannot change it
         if m.owner_agent not in FOLLOWUP_AGENTS or reports.get(m.owner_agent, AgentReport(agent=m.owner_agent, label="", status="failed")).status in {"failed", "skipped"}:
             continue
         if not (m.status == "unknown" or (m.score is not None and not m.evidence_ids)) or m.weight < 6:
@@ -244,8 +267,8 @@ def followup_candidates(ctx: RunContext, metrics: list[MetricResult], reports: d
             out.append(m)
     # Then: important metrics left unknown although no relevant evidence was ever gathered for them.
     for m in sorted(metrics, key=lambda m: -m.weight):
-        tools = METRIC_TOOLS.get(m.id)
-        if m in out or m.status != "unknown" or m.weight < 5 or not tools:
+        tools = metric_tools(m.id)
+        if m in out or m.id in settled or m.status != "unknown" or m.weight < 5 or not tools:
             continue
         if reports.get(m.owner_agent) is None or reports[m.owner_agent].status in {"failed", "skipped"}:
             continue
@@ -280,7 +303,7 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
     )
     try:
         llm = chat_model().with_structured_output(_Narrative, method="json_schema")
-        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=150)
+        out: _Narrative = await asyncio.wait_for(llm.ainvoke(prompt), timeout=ctx.time_left(150))
         return out.headline, out.explanation
     except Exception as err:  # noqa: BLE001
         log.warning("narrative failed: %s", err)
@@ -302,6 +325,10 @@ def key_reasons(metrics: list[MetricResult]) -> list[dict]:
     return out
 
 
+def site_checks(ctx: RunContext) -> list[dict]:
+    return space_program.site_checks(ctx.program, space_program.facts_from(ctx.property, ctx.feature, ctx.building))
+
+
 def compliance_items(ctx: RunContext) -> list[dict]:
     items: dict[str, dict] = {}
     for e in ctx.evidence.all():
@@ -314,6 +341,10 @@ def compliance_items(ctx: RunContext) -> list[dict]:
     if not any(e.tool == "list_use_requirements" for e in ctx.evidence.all()):
         for d in rules.use_requirements(ctx.jurisdiction, ctx.intent["business_type"]):
             items.setdefault(d["id"], {**d, "evidence_ids": []})
+    # what the user's program triggers at this building (always shown; cites the agent's evidence when it ran the check)
+    prog_ev = [e.id for e in ctx.evidence.all() if e.tool == "check_space_program"]
+    for row in space_program.compliance_rows(ctx.program, site_checks(ctx)):
+        items.setdefault(row["id"], {**row, "evidence_ids": prog_ev[-1:]})
     order = {"fail": 0, "risk": 1, "unknown": 2, "pass": 3}
     return sorted(items.values(), key=lambda i: order.get(i["status"], 9))
 
@@ -331,7 +362,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             raise ValueError(f"Unknown property {req.property_id}")
         prop, feature = stored
         ctx = await build_context(req, prop, feature, log_)
-        db.update_analysis(analysis_id, property=json.dumps({**ctx.property, "key_facts": key_facts(feature), "raw": feature, "imagery": imagery_meta(feature)}))
+        db.update_analysis(analysis_id, property=json.dumps({**ctx.property, "key_facts": key_facts(feature), "raw": feature, "imagery": imagery_meta(feature), "matterport": matterport.link_info(ctx.property)}))
 
         # ---- plan
         mp_ok, mp_reason = matterport_agent.available(ctx)
@@ -339,19 +370,19 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             ("vexcel", "run" if feature else "skip", "Investigate building characteristics from Vexcel" if feature else "No Vexcel data for this building"),
             ("neighborhood", "run", f"Catchment ~{ctx.business['default_radius_m']} m for a {ctx.business['label'].lower()}"),
             ("compliance", "run", f"Rules for {ctx.jurisdiction['name']}"),
-            ("matterport", "run" if mp_ok else "skip", "Interior scan" if mp_ok else mp_reason),
+            ("matterport", "run" if mp_ok else "skip", f"Interior from Matterport scan {ctx.property['matterport_model_id']}" if mp_ok else mp_reason),
             ("cost", "run", "After building + compliance findings (depends on them)"),
         ]
         for agent, action, why in plan:
             log_.emit("engine", "plan", f"{AGENT_LABELS[agent]}: {'will run' if action == 'run' else 'skipped'} — {why}")
 
         # ---- phase 1: independent investigations, concurrently
-        log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood and Compliance agents investigating in parallel")
+        log_.emit("engine", "plan", "Phase 1: Vexcel, Neighborhood, Compliance" + (" and Matterport" if mp_ok else "") + " agents investigating in parallel")
         phase1 = await asyncio.gather(vexcel_agent.run(ctx), neighborhood_agent.run(ctx), compliance_agent.run(ctx), matterport_agent.run(ctx), return_exceptions=True)
         reports: dict[str, AgentReport] = {}
-        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError)), None)
+        limit_hit = next((r for r in phase1 if isinstance(r, AllProvidersFailedError) and r.exhausted), None)
         if limit_hit:
-            raise limit_hit
+            raise limit_hit  # every provider is out: nothing more can be investigated
         for name, rep in zip(["vexcel", "neighborhood", "compliance", "matterport"], phase1):
             if isinstance(rep, BaseException):
                 log_.emit(name, "error", f"Crashed: {rep}")
@@ -360,20 +391,24 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
                 reports[name] = rep
 
         # ---- share findings with the dependent Cost Agent
-        lines = []
+        lines, shared_ids = [], set()
         for name in ("vexcel", "compliance", "matterport", "neighborhood"):
             r = reports[name]
             for f in r.findings:
                 if f.impact == "negative" or f.severity != "low":
                     lines.append(f"- [{AGENT_LABELS[name]}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'}; {f.kind})")
+                    shared_ids.update(f.evidence_ids)
             for q in r.missing_information[:3]:
                 lines.append(f"- [{AGENT_LABELS[name]}] UNKNOWN: {q}")
         ctx.shared["upstream_findings"] = "\n".join(lines[:24])
+        ctx.shared["visible:cost"] = shared_ids  # the Cost Agent may cite the evidence behind the findings it was given
         log_.emit("engine", "plan", f"Phase 2: Cost Agent receives {len(lines)} upstream findings")
         try:
             reports["cost"] = await cost_agent.run(ctx)
-        except AllProvidersFailedError:
-            raise
+        except AllProvidersFailedError as err:
+            if err.exhausted:
+                raise
+            reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
         except Exception as err:  # noqa: BLE001
             reports["cost"] = AgentReport(agent="cost", label=AGENT_LABELS["cost"], status="failed", error=str(err))
 
@@ -390,11 +425,20 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         # ---- targeted follow-ups that could change the recommendation
         followups_run = []
         for m in followup_candidates(ctx, metrics, reports):
+            if ctx.deadline and ctx.deadline - time.time() < 120:
+                log_.emit("engine", "followup", f"Skipped follow-up on {m.name}: not enough time left before the analysis deadline")
+                break
             agent_mod = FOLLOWUP_AGENTS[m.owner_agent]
             question = f"Resolve the metric '{m.id}' ({m.name}). It is currently '{m.status}' and could change the final verdict. Find specific evidence or confirm it cannot be determined."
             log_.emit("engine", "followup", f"Follow-up to {AGENT_LABELS[m.owner_agent]}: {m.name} could change the verdict")
             try:
-                rep = await agent_mod.run(ctx, budget_limit=3, focus=question)
+                kwargs = {"metric_ids": [m.id]} if "metric_ids" in inspect.signature(agent_mod.run).parameters else {}
+                rep = await agent_mod.run(ctx, budget_limit=3, focus=question, **kwargs)
+            except AllProvidersFailedError as err:
+                if err.exhausted:
+                    raise
+                followups_run.append({"agent": m.owner_agent, "question": question, "outcome": f"Failed: {err}"})
+                continue
             except Exception as err:  # noqa: BLE001
                 followups_run.append({"agent": m.owner_agent, "question": question, "outcome": f"Failed: {err}"})
                 continue
@@ -411,15 +455,21 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             log_.emit("engine", "followup", outcome)
         if followups_run:
             metrics, conflicts = merge_metrics(ctx, reports, log_)
+        reconcile_findings(reports, metrics, ctx.shared.get("overridden_metrics", {}))
 
         # ---- score (Python) + evidence quality
         rec = scoring.overall(_scoring_rows(metrics))
+        checks = site_checks(ctx)
+        gaps = must_have_gaps(ctx, reports, checks)
+        if gaps and rec["verdict"] == "recommended":
+            rec = {**rec, "verdict": "conditional", "label": scoring.VERDICT_LABELS["conditional"]}
+            log_.emit("engine", "validation", f"Verdict capped at '{rec['label']}': must-have not met ({'; '.join(gaps)[:200]})")
         if "evidence_quality" in ctx.business["metrics"]:
             eq = scoring.evidence_quality_status(rec["confidence"])
             metrics.append(MetricResult(id="evidence_quality", name="Evidence quality", category="common", group="Confidence", owner_agent="engine", weight=0, status=eq, score=float(scoring.STATUS_POINTS[eq]), why_it_matters=ctx.business["metrics"]["evidence_quality"]["why"], rationale=f"{rec['confidence']}% of the weighted metrics are backed by verified evidence.", evidence_ids=[]))
         log_.emit("engine", "validation", f"Scored {len(metrics)} metrics in Python: score {rec['score']}, confidence {rec['confidence']}% → {rec['label']}")
 
-        cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
+        cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]  # the agent's estimate, or the engine's program-size recompute
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
         cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
@@ -446,15 +496,17 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             *[{"name": f"LLM: {model_label(p)}", "status": "used" if llm_counts.get(p) else "unavailable",
                "note": f"{llm_counts.get(p, 0)} calls" + (" (fallback)" if llm_counts.get(p) and p != settings.llm_providers[0] else "")}
               for p in settings.llm_providers],
-            {"name": "Matterport interior scan", "status": "used" if mp_ok else "unavailable", "note": mp_reason or "Interior model"},
-            {"name": "CoStar listings / asking rent", "status": "unavailable", "note": "Not connected; rent uses documented planning bands"},
+            {"name": "Matterport interior scan", "status": "used" if mp_ok else "unavailable", "note": mp_reason or f"Model API ({matterport.data_mode(ctx.property['matterport_model_id'])}), model {ctx.property['matterport_model_id']}"},
+            {"name": "CoStar building & listings", "status": "used" if (ctx.building.get("costar_id") or ctx.property.get("costar_id")) else "unavailable",
+             "note": "Building record (year built, class, parking, sprinklers…) and lease listings from the CoStar kit snapshot" if (ctx.building.get("costar_id") or ctx.property.get("costar_id")) else "No CoStar record matched this building; rent uses documented planning bands"},
         ]
         result = {
             "business_type": ctx.intent["business_type"],
             "business_label": ctx.business["label"],
             "recommendation": {
                 "verdict": rec["verdict"], "label": rec["label"], "score": rec["score"], "confidence": rec["confidence"],
-                "headline": headline, "explanation": explanation, "key_reasons": key_reasons(metrics),
+                "headline": headline, "explanation": explanation,
+                "key_reasons": [*({"text": f"Must-have not met — {g}", "impact": "negative", "metric_id": None, "evidence_ids": []} for g in gaps), *key_reasons(metrics)],
                 "dealbreakers": [f"{reg[b]['name']} is a blocker" for b in rec["blockers"]],
             },
             "metrics": [m.model_dump() for m in metrics],
@@ -462,6 +514,8 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             "evidence": [e.model_dump() for e in ctx.evidence.all()],
             "costs": cost_public,
             "compliance": compliance_items(ctx),
+            "program": ctx.program,
+            "site_checks": checks,
             "neighborhood": {
                 **{k: v for k, v in nb.items() if k not in {"fetched_radius_m", "user_radius_m"}},
                 "radius_reason": ctx.business["radius_reason"].strip(),
@@ -479,3 +533,5 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         log.exception("analysis %s failed", analysis_id)
         log_.emit("engine", "error", f"Analysis failed: {err}")
         db.update_analysis(analysis_id, status="failed", error=str(err))
+    finally:
+        log_.flush()
