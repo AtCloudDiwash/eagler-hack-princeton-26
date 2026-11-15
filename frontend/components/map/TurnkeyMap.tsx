@@ -8,6 +8,7 @@ import type { GeoJSONGeometry, Place } from "@/lib/api-types";
 import { TILE_URL } from "@/lib/api";
 import { asGeometry, boundsOf, circlePolygon, EMPTY_FC, type FC, type LngLat } from "@/lib/geo";
 import { PLACE_GROUPS, placeMeta } from "@/lib/places";
+import ActiveBuildingPin from "@/components/map/ActiveBuildingPin";
 
 export type BaseLayer = "aerial" | "map";
 
@@ -53,6 +54,8 @@ type Props = {
   tilt?: boolean;
   /** HTML overlays anchored to coordinates (hover cards, labels). */
   markers?: { id: string; lon: number; lat: number; node: ReactNode; anchor?: "bottom" | "center" | "top" }[];
+  /** Show a rotating 3D pin on the selected/subject building under investigation. Default true. */
+  activePin?: boolean;
   children?: ReactNode;
 };
 
@@ -111,6 +114,16 @@ export default function TurnkeyMap(p: Props) {
     const g = asGeometry(p.parcel ?? null);
     return g ? { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: g }] } : EMPTY_FC;
   }, [p.parcel]);
+
+  const activeBuilding = useMemo(() => {
+    if (p.activePin === false) return null;
+    const list = p.buildings ?? [];
+    if (p.selectedId) {
+      const selected = list.find((b) => b.id === p.selectedId);
+      if (selected) return selected;
+    }
+    return list.find((b) => b.kind === "subject") ?? null;
+  }, [p.activePin, p.buildings, p.selectedId]);
 
   // ---------- camera
   useEffect(() => {
@@ -329,6 +342,11 @@ export default function TurnkeyMap(p: Props) {
         <Layer id="tk-scan-line" type="line" paint={{ "line-color": "#ecff8f", "line-width": 2.5, "line-opacity": 0 }} />
       </Source>
 
+      {activeBuilding && (
+        <Marker key={`active-pin-${activeBuilding.id}`} longitude={activeBuilding.lon} latitude={activeBuilding.lat} anchor="bottom" style={{ pointerEvents: "none", zIndex: 2 }}>
+          <ActiveBuildingPin />
+        </Marker>
+      )}
       {(p.markers ?? []).map((m) => (
         <Marker key={m.id} longitude={m.lon} latitude={m.lat} anchor={m.anchor ?? "bottom"} style={{ pointerEvents: "none" }}>
           {m.node}
