@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Building2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { Candidate, SearchResponse } from "@/lib/api-types";
-import { fmtFootprint, fmtNum, titleCase } from "@/lib/format";
+import { fmtDistance, fmtFootprint, fmtNum, titleCase } from "@/lib/format";
 import { ScoreRing, stagger } from "@/components/ui/primitives";
 import IntentChips from "./IntentChips";
 import { ProgramPanel } from "@/components/program/SpaceProgram";
@@ -19,9 +19,18 @@ type Props = {
 export const candidateTitle = (c: Candidate) => c.building_name || c.address || `${titleCase(c.building_type) || "Building"} · ${fmtFootprint(c.area_sqft)}`;
 /** The size line: listed space beats rentable area beats the aerial footprint. */
 export const candidateSize = (c: Candidate) =>
-  c.best_space?.sqft ? `${fmtNum(c.best_space.sqft)} sq ft available` : c.rentable_sqft ? `${fmtNum(c.rentable_sqft)} sq ft rentable` : fmtFootprint(c.area_sqft);
+  c.best_space?.sqft
+    ? `${c.best_space.sqft_min ? `${fmtNum(c.best_space.sqft_min)}–` : ""}${fmtNum(c.best_space.sqft)} sq ft available`
+    : c.rentable_sqft
+      ? `${fmtNum(c.rentable_sqft)} sq ft rentable`
+      : fmtFootprint(c.area_sqft);
 export const candidateMeta = (c: Candidate) =>
-  [c.roof_condition_label && `Roof ${c.roof_condition_label.toLowerCase()}`, c.stories_est != null && `~${c.stories_est} ${c.stories_est === 1 ? "story" : "stories"}`, c.source !== "vexcel" && c.source]
+  [
+    c.distance_m != null && `${fmtDistance(c.distance_m)} away`,
+    c.roof_condition_label && `Roof ${c.roof_condition_label.toLowerCase()}`,
+    c.stories_est != null && `~${c.stories_est} ${c.stories_est === 1 ? "story" : "stories"}`,
+    c.source !== "vexcel" && c.source,
+  ]
     .filter(Boolean)
     .join(" · ");
 

@@ -3,7 +3,7 @@
 Vexcel has no listings or text search, so discovery = geocode the place -> pull Vexcel parcels around
 it (/property/extract) -> keep building types that suit the business -> deterministic pre-screen by
 size and condition. Outside the key's geofence we fall back to OpenStreetMap building footprints and
-say so. CoStar listings are not connected in this build (noted in the response).
+say so. CoStar listings supply available suites, rentable areas and asking rents when the kit index is present.
 """
 from __future__ import annotations
 
@@ -15,46 +15,61 @@ import httpx
 import db
 from config import business, settings
 from schemas import Candidate, Intent, SearchResponse
-from services import costar, external, program as space_program, vexcel
+from services import costar, external, program as space_program, sizing, vexcel
 from services.geo import centroid, haversine_m, in_coverage, property_id
-from services.intent import parse, target_sqft
+from services.intent import parse
 
-SEARCH_BOX_M = 1600
+# The search area: a box reaching SEARCH_RADIUS_M from the place, for both the Vexcel building sweep and CoStar
+# listings. Widened to WIDE_RADIUS_M when fewer than MIN_SUITABLE buildings of a suitable type are inside it.
+SEARCH_RADIUS_M = 800
+WIDE_RADIUS_M = 1600
+MIN_SUITABLE = 12
 OSM_DEADLINE_S = 45
 DEMO_CENTER = (29.7560, -95.3650)
 
 
-def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dict | None = None) -> tuple[int, list[str]]:
-    """Deterministic 0-100 pre-screen (type 35, size 35, roof 20, data 10, minus program conflicts on
-    must-haves). Not the agent analysis."""
+# Pre-screen weights (sum 100). Size and distance are graded, so too big, too small and too far all score lower.
+W_TYPE, W_SIZE, W_NEAR, W_ROOF, W_EVIDENCE = 25, 35, 15, 15, 10
+NEAR_FULL_M, NEAR_ZERO_M = 250, 1600  # full distance points within 250 m of the searched place, none at 1.6 km
+
+
+def proximity(distance_m: float | None) -> float | None:
+    """1 within NEAR_FULL_M of the searched place, linear to 0 at NEAR_ZERO_M."""
+    if distance_m is None:
+        return None
+    return max(0.0, min(1.0, (NEAR_ZERO_M - distance_m) / (NEAR_ZERO_M - NEAR_FULL_M)))
+
+
+def _distance_text(d: float) -> str:
+    return f"{d:,.0f} m" if d < 1000 else f"{d / 1000:.1f} km"
+
+
+def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dict | None = None, place_name: str | None = None) -> tuple[int, list[str]]:
+    """Deterministic 0-100 pre-screen: building type 25, size fit 35 (services/sizing.py), distance from the
+    searched place 15, roof 15, evidence 10, minus program conflicts on must-haves. Not the agent analysis."""
     cfg = business(intent.business_type)
-    target, _ = target_sqft(intent)
-    score, reasons = 0, []
+    size = (program or {}).get("size") or sizing.estimate(intent)
+    ground_required = cfg["program"]["ground_floor"] == "required"
+    score, reasons = 0.0, []
     btype = c.get("building_type")
     if btype in cfg["suitable_building_types"]:
-        score += 35
+        score += W_TYPE
         reasons.append(f"{btype.replace('_', ' ').title()} building suits a {cfg['label'].lower()}")
     elif btype in cfg.get("acceptable_building_types", []):
-        score += 15
+        score += W_TYPE * 0.4
         reasons.append(f"{btype.replace('_', ' ')} building: possible ground-floor commercial, verify")
     elif btype:
         reasons.append(f"{btype.replace('_', ' ')} building is an unusual fit")
 
-    area = c.get("area_sqft")
     best = c.get("best_space")
     if best:  # CoStar lists a suite in the user's size range: the strongest size evidence there is
-        score += 35
         rent = f" at ${best['rent_per_sqft_yr']:.2f}/sq ft/yr" if best.get("rent_per_sqft_yr") else ""
         floor = f", {best['floor'].lower()}" if best.get("floor") else ""
-        reasons.insert(0, f"On the market (CoStar): {('Suite ' + str(best['suite'])) if best.get('suite') else 'a space'} with {best['sqft']:,.0f} rentable sq ft{floor}{rent}")
-        if best.get("ground_floor") is False and cfg["program"]["ground_floor"] == "required":
-            score -= 25
+        sq = f"{best['sqft_min']:,.0f}-{best['sqft']:,.0f}" if best.get("sqft_min") else f"{best['sqft']:,.0f}"
+        reasons.insert(0, f"On the market (CoStar): {('Suite ' + str(best['suite'])) if best.get('suite') else 'a space'} with {sq} rentable sq ft{floor}{rent}")
+        if best.get("ground_floor") is False and ground_required:
+            score -= 20
             reasons.insert(1, f"Ground floor: that suite is on the {best['floor'].lower()}, but a {cfg['label'].lower()} needs street level")
-        area = None  # size already scored from the listing
-    elif c.get("space_count"):
-        score += 12
-        reasons.append(f"CoStar lists {c['space_count']} space(s) here ({c['available_sqft'] or 0:,.0f} sq ft), none in your ~{target:,} sq ft range")
-        area = None
     if c.get("costar_type") == "Multifamily":
         # Vexcel may call it "commercial" (ground-floor retail), but CoStar records an apartment building.
         reasons[:] = [r for r in reasons if not r.lower().startswith(("commercial building", "retail building", "office building"))]
@@ -64,26 +79,43 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
             reasons.insert(1 if best else 0, "Apartment building (CoStar: multifamily): confirm a commercial space exists and is allowed")
     if c.get("rentable_sqft") and not best:
         reasons.append(f"Rentable area (CoStar {c.get('rentable_basis') or 'RBA'}): {c['rentable_sqft']:,.0f} sq ft for the whole building")
-    if area:
-        ratio = area / target
-        if 0.85 <= ratio <= 3:
-            score += 35
-            reasons.append(f"Building footprint {area:,.0f} sq ft can hold your ~{target:,} sq ft")
-        elif ratio > 3:
-            score += 22
-            reasons.append(f"Large building ({area:,.0f} sq ft footprint): you would lease a suite")
-        else:
-            score += round(35 * max(0.0, ratio - 0.4) / 0.45)
-            reasons.append(f"Building footprint {area:,.0f} sq ft may be small for ~{target:,} sq ft")
+
+    graded = sizing.fit(size, best_space=best, closest_space_sqft=c.get("closest_space_sqft"), space_count=c.get("space_count") or 0,
+                        available_sqft=c.get("available_sqft"), footprint_sqft=c.get("area_sqft"), stories=c.get("stories_est"),
+                        ground_floor_required=ground_required)
+    if graded:
+        score += W_SIZE * graded.score
+        if not best or graded.status != "strong":
+            reasons.append(("Size: " if graded.status == "strong" else "Size mismatch: ") + graded.reason)
+    else:
+        score += W_SIZE * 0.3  # unknown size: not rewarded like a fit, not punished like a mismatch
+
+    near = proximity(c.get("distance_m"))
+    if near is not None:
+        score += W_NEAR * near
+        d, where = c["distance_m"], place_name or "the searched place"
+        if d <= 400:
+            reasons.append(f"Location: {_distance_text(d)} from {where}")
+        elif d > 1000:
+            reasons.append(f"Location: {_distance_text(d)} from {where}, at the edge of the area")
+
     cond = c.get("roof_condition")
     if isinstance(cond, (int, float)):
-        score += round(20 * (cond - 1) / 4)
+        score += W_ROOF * (cond - 1) / 4
         if cond >= 4:
             reasons.append(f"Roof in {c.get('roof_condition_label', '').lower()} condition")
         elif cond <= 2:
             reasons.append(f"Roof condition {c.get('roof_condition_label', '').lower()} ({cond:g}/5)")
-    filled = sum(1 for k in ("building_type", "area_sqft", "roof_condition", "stories_est") if c.get(k) is not None)
-    score += round(10 * filled / 4)
+    else:
+        score += W_ROOF * 0.4  # no aerial roof data (e.g. a CoStar-only listing): neutral, not bad
+
+    if best:
+        score += W_EVIDENCE  # a real vacancy in range
+    elif c.get("space_count"):
+        score += W_EVIDENCE * 0.6
+    else:
+        filled = sum(1 for k in ("building_type", "area_sqft", "roof_condition", "stories_est") if c.get(k) is not None)
+        score += W_EVIDENCE * 0.5 * filled / 4
     if program:
         # what the user's program needs from the building (ground floor, ceiling, paving for parking/drive-thru...)
         must = {n["id"] for n in program["needs"] if n["priority"] == "must"} | ({"ground_floor"} if program["building"]["ground_floor"] == "required" else set())
@@ -92,10 +124,11 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
                 continue  # size scored above; the rest are not building-specific at this stage
             if chk["status"] == "risk":
                 score -= 10 if chk["id"] in must else 4
-                reasons.append(f"{chk['label']}: {chk['detail']}")
+                if not (chk["id"] == "ground_floor" and best):  # the listed suite's floor is already explained above
+                    reasons.append(f"{chk['label']}: {chk['detail']}")
             elif chk["status"] == "pass" and chk["id"] in must | {"ceiling"}:
                 reasons.append(f"{chk['label']}: {chk['detail']}")
-    return max(0, min(score, 100)), reasons
+    return max(0, min(round(score), 100)), reasons
 
 
 async def _osm_buildings(lat: float, lon: float) -> list[dict]:
@@ -181,7 +214,7 @@ async def locate(text: str, notes: list[str]) -> dict | None:
     return place
 
 
-def attach_costar(candidates: list[dict], lat: float, lon: float, cfg: dict, prog: dict, notes: list[str]) -> set[int]:
+def attach_costar(candidates: list[dict], lat: float, lon: float, cfg: dict, prog: dict, notes: list[str], radius_m: float = SEARCH_RADIUS_M) -> set[int]:
     """Give every building its CoStar record (rentable area, spaces on the market, asking rents) and add the
     CoStar-listed properties for this use that the building search missed. Returns the listed CoStar ids."""
     if not costar.available():
@@ -197,7 +230,7 @@ def attach_costar(candidates: list[dict], lat: float, lon: float, cfg: dict, pro
             c.update(costar.reconcile(c, p))
             c["address"] = c.get("address") or p.get("address")
     types = cfg.get("costar_property_types", [])
-    listed = costar.listed_near(lat, lon, SEARCH_BOX_M / 2, types)
+    listed = costar.listed_near(lat, lon, radius_m, types)
     added = 0
     for p in listed:
         if p["id"] in matched:
@@ -215,6 +248,35 @@ def attach_costar(candidates: list[dict], lat: float, lon: float, cfg: dict, pro
     return {p["id"] for p in listed}
 
 
+async def _vexcel_buildings(lat: float, lon: float, source: str, allowed: set[str], notes: list[str]) -> tuple[list[dict], dict[str, dict], float]:
+    """Every building in the search area (paged: one Vexcel page is 500 parcels in no particular order, which in a
+    dense neighbourhood missed the place itself), widened once when the area holds few suitable buildings.
+    Returns (candidates, raw features by id, radius searched)."""
+    live = source == "vexcel"
+    candidates: list[dict] = []
+    raws: dict[str, dict] = {}
+
+    def add(features: list[dict]) -> None:
+        for f in features:
+            c = vexcel.summarize_feature(f, source=source)
+            if c["id"] not in raws:
+                candidates.append(c)
+                raws[c["id"]] = f
+
+    features, complete = await vexcel.property_sweep(lat, lon, SEARCH_RADIUS_M, calculated=live)
+    add(features)
+    radius = SEARCH_RADIUS_M
+    if not complete:
+        notes.append(f"Dense area: the search covered the first {len(features):,} parcels within {SEARCH_RADIUS_M} m.")
+    suitable = sum(1 for c in candidates if c.get("building_type") in allowed)
+    if suitable < MIN_SUITABLE:
+        wide, _ = await vexcel.property_sweep(lat, lon, WIDE_RADIUS_M, max_pages=6, calculated=live)
+        add(wide)
+        radius = WIDE_RADIUS_M
+        notes.append(f"Only {suitable} suitable building(s) within {SEARCH_RADIUS_M} m, so the search widened to {WIDE_RADIUS_M / 1000:.1f} km.")
+    return candidates, raws, radius
+
+
 async def search(query: str) -> SearchResponse:
     intent = await parse(query)
     notes: list[str] = []
@@ -229,27 +291,25 @@ async def search(query: str) -> SearchResponse:
     covered = in_coverage(lat, lon)
     location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered}
 
+    cfg = business(intent.business_type)
+    allowed = set(cfg["suitable_building_types"]) | set(cfg.get("acceptable_building_types", []))
     raws: dict[str, dict | None] = {}
     candidates: list[dict] = []
+    radius: float = SEARCH_RADIUS_M
     data_mode = "osm_only"
     if settings.vexcel_api_key and covered:
         try:
-            features = await vexcel.property_extract(lat, lon, SEARCH_BOX_M, limit=300, calculated=True)
+            candidates, raws, radius = await _vexcel_buildings(lat, lon, "vexcel", allowed, notes)
             data_mode = "vexcel_live"
-            for f in features:
-                c = vexcel.summarize_feature(f)
-                candidates.append(c)
-                raws[c["id"]] = f
         except vexcel.VexcelError as err:
             notes.append(f"Vexcel returned {err.status} ({err.message}); using OpenStreetMap footprints instead.")
+        except httpx.HTTPError as err:
+            notes.append(f"Vexcel didn't answer ({type(err).__name__}); using OpenStreetMap footprints instead.")
     elif not settings.vexcel_api_key and haversine_m(lat, lon, *DEMO_CENTER) < 6000:
         data_mode = "vexcel_demo"
         notes.append("DEMO MODE: no VEXCEL_API_KEY set, showing a recorded Vexcel sample of downtown Houston.")
         try:
-            for f in await vexcel.property_extract(lat, lon, SEARCH_BOX_M, limit=300):
-                c = vexcel.summarize_feature(f, source="demo")
-                candidates.append(c)
-                raws[c["id"]] = f
+            candidates, raws, radius = await _vexcel_buildings(lat, lon, "demo", allowed, notes)
         except vexcel.VexcelError as err:
             data_mode = "osm_only"
             notes.append(err.message)
@@ -269,11 +329,9 @@ async def search(query: str) -> SearchResponse:
 
     if data_mode != "osm_only":
         # Warm OpenStreetMap places for the whole search area (box half-diagonal + 1.5 km catchment).
-        external.prefetch_places(lat, lon, radius_m=external.PLACES_RADIUS_M + int(SEARCH_BOX_M * 0.72))
-    cfg = business(intent.business_type)
+        external.prefetch_places(lat, lon, radius_m=external.PLACES_RADIUS_M + int(radius * 1.42))
     prog = space_program.build(intent)
-    allowed = set(cfg["suitable_building_types"]) | set(cfg.get("acceptable_building_types", []))
-    listed = attach_costar(candidates, lat, lon, cfg, prog, notes)
+    listed = attach_costar(candidates, lat, lon, cfg, prog, notes, radius)
     scored: list[Candidate] = []
     seen_ids: set[str] = set()
     for c in candidates:
@@ -284,11 +342,12 @@ async def search(query: str) -> SearchResponse:
             continue  # a CoStar lease listing for this use outranks Vexcel's building class
         if c.get("_too_low"):
             continue  # roof under 8 ft: canopy/kiosk/shed rather than a leasable building
-        c["match_score"], c["match_reasons"] = prescreen(c, intent, prog, raws.get(c["id"]))
+        c["distance_m"] = round(haversine_m(lat, lon, c["lat"], c["lon"]))
+        c["match_score"], c["match_reasons"] = prescreen(c, intent, prog, raws.get(c["id"]), place["name"])
         scored.append(Candidate(**c))
-    # A space actually on the market in the user's size range beats any building that merely could suit;
-    # then by fit score. Keep some other listed buildings in the list too (spaces can often be combined/divided).
-    scored.sort(key=lambda c: (c.best_space is None, -c.match_score, haversine_m(lat, lon, c.lat, c.lon)))
+    # By fit score (a listed suite in range already scores its size and evidence in full), then nearest first.
+    # Keep some other listed buildings in the list too (spaces can often be combined/divided).
+    scored.sort(key=lambda c: (-c.match_score, c.distance_m or 0))
     top = scored[:25]
     extra_listed = [c for c in scored[25:] if c.space_count][: max(0, 8 - sum(1 for c in top if c.space_count))]
     if extra_listed:

@@ -30,6 +30,10 @@ class Intent(BaseModel):
     location_text: str | None = None
     seats: int | None = None
     sqft: int | None = None
+    sqft_min: int | None = None  # "at least 2,000 sq ft", "1,200-1,800 sq ft" (services/sizing.py)
+    sqft_max: int | None = None  # "under 1,500 sq ft"
+    concept: str | None = None  # business concept (coffee shop, fine dining, yoga studio...); None = the default
+    size_hint: Literal["small", "large"] | None = None  # "small cafe", "large gym" when no count is given
     requirements: list[str] = []  # readable labels of everything asked for (needs + free-text extras)
     budget: Budget | None = None
     parser: Literal["llm", "rules"] = "rules"
@@ -57,6 +61,7 @@ class Candidate(BaseModel):
     stories_est: int | None = None
     match_score: int = 0
     match_reasons: list[str] = []
+    distance_m: float | None = None  # from the searched place
     source: Literal["vexcel", "osm", "demo", "costar"] = "vexcel"
     address: str | None = None
     # CoStar (sponsor kit): the leasing figures Vexcel can't measure
@@ -66,7 +71,8 @@ class Candidate(BaseModel):
     rentable_basis: str | None = None  # "RBA" | "GLA"
     available_sqft: float | None = None  # sum of spaces on the market (not lease-pending)
     space_count: int = 0  # spaces on the market
-    best_space: dict | None = None  # the listed suite closest to the user's size: suite, floor, sqft, rent_per_sqft_yr
+    best_space: dict | None = None  # the listed suite closest to the user's size: suite, floor, sqft (sqft_min when divisible), rent_per_sqft_yr
+    closest_space_sqft: float | None = None  # when no listed suite is in range: the listed space nearest the user's size
     asking_rent_per_sqft_yr: list[float] | None = None  # [low, high] across listed spaces
 
 

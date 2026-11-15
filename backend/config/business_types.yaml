@@ -13,6 +13,15 @@
 #   program              what the user's request implies (services/program.py):
 #     drivers            counts in the request that size the space: field, label, keywords, sqft_each,
 #                        base_sqft, why. The first driver the user gives a number for sets the size.
+#     concepts           kinds of this business that size differently (services/sizing.py). Each has an id,
+#                        label, keywords (found in the query; the one marked default otherwise) and:
+#                          sqft_per: {driver field: [low, typical, high]} front-of-house sq ft per unit
+#                          base_sqft / base_label: fixed space on top (counter and queue, lobby, reception)
+#                          back_of_house_share: kitchen/storage/restroom share of the total (restaurants)
+#                          default_count: {driver field: n} assumed when the request gives no count
+#                          default_sqft: [low, typical, high] when no driver applies (retail)
+#                          unit_label: what the counted unit is called for this concept ("exam rooms")
+#                        The band is the low..high estimate; the size fit scores spaces against it.
 #     occupancy          IBC occupancy group (config/occupancy_codes.yaml), optional small_group used
 #                        below 50 occupants (IBC §303.1.1), load_factors: share of floor area by function
 #                        and its sq ft per person (IBC Table 1004.5)
@@ -24,12 +33,68 @@
 restaurant:
   label: Restaurant
   icon: utensils
-  keywords: [restaurant, cafe, café, diner, bistro, eatery, bar, pizzeria, bakery, coffee shop, taqueria, food]
+  keywords: [restaurant, cafe, café, diner, bistro, eatery, bar, pub, brewery, taproom, pizzeria, bakery, coffee shop, coffee, taqueria, food]
   zoning_use: restaurant
   sizing: {sqft_per_seat: 35, default_seats: 40, ideal_min_sqft: 1200, ideal_max_sqft: 4500}
   program:
     drivers:
       - {field: seats, label: seats, keywords: [seat, seats, seater, cover, covers, guest, guests, diner, diners], sqft_each: 35, base_sqft: 0, why: "~35 sq ft per seat covers dining, kitchen, restrooms and storage"}
+    concepts:
+      - id: full_service
+        label: full-service restaurant
+        default: true
+        keywords: [full service, full-service, sit-down, sit down, restaurant, bistro, diner, eatery, brasserie, trattoria]
+        sqft_per: {seats: [15, 18, 21]}
+        base_sqft: 150
+        base_label: host stand, waiting area and server stations
+        back_of_house_share: 0.38
+        default_count: {seats: 40}
+        why: "Table service: 15-21 sq ft of dining room per seat; the kitchen, dish, storage and restrooms take ~35-40% of the space."
+      - id: coffee_shop
+        label: coffee shop / café
+        keywords: [coffee shop, coffee, café, cafe, espresso, tea house, tea shop, juice bar, boba, smoothie, dessert, ice cream, gelato]
+        sqft_per: {seats: [16, 18, 20]}
+        base_sqft: 300
+        base_label: order counter, queue and pickup
+        back_of_house_share: 0.25
+        default_count: {seats: 25}
+        why: "Counter service with a small prep area: the counter and queue take a fixed ~300 sq ft; back of house is ~25%."
+      - id: counter_service
+        label: fast-casual / counter-service restaurant
+        keywords: [fast casual, fast-casual, counter service, quick service, quick-service, fast food, takeout, take-out, takeaway, sandwich, burger, taqueria, pizzeria, pizza, food hall]
+        sqft_per: {seats: [12, 14, 16]}
+        base_sqft: 200
+        base_label: order counter, queue and pickup
+        back_of_house_share: 0.35
+        default_count: {seats: 40}
+        why: "Counter ordering packs seats tighter (12-16 sq ft each); the kitchen is ~35% of the space."
+      - id: fine_dining
+        label: fine-dining restaurant
+        keywords: [fine dining, fine-dining, upscale, tasting menu, white tablecloth, steakhouse, omakase, chef's table]
+        sqft_per: {seats: [20, 24, 28]}
+        base_sqft: 250
+        base_label: host stand, lounge and server stations
+        back_of_house_share: 0.42
+        default_count: {seats: 50}
+        why: "Generous table spacing (20-28 sq ft per seat) and a larger kitchen (~40%) for plated, multi-course service."
+      - id: bar
+        label: bar / taproom
+        keywords: [bar, pub, brewery, brewpub, taproom, tap room, lounge, wine bar, cocktail, tavern, speakeasy]
+        sqft_per: {seats: [12, 15, 18]}
+        base_sqft: 350
+        base_label: bar counter and back bar
+        back_of_house_share: 0.2
+        default_count: {seats: 60}
+        why: "Standing room and the bar itself take space; back of house (storage, cooler, small kitchen) is ~20%."
+      - id: bakery
+        label: bakery
+        keywords: [bakery, patisserie, pastry, donut, doughnut, bagel]
+        sqft_per: {seats: [15, 18, 20]}
+        base_sqft: 300
+        base_label: display case and counter
+        back_of_house_share: 0.55
+        default_count: {seats: 12}
+        why: "Production (ovens, mixers, proofing, storage) takes over half the space; seating is a small café area."
     occupancy:
       group: A-2
       small_group: B
@@ -79,7 +144,26 @@ dental_clinic:
   sizing: {sqft_per_seat: 0, default_sqft: 2200, ideal_min_sqft: 1500, ideal_max_sqft: 4000}
   program:
     drivers:
-      - {field: chairs, label: operatories, keywords: [chair, chairs, operatory, operatories, treatment room, treatment rooms, op, ops], sqft_each: 400, base_sqft: 400, why: "~400 sq ft per operatory including its share of sterilization, lab and corridors, plus ~400 sq ft of reception and office"}
+      - {field: chairs, label: operatories, keywords: [chair, chairs, operatory, operatories, treatment room, treatment rooms, exam room, exam rooms, op, ops], sqft_each: 400, base_sqft: 400, why: "~400 sq ft per operatory including its share of sterilization, lab and corridors, plus ~400 sq ft of reception and office"}
+    concepts:
+      - id: dental
+        label: dental practice
+        default: true
+        keywords: [dental, dentist, orthodontist, orthodontic, endodontist, periodontist, oral surgeon]
+        sqft_per: {chairs: [350, 400, 450]}
+        base_sqft: 400
+        base_label: reception, waiting and office
+        default_count: {chairs: 4}
+        why: "Each operatory carries its share of sterilization, lab, x-ray and corridors."
+      - id: medical_clinic
+        label: medical clinic
+        keywords: [clinic, medical office, medical practice, medical, doctor, physician, primary care, urgent care, pediatric, pediatrician, chiropractor, physical therapy, therapist]
+        unit_label: exam rooms
+        sqft_per: {chairs: [250, 300, 350]}
+        base_sqft: 600
+        base_label: reception, waiting, nurse station and office
+        default_count: {chairs: 5}
+        why: "Exam rooms are ~100-120 sq ft each; with charting, corridors and a lab each room carries ~250-350 sq ft."
     occupancy:
       group: B
       load_factors:
@@ -127,6 +211,32 @@ gym:
     drivers:
       - {field: class_size, label: people per class, keywords: [classes of, class of, person classes, person class, people per class, per class, class size, students per class], sqft_each: 50, base_sqft: 600, why: "~50 sq ft per person in an exercise room (the code's occupant load factor) plus ~600 sq ft of lobby, lockers and office"}
       - {field: members, label: members, keywords: [member, members, membership], sqft_each: 10, base_sqft: 0, why: "~10 sq ft per member is a common club planning rule of thumb"}
+    concepts:
+      - id: full_gym
+        label: gym / fitness center
+        default: true
+        keywords: [gym, fitness center, fitness centre, health club, 24-hour, 24 hour]
+        sqft_per: {class_size: [50, 60, 70], members: [8, 10, 13]}
+        base_sqft: 600
+        base_label: lobby, lockers and office
+        default_count: {members: 600}
+        why: "Equipment floor, free weights and locker rooms; clubs plan ~8-13 sq ft per member."
+      - id: studio
+        label: boutique studio (yoga, pilates, barre, spin)
+        keywords: [yoga, pilates, barre, spin, cycling, dance, meditation, stretch, studio]
+        sqft_per: {class_size: [40, 50, 60], members: [5, 6, 8]}
+        base_sqft: 600
+        base_label: lobby, cubbies, restrooms and office
+        default_count: {class_size: 20}
+        why: "One studio room at ~40-60 sq ft per person (the code allows 50) plus a small lobby."
+      - id: functional
+        label: functional training / boutique gym
+        keywords: [crossfit, boutique gym, boutique fitness, functional, hiit, bootcamp, boot camp, boxing, martial arts, mma, jiu jitsu, karate, personal training]
+        sqft_per: {class_size: [80, 100, 130], members: [8, 10, 12]}
+        base_sqft: 700
+        base_label: lobby, lockers and office
+        default_count: {class_size: 20}
+        why: "Rigs, rowers and open floor for movement need ~80-130 sq ft per athlete per class."
     occupancy:
       group: A-3
       small_group: B
@@ -174,6 +284,26 @@ office:
   program:
     drivers:
       - {field: employees, label: people, keywords: [employee, employees, people, person, staff, team, desk, desks, workstation, workstations, seat, seats], sqft_each: 175, base_sqft: 0, why: "~150-200 sq ft per person including meeting rooms, kitchen and circulation"}
+    concepts:
+      - id: office
+        label: office
+        default: true
+        keywords: [office, headquarters, hq]
+        sqft_per: {employees: [150, 175, 200]}
+        default_count: {employees: 17}
+        why: "A mix of desks and private offices with meeting rooms, kitchen and circulation."
+      - id: open_plan
+        label: open-plan office
+        keywords: [startup, start-up, agency, coworking, co-working, open plan, open-plan, open office, tech company]
+        sqft_per: {employees: [110, 140, 170]}
+        default_count: {employees: 15}
+        why: "Benching desks and shared rooms: ~110-170 sq ft per person."
+      - id: professional
+        label: professional office (private offices)
+        keywords: [law firm, law office, attorney, lawyer, accounting, accountant, cpa, financial advisor, consultancy, firm, private offices]
+        sqft_per: {employees: [200, 250, 300]}
+        default_count: {employees: 10}
+        why: "Mostly private offices, a reception and conference rooms: ~200-300 sq ft per person."
     occupancy:
       group: B
       load_factors:
@@ -216,6 +346,28 @@ retail:
   sizing: {sqft_per_seat: 0, default_sqft: 2000, ideal_min_sqft: 800, ideal_max_sqft: 8000}
   program:
     drivers: []
+    concepts:
+      - id: general_retail
+        label: retail store
+        default: true
+        keywords: [retail, store, shop]
+        default_sqft: [1200, 2000, 3500]
+        why: "sales floor plus ~20% stockroom"
+      - id: boutique
+        label: boutique
+        keywords: [boutique, apparel, clothing, fashion, gift shop, gift, florist, flower shop, jewelry, jewellery, cosmetics, bookstore, book shop, vintage, thrift]
+        default_sqft: [700, 1200, 1800]
+        why: "a compact sales floor with a fitting room and small stockroom"
+      - id: convenience
+        label: convenience store / market
+        keywords: [convenience, corner store, bodega, mini mart, minimart, market, grocery, deli, liquor store, pharmacy]
+        default_sqft: [1500, 2500, 4000]
+        why: "aisles, coolers along the walls and a stockroom"
+      - id: showroom
+        label: showroom
+        keywords: [showroom, furniture, mattress, appliance, flooring, lighting store, car dealership]
+        default_sqft: [2500, 4000, 7000]
+        why: "large items on display need open floor"
     occupancy:
       group: M
       load_factors:

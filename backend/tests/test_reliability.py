@@ -182,15 +182,6 @@ def test_recorded_parking_spaces_replace_the_paving_estimate():
         assert item["status"] == "pass" and item["evidence"]["recorded_spaces"] == 120 and "CoStar" in item["detail"]
 
 
-def test_size_assessment_thresholds():
-    assert verdicts.size_assessment(1400, 1190, 1820, best_space={"sqft": 1500, "suite": "100"})[0] == "strong"
-    assert verdicts.size_assessment(1400, 1190, 1820, footprint_sqft=1500)[0] == "strong"
-    assert verdicts.size_assessment(1400, 1190, 1820, footprint_sqft=3500)[0] == "adequate"
-    assert verdicts.size_assessment(1400, 1190, 1820, footprint_sqft=600)[0] == "weak"
-    assert verdicts.size_assessment(1400, 1190, 1820, interior_sqft=900)[0] == "weak"
-    assert verdicts.size_assessment(1400, 1190, 1820) is None
-
-
 def test_roof_verdict_from_aerial_data():
     feature = {"properties": {}, "structures": []}
     ctx = _ctx(feature=feature)

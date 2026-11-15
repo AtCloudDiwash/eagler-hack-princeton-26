@@ -8,6 +8,8 @@
 #   check      optional deterministic site check in services/program.py (ground_floor, parking,
 #              paved_area, timeline, size)
 #   min_paved_sqft, paved_reason   for check: paved_area — the paving the need requires, and why
+#   adds_sqft  optional floor area the need adds to the size estimate (services/sizing.py), per business
+#              type or `default`
 #   triggers   what this need sets in motion (shown to the user and to the owner agent)
 
 parking:
@@ -112,18 +114,21 @@ storage:
   label: Storage space
   keywords: [storage, stockroom, warehouse space, back room, inventory]
   owner: matterport
+  adds_sqft: {default: 200}
   triggers: Back-of-house storage share of the floor plan.
 
 private_rooms:
   label: Private rooms / offices
-  keywords: [private office, private offices, conference room, meeting room, treatment room, exam room, operatory, operatories]
+  keywords: [private dining, private room, private office, private offices, conference room, meeting room, treatment room, exam room, operatory, operatories]
   owner: matterport
+  adds_sqft: {restaurant: 250, gym: 200, retail: 150}  # private dining / a treatment room / a fitting room; already in office and clinic factors
   triggers: Enclosed rooms in the layout; adding walls is cheaper than moving plumbing.
 
 showers_lockers:
   label: Showers / locker rooms
   keywords: [shower, showers, locker, lockers, changing room]
   owner: matterport
+  adds_sqft: {default: 250}
   triggers: Extra plumbing fixtures and drainage, one of the largest gym build-out costs.
 
 high_ceiling:
