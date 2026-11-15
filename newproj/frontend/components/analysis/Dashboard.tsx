@@ -1,19 +1,21 @@
 "use client";
 
 import { AnimatePresence, motion, useInView } from "motion/react";
-import { ArrowLeft, BadgeCheck, Building2, ChevronDown, CircleDollarSign, FileSearch, Gauge, Landmark, MapPinned, PlayCircle, Scale, ThumbsDown, ThumbsUp, Users, Wallet } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Box, ClipboardList, Building2, ChevronDown, CircleDollarSign, FileSearch, Gauge, Landmark, MapPinned, PlayCircle, Scale, ThumbsDown, ThumbsUp, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import type { Analysis, AnalysisResult, Costs } from "@/lib/api-types";
-import { fmtMoney, fmtRange, fmtSqft, titleCase, VERDICT_STYLE } from "@/lib/format";
+import { fmtMoney, fmtRange, fmtFootprint, titleCase, VERDICT_STYLE } from "@/lib/format";
 import { fmtClock } from "@/lib/humanize";
 import { Brand, Stepper } from "@/components/shell/Shell";
 import { Meter, ScoreRing, stagger, Tabs } from "@/components/ui/primitives";
 import { AgentsTab, ComplianceTab, CostsTab, EvidenceTab, MetricsOverview, MoreDetails } from "./DashboardTabs";
 import { EvidenceChips } from "./EvidenceContext";
 import LocationTab from "./LocationTab";
+import { InteriorTab } from "@/components/matterport/Matterport";
+import { NeedsTab } from "@/components/program/SpaceProgram";
 
-type Tab = "overview" | "location" | "costs" | "compliance" | "agents" | "evidence";
+type Tab = "overview" | "needs" | "location" | "interior" | "costs" | "compliance" | "agents" | "evidence";
 
 const BUDGET_UI = {
   within: { label: "Within budget", color: "#34d399", cls: "bg-emerald-400/15 text-emerald-200" },
@@ -32,7 +34,7 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
   const [expanded, setExpanded] = useState(false);
   const duration = analysis.events.length ? analysis.events[analysis.events.length - 1].t : null;
   const budget = result.costs?.budget;
-  const title = p.address || `${titleCase(p.building_type) || "Building"} · ${fmtSqft(p.area_sqft)}`;
+  const title = p.address || `${titleCase(p.building_type) || "Building"} · ${fmtFootprint(p.area_sqft)}`;
 
   const pros = rec.key_reasons.filter((r) => r.impact === "positive").slice(0, 3);
   const cons = rec.key_reasons.filter((r) => r.impact === "negative").slice(0, 3);
@@ -143,7 +145,9 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
             className="mb-5"
             tabs={[
               { id: "overview", label: "Checks", icon: <Gauge size={13} /> },
+              { id: "needs", label: "Your needs", icon: <ClipboardList size={13} /> },
               { id: "location", label: "Location", icon: <MapPinned size={13} /> },
+              ...(p.matterport ? [{ id: "interior" as const, label: "Interior 3D", icon: <Box size={13} /> }] : []),
               { id: "costs", label: "Costs", icon: <CircleDollarSign size={13} /> },
               { id: "compliance", label: "Rules", icon: <Landmark size={13} /> },
               { id: "agents", label: "Agents", icon: <Users size={13} /> },
@@ -153,7 +157,9 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22 }}>
               {tab === "overview" && <MetricsOverview metrics={result.metrics} businessLabel={result.business_label} />}
+              {tab === "needs" && <NeedsTab program={result.program} checks={result.site_checks} />}
               {tab === "location" && <LocationTab result={result} property={p} />}
+              {tab === "interior" && p.matterport && <InteriorTab link={p.matterport} report={result.agents.find((a) => a.agent === "matterport")} />}
               {tab === "costs" && <CostsTab costs={result.costs} />}
               {tab === "compliance" && <ComplianceTab items={result.compliance} />}
               {tab === "agents" && <AgentsTab agents={result.agents} />}

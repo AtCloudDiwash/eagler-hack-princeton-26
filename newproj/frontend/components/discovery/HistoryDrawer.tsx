@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { AnalysisSummary } from "@/lib/api-types";
-import { fmtSqft, titleCase, VERDICT_STYLE } from "@/lib/format";
+import { fmtFootprint, titleCase, VERDICT_STYLE } from "@/lib/format";
 import { ScoreRing, Spinner, stagger } from "@/components/ui/primitives";
 
 /** "Past analyses" slide-over. */
@@ -69,7 +69,7 @@ export default function HistoryDrawer({ open, onClose }: { open: boolean; onClos
                     <Link href={`/analysis/${a.id}`} className="flex items-center gap-3 rounded-xl bg-white/[0.03] p-3 ring-1 ring-inset ring-white/[0.05] transition hover:bg-white/[0.06] hover:ring-teal-300/30">
                       {a.score != null ? <ScoreRing value={a.score} size={44} color={v?.color} animateIn={false} /> : <span className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.04] text-[10px] text-slate-500">{a.status}</span>}
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-slate-100">{a.property.address || `${titleCase(a.property.building_type)} · ${fmtSqft(a.property.area_sqft)}`}</div>
+                        <div className="truncate text-[13px] font-medium text-slate-100">{a.property.address || `${titleCase(a.property.building_type)} · ${fmtFootprint(a.property.area_sqft)}`}</div>
                         <div className="truncate text-[11px] text-slate-500">
                           {a.business_label} · {new Date(a.created_at).toLocaleDateString()}
                         </div>

@@ -170,14 +170,15 @@ export function Tabs<T extends string>({ tabs, value, onChange, layoutId, classN
   );
 }
 
-export function StatTile({ icon, label, value, hint, accent = "#d4f53a" }: { icon?: ReactNode; label: string; value: ReactNode; hint?: string; accent?: string }) {
+export function StatTile({ icon, label, value, sub, hint, accent = "#d4f53a", muted = false }: { icon?: ReactNode; label: string; value: ReactNode; sub?: ReactNode; hint?: string; accent?: string; muted?: boolean }) {
   return (
     <div className="rounded-xl bg-white/[0.035] p-2.5 ring-1 ring-inset ring-white/[0.06]" title={hint}>
       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500">
         {icon && <span style={{ color: accent }}>{icon}</span>}
         {label}
       </div>
-      <div className="mt-1 truncate text-sm font-semibold text-slate-100">{value}</div>
+      <div className={`mt-1 truncate text-sm ${muted ? "font-normal text-slate-500" : "font-semibold text-slate-100"}`}>{value}</div>
+      {sub && <div className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-slate-500">{sub}</div>}
     </div>
   );
 }

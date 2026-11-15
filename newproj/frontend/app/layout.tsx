@@ -17,9 +17,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: browser extensions (Grammarly, ColorZilla, password managers, translators)
+    // add attributes to <html>/<body> before React hydrates. This only ignores attribute mismatches on
+    // these two tags; real mismatches inside the app are still reported.
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}
+        suppressHydrationWarning
       >
         {children}
       </body>

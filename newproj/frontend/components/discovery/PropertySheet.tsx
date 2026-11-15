@@ -1,12 +1,18 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowLeft, Building2, Camera, Car, Database, Fan, Home, Layers3, MapPinned, Ruler, Sparkles } from "lucide-react";
-import type { Candidate, KeyFact, Neighborhood, PropertyDetail } from "@/lib/api-types";
+import {
+  ArrowLeft, ArrowUpDown, Building2, CalendarDays, Camera, Car, ChefHat, Database, DollarSign, Droplets, Fan, Hammer, Home, Layers3,
+  MapPinned, MoveVertical, Receipt, Ruler, Sparkles,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import type { Candidate, KeyFact, Neighborhood, PropertyDetail, SpaceProgram } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtSqft, titleCase } from "@/lib/format";
 import { groupIdForLabel, placeMeta } from "@/lib/places";
 import { FieldExplorer } from "@/components/ui/JsonView";
 import { Collapsible, ScoreRing, Spinner, StatTile } from "@/components/ui/primitives";
+import { MatterportLinker } from "@/components/matterport/Matterport";
+import CostarPanel from "./CostarPanel";
 import { candidateTitle } from "./CandidateRail";
 
 type Props = {
@@ -14,6 +20,8 @@ type Props = {
   detail: PropertyDetail | null;
   detailLoading: boolean;
   detailError: string | null;
+  onDetailChange: (d: PropertyDetail) => void;
+  program: SpaceProgram | null;
   neighborhood: Neighborhood | null;
   neighborhoodLoading: boolean;
   neighborhoodError: string | null;
@@ -76,14 +84,25 @@ export default function PropertySheet(p: Props) {
           </div>
         </div>
 
+        {p.detail?.highlights?.length ? (
+          <div className="grid grid-cols-3 gap-2">
+            {p.detail.highlights.map((h) => (
+              <StatTile key={h.id} icon={HIGHLIGHT_ICONS[h.icon]?.[0]} accent={h.status && h.status !== "unknown" ? STATUS_COLOR[h.status] : HIGHLIGHT_ICONS[h.icon]?.[1]} label={h.label} value={h.value} sub={h.sub ?? undefined} muted={h.missing} hint={h.missing ? h.hint : `${h.hint} Source: ${h.source}.`} />
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-3 gap-2">
-          <StatTile icon={<Ruler size={11} />} label="Footprint" value={fmtSqft(c.area_sqft)} />
-          <StatTile icon={<Layers3 size={11} />} label="Stories" value={c.stories_est != null ? `~${c.stories_est}` : "—"} />
+          <StatTile icon={<Ruler size={11} />} label="Rentable" value={c.rentable_sqft ? fmtSqft(c.rentable_sqft) : "—"} accent="#34d399" hint="Rentable Building Area from CoStar (GLA for retail): the leasing figure for the whole building. '—' when CoStar has no record." />
+          <StatTile icon={<Ruler size={11} />} label="Bldg footprint" value={fmtSqft(c.area_sqft)} hint="The building's outline seen from above (about one floor). Not the lot, and not the space you would lease." />
+          <StatTile icon={<Layers3 size={11} />} label="Stories" value={c.stories_est != null ? `~${c.stories_est}` : "—"} hint="Recorded by CoStar when the building is in the kit; otherwise roof height ÷ ~13 ft (estimate)." />
           <StatTile icon={<Home size={11} />} label="Roof" value={c.roof_condition != null ? `${c.roof_condition_label ?? ""} ${c.roof_condition.toFixed(1)}` : "—"} accent="#34d399" />
           <StatTile icon={<Fan size={11} />} label="AC units" value={fact(facts, "AC units detected") ?? (p.detailLoading ? "…" : "—")} accent="#e2fb5c" hint="Detected in imagery; units can be hidden" />
           <StatTile icon={<Car size={11} />} label="Paved" value={fact(facts, "Paved (hardscape) area") ?? (p.detailLoading ? "…" : "—")} accent="#94a3b8" />
+          <StatTile icon={<Building2 size={11} />} label="Total floors" value={c.floor_area_est_sqft ? `~${fmtSqft(c.floor_area_est_sqft)}` : "—"} accent="#60a5fa" hint="CoStar gross building area when recorded; otherwise footprint × estimated stories (rough)" />
+          <StatTile icon={<MapPinned size={11} />} label="Lot (parcel)" value={fmtSqft(c.parcel_sqft)} accent="#f472b6" hint="The whole property: building plus parking, paving and open land. CoStar's recorded lot when available; '—' when the aerial parcel is implausible (smaller than the building)." />
           <StatTile icon={<Camera size={11} />} label="Imagery" value={p.detail?.imagery?.date?.slice(0, 7) ?? (p.detailLoading ? "…" : "—")} accent="#a78bfa" />
         </div>
+        )}
 
         {p.candidate.match_reasons.length > 0 && (
           <ul className="space-y-1">
@@ -142,6 +161,10 @@ export default function PropertySheet(p: Props) {
             )}
           </Collapsible>
         </div>
+
+        {p.detail?.costar && <CostarPanel costar={p.detail.costar} program={p.program} />}
+
+        {p.detail && <MatterportLinker property={p.detail} onChange={p.onDetailChange} />}
 
         <div>
           <div className="mb-2 flex items-center justify-between">
@@ -205,8 +228,34 @@ export default function PropertySheet(p: Props) {
           {p.analyzing ? <Spinner className="h-4 w-4 text-ink-950" /> : <Sparkles size={16} />}
           <span className="relative">Analyze this property</span>
         </motion.button>
-        <p className="text-center text-[10px] text-slate-500">4 AI agents check building, area, rules & cost · about 2 min</p>
+        <p className="text-center text-[10px] text-slate-500">
+          {p.detail?.matterport ? "5 AI agents check building, interior, area, rules & cost" : "4 AI agents check building, area, rules & cost"} · about 2 min
+        </p>
       </div>
     </div>
   );
 }
+
+/** Icon color when a tile judges the building against the user's request. */
+const STATUS_COLOR = { good: "#34d399", warn: "#fbbf24", bad: "#f87171" } as const;
+
+/** Icon + accent per highlight kind. */
+const HIGHLIGHT_ICONS: Record<string, [ReactNode, string]> = {
+  space: [<Ruler key="i" size={11} />, "#34d399"],
+  rent: [<DollarSign key="i" size={11} />, "#e2fb5c"],
+  calendar: [<CalendarDays key="i" size={11} />, "#a78bfa"],
+  kitchen: [<ChefHat key="i" size={11} />, "#fb923c"],
+  building: [<Building2 key="i" size={11} />, "#60a5fa"],
+  year: [<Hammer key="i" size={11} />, "#94a3b8"],
+  parking: [<Car key="i" size={11} />, "#94a3b8"],
+  sprinklers: [<Droplets key="i" size={11} />, "#38bdf8"],
+  ceiling: [<MoveVertical key="i" size={11} />, "#2dd4bf"],
+  elevator: [<ArrowUpDown key="i" size={11} />, "#2dd4bf"],
+  cam: [<Receipt key="i" size={11} />, "#e2fb5c"],
+  roof: [<Home key="i" size={11} />, "#34d399"],
+  fan: [<Fan key="i" size={11} />, "#e2fb5c"],
+  floors: [<Layers3 key="i" size={11} />, "#60a5fa"],
+  footprint: [<Ruler key="i" size={11} />, "#d4f53a"],
+  lot: [<MapPinned key="i" size={11} />, "#f472b6"],
+  imagery: [<Camera key="i" size={11} />, "#a78bfa"],
+};

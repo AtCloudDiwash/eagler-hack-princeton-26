@@ -27,6 +27,10 @@ const TOOL_TEXT: Record<string, (a: Args) => string> = {
   get_rent_assumption: () => "Looking up local rent levels",
   list_cost_items: () => "Reviewing possible conversion costs",
   estimate_costs: () => "Estimating upfront & monthly costs",
+  get_building_facts: () => "Reading the recorded building facts",
+  get_scan_identity: () => "Confirming the 3D scan shows this space",
+  check_doorways: () => "Measuring door widths in the 3D scan",
+  check_windows: () => "Checking windows and daylight in the 3D scan",
 };
 
 export function toolText(tool: string, args: Args = {}): string {

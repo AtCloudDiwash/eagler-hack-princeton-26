@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { BusinessTypeInfo, Candidate, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
-import { buildingColor, fmtDistance, fmtSqft } from "@/lib/format";
+import { buildingColor, fmtDistance, fmtFootprint } from "@/lib/format";
 import { heightFor, type LngLat } from "@/lib/geo";
 import { useMedia } from "@/lib/useMedia";
 import type { MapBuilding } from "@/components/map/TurnkeyMap";
@@ -138,12 +138,14 @@ export default function DiscoveryPage() {
     if (!selected) return;
     const ctrl = new AbortController();
     setDetailLoading(true);
+    const forRequest = result ? { business_type: result.intent.business_type, sqft: result.program?.size.target_sqft, budget: result.intent.budget } : undefined;
     api
-      .property(selected.id, ctrl.signal)
+      .property(selected.id, ctrl.signal, forRequest)
       .then(setDetail)
       .catch((e: Error) => e.name !== "AbortError" && setDetailError(e.message))
       .finally(() => !ctrl.signal.aborted && setDetailLoading(false));
     return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch per building; the request is fixed for a result
   }, [selected]);
 
   useEffect(() => {
@@ -258,7 +260,7 @@ export default function DiscoveryPage() {
                         <span className="max-w-[200px] truncate text-xs font-medium text-slate-100">{candidateTitle(hovered)}</span>
                       </div>
                       <div className="text-[10px] text-slate-400">
-                        {fmtSqft(hovered.area_sqft)} · click to inspect
+                        {fmtFootprint(hovered.area_sqft)} · click to inspect
                       </div>
                     </motion.div>
                   ),
@@ -355,6 +357,8 @@ export default function DiscoveryPage() {
               detail={detail}
               detailLoading={detailLoading}
               detailError={detailError}
+              onDetailChange={setDetail}
+              program={result?.program ?? null}
               neighborhood={neighborhood}
               neighborhoodLoading={nbLoading}
               neighborhoodError={nbError}

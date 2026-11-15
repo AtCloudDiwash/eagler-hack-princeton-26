@@ -51,9 +51,24 @@ export const api = {
   businessTypes: () => request<BusinessTypeInfo[]>("/api/business-types"),
   search: (query: string, signal?: AbortSignal) =>
     request<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify({ query }), signal }),
-  property: (id: string, signal?: AbortSignal) => request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}`, { signal }),
+  /** With the user's request, the detail's panel tiles describe what this building offers that request. */
+  property: (id: string, signal?: AbortSignal, forRequest?: { business_type: string; sqft?: number; budget?: { amount: number; period: string } | null }) => {
+    const q = new URLSearchParams();
+    if (forRequest) {
+      q.set("business_type", forRequest.business_type);
+      if (forRequest.sqft) q.set("sqft", String(Math.round(forRequest.sqft)));
+      if (forRequest.budget) {
+        q.set("budget_amount", String(forRequest.budget.amount));
+        q.set("budget_period", forRequest.budget.period);
+      }
+    }
+    return request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}${q.size ? `?${q}` : ""}`, { signal });
+  },
   neighborhood: (id: string, radius: number, signal?: AbortSignal) =>
     request<Neighborhood>(`/api/properties/${encodeURIComponent(id)}/neighborhood?radius_m=${radius}`, { signal }),
+  linkMatterport: (id: string, tour: string) =>
+    request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}/matterport`, { method: "PUT", body: JSON.stringify({ tour }) }),
+  unlinkMatterport: (id: string) => request<PropertyDetail>(`/api/properties/${encodeURIComponent(id)}/matterport`, { method: "DELETE" }),
   startAnalysis: (body: AnalysisRequest) =>
     request<{ id: string; status: string }>("/api/analyses", { method: "POST", body: JSON.stringify(body) }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/api/analyses/${encodeURIComponent(id)}`, { signal }),

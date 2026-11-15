@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { Analysis, AnalysisSummary, MetricResult } from "@/lib/api-types";
-import { fmtRange, fmtSqft, SEVERITY_STYLE, STATUS_STYLE, titleCase, VERDICT_STYLE } from "@/lib/format";
+import { fmtRange, fmtFootprint, SEVERITY_STYLE, STATUS_STYLE, titleCase, VERDICT_STYLE } from "@/lib/format";
 import { Brand } from "@/components/shell/Shell";
 import { Meter, Pill, ScoreRing, Spinner, stagger } from "@/components/ui/primitives";
 
@@ -70,7 +70,7 @@ function Compare() {
     return [...seen];
   }, [cols]);
   const best = cols.length ? Math.max(...cols.map((a) => a.result!.recommendation.score)) : null;
-  const title = (a: Analysis) => a.property.address || `${titleCase(a.property.building_type)} · ${fmtSqft(a.property.area_sqft)}`;
+  const title = (a: Analysis) => a.property.address || `${titleCase(a.property.building_type)} · ${fmtFootprint(a.property.area_sqft)}`;
 
   return (
     <div className="min-h-dvh bg-ink-950 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212, 245, 58,0.10),transparent)]">
@@ -107,7 +107,7 @@ function Compare() {
                 >
                   <span className={`grid h-4 w-4 shrink-0 place-items-center rounded ${on ? "bg-teal-300 text-ink-950" : "ring-1 ring-slate-600"}`}>{on && <Check size={11} strokeWidth={3} />}</span>
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-slate-100">{s.property.address || `${titleCase(s.property.building_type)} · ${fmtSqft(s.property.area_sqft)}`}</span>
+                    <span className="block truncate font-medium text-slate-100">{s.property.address || `${titleCase(s.property.building_type)} · ${fmtFootprint(s.property.area_sqft)}`}</span>
                     <span className="block truncate text-[10px] text-slate-500">
                       {s.business_label} · {new Date(s.created_at).toLocaleDateString()}
                     </span>

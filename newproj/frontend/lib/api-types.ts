@@ -7,6 +7,8 @@
  *   POST /api/search            {query}             -> SearchResponse          (Step 1-2: discovery, no agents)
  *   GET  /api/properties/{id}                       -> PropertyDetail          (Step 3: selected building)
  *   GET  /api/properties/{id}/neighborhood?radius_m=400 -> Neighborhood        (Step 3: surroundings)
+ *   PUT  /api/properties/{id}/matterport {tour}     -> PropertyDetail          (link a Matterport 3D tour)
+ *   DELETE /api/properties/{id}/matterport          -> PropertyDetail          (unlink it)
  *   POST /api/analyses          AnalysisRequest     -> {id, status}            (Step 4: start agents)
  *   GET  /api/analyses/{id}                         -> Analysis                (poll; events stream in while running)
  *   GET  /api/analyses                              -> AnalysisSummary[]       (history / compare picker)
@@ -45,7 +47,37 @@ export type Intent = {
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
   budget: Budget | null; // stated in the query ("$8k/month", "budget of $300k"), else null
   parser: "llm" | "rules";
+  occupancy?: Record<string, number>; // counts stated: seats, chairs, members, class_size, employees, staff
+  needs?: Need[]; // recognised needs (backend/config/needs.yaml)
+  open_within_months?: number | null;
+  tenure?: "lease" | "buy";
+  near?: string[];
+  avoid?: string[];
 };
+
+export type Need = { id: string; label: string; priority: "must" | "nice" };
+
+export type CheckStatus = "pass" | "risk" | "unknown";
+
+/** What the request implies (backend/services/program.py): size, occupancy, code needs, building needs. */
+export type SpaceProgram = {
+  business_type: string;
+  business_label: string;
+  acknowledged: { label: string; value: string; source: "stated" | "derived" | "default" }[];
+  size: { target_sqft: number; min_sqft: number; max_sqft: number; basis: string[] };
+  occupancy: { counts: Record<string, number>; group: string; group_label: string; occupant_load: number; area_based_load: number; people_stated: number; basis: string[] };
+  code: { id: string; rule: string; value: string; detail: string; citation: string | null }[];
+  building: { suitable_types: string[]; acceptable_types: string[]; ground_floor: "required" | "preferred" | "any"; min_ceiling_ft: number; ceiling_reason: string; buildout_months: [number, number] };
+  needs: (Need & { owner: AgentName; check: string | null; triggers: string })[];
+  timeline: { open_within_months: number; buildout_months: [number, number]; status: "ok" | "tight" | "risk"; detail: string } | null;
+  tenure: "lease" | "buy";
+  near: string[];
+  avoid: string[];
+  disclaimer: string;
+};
+
+/** A building compared with the program (size, ground floor, ceiling, paving for parking/drive-thru...). */
+export type SiteCheck = { id: string; label: string; status: CheckStatus; detail: string };
 
 export type Candidate = {
   id: string;
@@ -54,14 +86,57 @@ export type Candidate = {
   footprint: GeoJSONGeometry | null; // building outline, [lon, lat]
   parcel: GeoJSONGeometry | null;
   building_type: string | null; // Vexcel building-type.class, e.g. "commercial"
-  area_sqft: number | null;
+  area_sqft: number | null; // BUILDING FOOTPRINT (outline from above, ~one floor): not the lot, not a leasable suite
+  floor_area_est_sqft?: number | null; // footprint × estimated stories
+  parcel_sqft?: number | null; // the property: lot/parcel area
   roof_condition: number | null; // 1 Bad .. 5 Great
   roof_condition_label: string | null;
   stories_est: number | null;
   match_score: number; // 0-100, deterministic pre-screen (NOT the agent analysis)
   match_reasons: string[];
-  source: "vexcel" | "osm" | "demo";
+  source: "vexcel" | "osm" | "demo" | "costar";
   address: string | null;
+  // CoStar (sponsor kit): leasing figures the aerial data can't measure
+  costar_id?: number | null;
+  building_name?: string | null;
+  rentable_sqft?: number | null; // Rentable Building Area (RBA; GLA for retail) of the whole building
+  rentable_basis?: "RBA" | "GLA" | null;
+  available_sqft?: number | null; // spaces on the market (not lease-pending)
+  space_count?: number;
+  best_space?: CostarSpace | null; // listed suite closest to the user's size
+  asking_rent_per_sqft_yr?: [number, number] | null;
+};
+
+export type CostarSpace = {
+  suite: string | null;
+  floor: string | null;
+  sqft: number | null;
+  rent_per_sqft_yr: number | null; // asking, normalised to $/sq ft/yr
+  service: string | null; // TripleNet, FullService, ...
+  use: string | null;
+  available_on: string | null;
+  lease_pending?: boolean;
+};
+
+export type CostarSummary = {
+  costar_id: number;
+  name: string | null;
+  address: string | null;
+  type: string | null;
+  match: string;
+  rentable_sqft: number | null;
+  rentable_basis: "RBA" | "GLA" | null;
+  gross_sqft: number | null;
+  typical_floor_sqft: number | null;
+  stories: number | null;
+  lot_sqft: number | null;
+  parking_ratio: number | null;
+  spaces: CostarSpace[];
+  space_count: number;
+  available_sqft: number | null;
+  asking_rent_per_sqft_yr: [number, number] | null;
+  matterport_models: string[];
+  note: string;
 };
 
 export type SearchResponse = {
@@ -70,14 +145,40 @@ export type SearchResponse = {
   data_mode: "vexcel_live" | "vexcel_demo" | "osm_only";
   candidates: Candidate[];
   notes: string[]; // human-readable caveats ("Outside Vexcel coverage: footprints from OpenStreetMap")
+  program: SpaceProgram | null; // what the request implies (shown before any building is chosen)
 };
 
 export type KeyFact = { group: string; label: string; value: string; note?: string | null };
 
+/** One property-panel tile: a known fact, best first (backend services/building_facts.highlights). */
+export type Highlight = {
+  id: string;
+  label: string;
+  value: string;
+  hint: string;
+  source: string; // "CoStar", "CoStar listing", "Vexcel"...
+  icon: string; // space | rent | building | year | parking | floors | roof | fan
+  missing: boolean; // true: `value` says why it's unknown ("Not listed", "Unknown")
+  sub?: string | null; // small context line under the headline ("Suite 170", "of ~1,400 sq ft", "no aerial data")
+  status?: "good" | "warn" | "bad" | "unknown"; // set when the tile judges this building against the user's request
+};
+
 export type PropertyDetail = Candidate & {
   key_facts: KeyFact[]; // the most useful fields, readable
+  highlights?: Highlight[]; // the same 9 panel tiles for every building: what it offers the user's request (or its recorded facts)
   raw: Record<string, unknown> | null; // complete Vexcel GeoJSON feature
   imagery: { collection: string | null; date: string | null; gsd_m: number | null } | null;
+  matterport?: MatterportLink | null; // linked 3D tour (null when none)
+  costar?: CostarSummary | null; // matched CoStar property: rentable area, spaces on the market, asking rents
+};
+
+/** A Matterport tour linked to a building. The tour always embeds; interior data depends on `data`. */
+export type MatterportLink = {
+  model_id: string;
+  embed_url: string; // public showcase iframe URL
+  data: "live" | "recorded" | "embed_only"; // Model API / recorded scan / tour only (no API credentials)
+  note: string;
+  scan?: { name: string | null; floors: number; rooms: number; total_indoor_area_sqft: number | null; insights_available: boolean } | null;
 };
 
 export type NeighborBuilding = {
@@ -237,6 +338,8 @@ export type AnalysisResult = {
   conflicts: { description: string; agents: AgentName[]; resolution: string }[];
   followups_run: { agent: AgentName; question: string; outcome: string }[];
   data_sources: { name: string; status: "used" | "unavailable" | "demo"; note: string }[];
+  program?: SpaceProgram; // absent on analyses run before the space program existed
+  site_checks?: SiteCheck[];
 };
 
 export type Analysis = {

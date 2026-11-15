@@ -12,11 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 import multi_agent_engine
 from config import business_types, settings
-from schemas import AnalysisRequest, SearchRequest, SearchResponse
-from services import discovery, external, neighborhood, vexcel
+from schemas import AnalysisRequest, MatterportLinkRequest, SearchRequest, SearchResponse
+from services import costar, discovery, external, matterport, neighborhood, vexcel
 from services.llm import llm_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("turnkey.api")
 app = FastAPI(title="Turnkey Matchmaker", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
 _running: set[asyncio.Task] = set()
@@ -31,7 +32,7 @@ def startup() -> None:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"llm": await llm_status(), "vexcel": vexcel.mode(), "census": bool(settings.census_api_key), "matterport": bool(settings.matterport_api_key)}
+    return {"llm": await llm_status(), "vexcel": vexcel.mode(), "census": bool(settings.census_api_key), "matterport": matterport.has_credentials()}
 
 
 @app.get("/api/business-types")
@@ -55,12 +56,63 @@ async def search(req: SearchRequest) -> SearchResponse:
     return await discovery.search(req.query)
 
 
-def _detail(prop: dict, raw: dict | None) -> dict:
-    return {**prop, "key_facts": vexcel.key_facts(raw), "raw": raw, "imagery": vexcel.imagery_meta(raw)}
+def _detail(prop: dict, raw: dict | None, intent=None) -> dict:
+    """Property detail. With the user's request (`intent`), the panel tiles describe what this building offers that
+    request (services/fit_summary.py); without it, the building's recorded facts."""
+    p = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
+    shown = costar.reconcile(prop, p)  # CoStar's recorded stories / floor area / lot win over aerial estimates
+    facts = vexcel.key_facts(raw)
+    if p:
+        recorded = {"Estimated stories": (p.get("stories"), "", "Recorded by CoStar"), "Est. total floor area": (p.get("gross_sqft"), " sq ft", "CoStar gross building area"),
+                    "Lot (parcel) area": (p.get("lot_sqft"), " sq ft", "Recorded by CoStar")}
+        for f in facts:
+            value, unit, note = recorded.get(f["label"], (None, "", ""))
+            if value:
+                f["note"] = f"{note} (aerial estimate: {f['value']})"
+                f["value"] = f"{value:,.0f}{unit}"
+    from services import building_facts, fit_summary
+
+    tiles = fit_summary.tiles(shown, raw, intent) if intent else building_facts.highlights(shown, raw)
+    return {**shown, "key_facts": facts, "highlights": tiles, "raw": raw, "imagery": vexcel.imagery_meta(raw), "matterport": matterport.link_info(shown),
+            "costar": costar.summarize(p) if p else None}
+
+
+async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:
+    """A building whose auto-linked scan is an amenity (lobby, fitness center) or an apartment-unit tour gets a one-time
+    search for a scan of an actual suite in the building; if none is found that tour is unlinked. User-linked tours are kept."""
+    from services import scan_identity
+
+    if prop.get("matterport_lookup_done"):
+        return prop
+    p = costar.match(prop["lat"], prop["lon"], prop.get("footprint"))
+    scans = {s["id"]: s.get("caption") for s in (p or {}).get("matterport_scans") or [] if isinstance(s, dict) and s.get("id")}
+    linked = prop.get("matterport_model_id")
+    auto = linked and (prop.get("matterport_auto_model_id") == linked or (linked in scans and not prop.get("matterport_auto_model_id")))
+    amenity_ids = [sid for sid, cap in scans.items() if scan_identity.not_the_space(cap)]  # amenities and apartment units
+    if not ((auto and linked in amenity_ids) or (not linked and amenity_ids and len(amenity_ids) == len(scans))):
+        return prop
+    out = {**prop, "matterport_lookup_done": True}
+    probe = linked or amenity_ids[0]
+    found = None
+    if matterport.has_credentials():
+        try:
+            r = await asyncio.wait_for(scan_identity.choose_scan({**prop, "matterport_model_id": probe}), timeout=6)
+            if r.get("switched") and r.get("verdict") in ("verified", "likely"):
+                found = r
+        except Exception as err:  # noqa: BLE001 - the panel must open regardless
+            log.warning("scan lookup failed for %s: %s", prop.get("id"), err)
+    if found:
+        out.update(matterport_model_id=found["model_id"], matterport_auto_model_id=found["model_id"],
+                   matterport_note=f"Auto-linked '{found.get('name')}': {found['reason'].split(' The linked scan')[0]}")
+    elif auto:
+        out.update(matterport_model_id=None, matterport_auto_model_id=None, matterport_note=None)
+    db.save_property(out, raw)
+    return out
 
 
 @app.get("/api/properties/{prop_id}")
-async def property_detail(prop_id: str) -> dict:
+async def property_detail(prop_id: str, business_type: str | None = None, sqft: int | None = Query(None, ge=100, le=1_000_000),
+                          budget_amount: float | None = None, budget_period: str | None = None) -> dict:
     stored = db.get_property(prop_id)
     if not stored:
         raise HTTPException(404, "Unknown property (run a search first)")
@@ -71,7 +123,10 @@ async def property_detail(prop_id: str) -> dict:
         if rev.get("address"):
             prop["address"] = rev["address"]
             db.save_property(prop, raw)
-    return _detail(prop, raw)
+    prop = await _replace_amenity_scan(prop, raw)
+    from services.fit_summary import intent_from_params
+
+    return _detail(prop, raw, intent_from_params(business_type, sqft, budget_amount, budget_period))
 
 
 @app.get("/api/properties/{prop_id}/neighborhood")
@@ -81,6 +136,34 @@ async def property_neighborhood(prop_id: str, radius_m: int = Query(400, ge=100,
         raise HTTPException(404, "Unknown property")
     prop, _ = stored
     return await neighborhood.build(prop["lat"], prop["lon"], radius_m, exclude_id=prop_id)
+
+
+@app.put("/api/properties/{prop_id}/matterport")
+async def link_matterport(prop_id: str, req: MatterportLinkRequest) -> dict:
+    """Link a Matterport tour (showcase URL or model id) to a building. Interior data is fetched now when
+    reachable, so a bad link or token shows up here instead of during the analysis."""
+    model_id = matterport.parse_model_id(req.tour)
+    if not model_id:
+        raise HTTPException(400, "Not a Matterport tour link. Paste a URL like https://my.matterport.com/show/?m=SxQL3iGyoDo or the 11-character model id.")
+    stored = db.set_matterport_model(prop_id, model_id)
+    if not stored:
+        raise HTTPException(404, "Unknown property")
+    detail = _detail(*stored)
+    if matterport.data_mode(model_id) != "embed_only":
+        try:
+            scan = matterport.summarize(await asyncio.wait_for(matterport.fetch_model(model_id), timeout=30))
+            detail["matterport"]["scan"] = {"name": scan["name"], "floors": len(scan["floors"]), "rooms": len(scan["rooms"]), "total_indoor_area_sqft": scan["total_indoor_area_sqft"], "insights_available": scan["insights_available"]}
+        except Exception as err:  # noqa: BLE001 - keep the link; the tour is still viewable
+            detail["matterport"]["note"] = f"Tour linked, but interior data could not be loaded: {err}"
+    return detail
+
+
+@app.delete("/api/properties/{prop_id}/matterport")
+def unlink_matterport(prop_id: str) -> dict:
+    stored = db.set_matterport_model(prop_id, None)
+    if not stored:
+        raise HTTPException(404, "Unknown property")
+    return _detail(*stored)
 
 
 @app.post("/api/analyses")
