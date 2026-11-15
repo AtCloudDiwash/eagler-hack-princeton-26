@@ -79,6 +79,9 @@ def cache_set(key: str, value: Any) -> None:
 # ---------------------------------------------------------------- properties
 
 def save_property(candidate: dict, raw: dict | None) -> None:
+    # A re-run search re-saves its candidates: keep a Matterport tour the user linked to this building.
+    if "matterport_model_id" not in candidate and (old := get_property(candidate["id"])) and old[0].get("matterport_model_id"):
+        candidate = {**candidate, "matterport_model_id": old[0]["matterport_model_id"]}
     _exec(
         "INSERT OR REPLACE INTO properties (id, candidate, raw, created_at) VALUES (?, ?, ?, ?)",
         (candidate["id"], json.dumps(candidate), json.dumps(raw) if raw is not None else None, time.time()),
@@ -90,6 +93,17 @@ def get_property(prop_id: str) -> tuple[dict, dict | None] | None:
     if not row:
         return None
     return json.loads(row["candidate"]), (json.loads(row["raw"]) if row["raw"] else None)
+
+
+def set_matterport_model(prop_id: str, model_id: str | None) -> tuple[dict, dict | None] | None:
+    """Link (or with None, unlink) a Matterport model to a stored property."""
+    stored = get_property(prop_id)
+    if not stored:
+        return None
+    prop, raw = stored
+    prop = {**prop, "matterport_model_id": model_id}
+    save_property(prop, raw)
+    return prop, raw
 
 
 # ---------------------------------------------------------------- analyses

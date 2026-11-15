@@ -4,9 +4,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { Building2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { Candidate, SearchResponse } from "@/lib/api-types";
-import { fmtSqft, titleCase } from "@/lib/format";
+import { fmtFootprint, fmtNum, titleCase } from "@/lib/format";
 import { ScoreRing, stagger } from "@/components/ui/primitives";
 import IntentChips from "./IntentChips";
+import { ProgramPanel } from "@/components/program/SpaceProgram";
 
 type Props = {
   result: SearchResponse;
@@ -15,7 +16,10 @@ type Props = {
   onSelect: (c: Candidate) => void;
 };
 
-export const candidateTitle = (c: Candidate) => c.address || `${titleCase(c.building_type) || "Building"} · ${fmtSqft(c.area_sqft)}`;
+export const candidateTitle = (c: Candidate) => c.building_name || c.address || `${titleCase(c.building_type) || "Building"} · ${fmtFootprint(c.area_sqft)}`;
+/** The size line: listed space beats rentable area beats the aerial footprint. */
+export const candidateSize = (c: Candidate) =>
+  c.best_space?.sqft ? `${fmtNum(c.best_space.sqft)} sq ft available` : c.rentable_sqft ? `${fmtNum(c.rentable_sqft)} sq ft rentable` : fmtFootprint(c.area_sqft);
 export const candidateMeta = (c: Candidate) =>
   [c.roof_condition_label && `Roof ${c.roof_condition_label.toLowerCase()}`, c.stories_est != null && `~${c.stories_est} ${c.stories_est === 1 ? "story" : "stories"}`, c.source !== "vexcel" && c.source]
     .filter(Boolean)
@@ -42,7 +46,10 @@ function Card({ c, i, hovered, onHover, onSelect, compact = false }: { c: Candid
           <span className="font-mono text-[10px] text-slate-500">{String(i + 1).padStart(2, "0")}</span>
           <span className="truncate text-[13px] font-medium text-slate-100">{candidateTitle(c)}</span>
         </div>
-        <div className="truncate text-[11px] text-slate-400">{candidateMeta(c) || fmtSqft(c.area_sqft)}</div>
+        <div className="truncate text-[11px] text-slate-400">
+          {c.space_count ? <span className="mr-1 rounded bg-emerald-400/15 px-1 text-[10px] font-semibold text-emerald-200">For lease</span> : null}
+          {[candidateSize(c), candidateMeta(c)].filter(Boolean).join(" · ")}
+        </div>
       </div>
       <ChevronRight size={15} className="shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-300" />
     </motion.button>
@@ -82,6 +89,11 @@ export default function CandidateRail({ result, hoveredId, onHover, onSelect }: 
           <IntentChips result={result} />
         </div>
         <motion.div variants={stagger.container} initial="hidden" animate="show" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
+          {result.program && (
+            <div className="-mt-3 mb-2">
+              <ProgramPanel program={result.program} />
+            </div>
+          )}
           {cands.map((c, i) => (
             <Card key={c.id} c={c} i={i} hovered={hoveredId === c.id} onHover={onHover} onSelect={onSelect} />
           ))}

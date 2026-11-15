@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from config import FIXTURES_DIR, roof_condition_labels, settings
-from services.geo import centroid, haversine_m, parse_wkt, property_id
+from services.geo import area_sqft, centroid, haversine_m, parse_wkt, property_id
 
 DEMO_FIXTURE = FIXTURES_DIR / "vexcel_houston_demo.json"
 _mem_cache: dict[str, tuple[float, Any]] = {}
@@ -132,6 +132,8 @@ def summarize_feature(feature: dict, source: str = "vexcel") -> dict:
         "parcel": parcel,
         "building_type": s.get("building-type.class"),
         "area_sqft": round(s["footprint.area"]) if isinstance(s.get("footprint.area"), (int, float)) else None,
+        "floor_area_est_sqft": round(s["footprint.area"] * stories) if isinstance(s.get("footprint.area"), (int, float)) and (stories := stories_estimate(s)) else None,
+        "parcel_sqft": area_sqft(parcel),
         "roof_condition": cond,
         "roof_condition_label": roof_condition_labels().get(int(cond)) if isinstance(cond, (int, float)) else None,
         "stories_est": stories_estimate(s),
@@ -160,10 +162,14 @@ def key_facts(feature: dict | None) -> list[dict]:
     p = feature.get("properties", {})
     s = primary_structure(feature) or {}
     cond = s.get("roof-characteristics.condition.precise-value") or s.get("roof-characteristics.condition")
-    label = roof_condition_labels().get(int(cond)) if isinstance(cond, (int, float)) else None
+    # Label from the nearest class (3.6 -> 4 Good), the same class Vexcel reports and the candidate tile shows.
+    label = roof_condition_labels().get(max(1, min(5, round(cond)))) if isinstance(cond, (int, float)) else None
+    paved = p.get("hardscapes.area")
     facts = [
         ("Building", "Building type", _fmt(s.get("building-type.class")), f"Vexcel AI confidence {s.get('building-type.score')}" if s.get("building-type.score") else None),
-        ("Building", "Footprint area", _fmt(s.get("footprint.area"), " sq ft"), None),
+        ("Building", "Building footprint", _fmt(s.get("footprint.area"), " sq ft"), "Outline of the whole building seen from above (about one floor). Not the lot, and not the space you would lease."),
+        ("Building", "Est. total floor area", _fmt(round(s["footprint.area"] * stories_estimate(s)) if isinstance(s.get("footprint.area"), (int, float)) and stories_estimate(s) else None, " sq ft"), "Footprint × estimated stories (rough)"),
+        ("Site", "Lot (parcel) area", _fmt(area_sqft(feature.get("geometry")), " sq ft"), "The whole property: building plus parking, paving and open land"),
         ("Building", "Roof height", _fmt(s.get("roof-characteristics.height"), " ft"), "Calculated from elevation data"),
         ("Building", "Estimated stories", _fmt(stories_estimate(s)), "Roof height ÷ ~13 ft per story (estimate)"),
         ("Building", "Structures on parcel", _fmt(p.get("structure.count")), None),
@@ -174,9 +180,10 @@ def key_facts(feature: dict | None) -> list[dict]:
         ("Roof", "Structural damage", "Detected" if s.get("roof-defects.structural-damage.detected") else "None detected", None),
         ("Rooftop equipment", "AC units detected", _fmt(s.get("roof-objects.ac-unit.count")), "Detected in imagery; units can be hidden, ground-mounted or interior"),
         ("Rooftop equipment", "Roof vents", _fmt(s.get("roof-objects.roof-vent.count")), None),
-        ("Rooftop equipment", "Solar", "Detected" if s.get("roof-objects.solar.value") else "None detected", None),
+        ("Rooftop equipment", "Solar", "Detected" if (s.get("roof-objects.solar-panel-photovoltaic.count") or 0) > 0 else "None detected", None),
         ("Rooftop equipment", "Skylights", _fmt(s.get("roof-objects.skylight.count")), None),
-        ("Site", "Paved (hardscape) area", _fmt(p.get("hardscapes.area"), " sq ft"), "~300–350 sq ft per parking space incl. aisles"),
+        ("Site", "Paved (hardscape) area", _fmt(paved, " sq ft") if isinstance(paved, (int, float)) and paved >= 100 else ("None detected" if isinstance(paved, (int, float)) else "—"),
+         "~300–350 sq ft per parking space incl. aisles" + ("; under 100 sq ft is a detection artefact, not a lot (structured or street parking is not counted)" if isinstance(paved, (int, float)) and paved < 100 else "")),
         ("Site", "Vehicles on parcel", _fmt(p.get("vehicles.count")), "Count at image capture time"),
         ("Site", "Tree cover", _fmt(p.get("parcel-tree-cover.percent"), "%"), None),
         ("Imagery", "Collection", _fmt(p.get("metadata.collection")), None),
@@ -201,7 +208,7 @@ FIELD_NOTES: dict[str, str] = {
     "roof-objects.roof-vent.count": "Small roof penetrations (plumbing/exhaust vents). Many vents suggest existing plumbing/exhaust paths but do not identify kitchen hood exhaust.",
     "roof-characteristics.shape.value": "Flat roofs make it easier to curb-mount new HVAC units and route kitchen exhaust.",
     "roof-characteristics.height": "Calculated roof height above ground (ft). Divide by ~13 ft for commercial stories (estimate).",
-    "footprint.area": "Footprint of the whole building (sq ft). A tenant usually leases only part of a large or multi-story building.",
+    "footprint.area": "Footprint of the whole building (sq ft): its outline seen from above, about one floor. It is NOT the parcel/lot and NOT the leasable space; a tenant usually leases only part of a large or multi-story building.",
     "hardscapes.area": "Paved area on the parcel (sq ft): driveways, lots, walks. ~300-350 sq ft per parking space incl. aisles; not all paving is parking.",
     "vehicles.count": "Vehicles visible on the parcel at capture time: a proxy for parking use/activity, not capacity.",
     "building-type.class": "AI land-use class of the structure (commercial, single_family, condo_apartment, multiple_family...).",

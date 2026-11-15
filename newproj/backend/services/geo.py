@@ -37,6 +37,23 @@ def outer_ring(geom: dict | None) -> list[list[float]]:
     return []
 
 
+def area_sqft(geom: dict | None) -> float | None:
+    """Area of a Polygon/MultiPolygon in sq ft (local equirectangular projection; fine at parcel scale)."""
+    if not geom or geom.get("type") not in {"Polygon", "MultiPolygon"}:
+        return None
+    polys = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+    total = 0.0
+    for poly in polys:
+        ring = poly[0] if poly else []
+        if len(ring) < 3:
+            continue
+        lat0 = sum(p[1] for p in ring) / len(ring)
+        kx, ky = 111_320 * math.cos(math.radians(lat0)), 110_540
+        pts = [(x * kx, y * ky) for x, y in ring]
+        total += abs(sum(pts[i][0] * pts[i - 1][1] - pts[i - 1][0] * pts[i][1] for i in range(len(pts)))) / 2
+    return round(total * 10.7639) if total else None
+
+
 def centroid(geom: dict | None) -> tuple[float, float] | None:
     """Rough centroid (lat, lon) as the vertex average of the outer ring."""
     ring = outer_ring(geom)

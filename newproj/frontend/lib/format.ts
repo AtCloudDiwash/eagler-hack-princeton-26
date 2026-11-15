@@ -16,6 +16,8 @@ export const fmtNum = (n: number | null | undefined, digits = 0) =>
   n == null || !Number.isFinite(n) ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: digits });
 
 export const fmtSqft = (n: number | null | undefined) => (n == null ? "—" : `${fmtNum(n)} sq ft`);
+/** Vexcel/OSM `area_sqft` is the BUILDING footprint (outline from above, ~one floor), not the lot or a suite. */
+export const fmtFootprint = (n: number | null | undefined) => (n == null ? "size unknown" : `${fmtNum(n)} sq ft footprint`);
 
 export const fmtDistance = (m: number | null | undefined) =>
   m == null ? "—" : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;

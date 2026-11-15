@@ -1,7 +1,7 @@
 """Non-Vexcel data sources, all keyless except Census ACS:
   - OpenStreetMap Nominatim: geocoding + reverse geocoding (fair use: <= 1 request/second)
   - OpenStreetMap Overpass: nearby places (competitors, demand generators, transit, parking)
-  - US Census geocoder (tract lookup, keyless) + ACS 5-year API (needs a free CENSUS_API_KEY)
+  - US Census geocoder (tract lookup + 2020 tract population/density, keyless) + ACS 5-year API (needs a free CENSUS_API_KEY)
 Results are cached in SQLite (OSM/Census data are openly licensed).
 """
 from __future__ import annotations
@@ -39,14 +39,14 @@ async def _nominatim(path: str, params: dict) -> Any:
 
 
 async def geocode(text: str) -> dict | None:
-    key = f"geocode:{text.lower().strip()}"
+    key = f"geocode2:{text.lower().strip()}"
     if (hit := db.cache_get(key, 7 * 86400)) is not None:
         return hit or None
     hits = await _nominatim("search", {"q": text, "limit": 1, "countrycodes": "us", "addressdetails": 1})
     result = None
     if hits:
         h = hits[0]
-        result = {"name": h.get("display_name", text).split(",")[0], "display_name": h.get("display_name"), "lat": float(h["lat"]), "lon": float(h["lon"]), "type": h.get("type")}
+        result = {"name": h.get("display_name", text).split(",")[0], "display_name": h.get("display_name"), "lat": float(h["lat"]), "lon": float(h["lon"]), "type": h.get("type"), "addresstype": h.get("addresstype")}
     db.cache_set(key, result or {})
     return result
 
@@ -143,6 +143,8 @@ async def _fetch_places(lat: float, lon: float, radius_m: int) -> list[dict]:
             "distance_m": 0,
             "brand": tags.get("brand"),
             "cuisine": tags.get("cuisine"),
+            "opening_hours": tags.get("opening_hours"),
+            "healthcare_speciality": tags.get("healthcare:speciality"),
         })
     return places
 
@@ -234,9 +236,32 @@ ACS_VARS = {
 }
 
 
+SQ_METERS_PER_SQ_MILE = 2_589_988.11
+
+
+def _tract_counts(t: dict) -> dict:
+    """2020 decennial counts on a Census2020-vintage tract: population, housing units, land area and density."""
+    def num(k: str) -> float | None:
+        try:
+            return float(t[k])
+        except (KeyError, TypeError, ValueError):
+            return None
+    pop, hu, land = num("POP100"), num("HU100"), num("AREALAND")
+    out: dict[str, Any] = {}
+    if pop is not None:
+        out["population_2020"] = int(pop)
+    if hu is not None:
+        out["housing_units_2020"] = int(hu)
+    if land:
+        out["land_area_sq_mi"] = round(land / SQ_METERS_PER_SQ_MILE, 3)
+        if pop is not None:
+            out["density_per_sq_mi"] = round(pop / (land / SQ_METERS_PER_SQ_MILE))
+    return out
+
+
 async def census_profile(lat: float, lon: float) -> dict:
     """Census tract for the point and, with CENSUS_API_KEY, ACS 5-year demographics."""
-    key = f"census:{lat:.4f},{lon:.4f}:{bool(settings.census_api_key)}"
+    key = f"census2:{lat:.4f},{lon:.4f}:{bool(settings.census_api_key)}"
     if (hit := db.cache_get(key, 30 * 86400)) is not None:
         return hit
     out: dict[str, Any] = {"source": "US Census Bureau", "tract": None, "acs": None, "status": "unavailable", "note": ""}
@@ -244,12 +269,13 @@ async def census_profile(lat: float, lon: float) -> dict:
         async with httpx.AsyncClient(timeout=15, headers=HEADERS) as client:
             res = await client.get(
                 "https://geocoding.geo.census.gov/geocoder/geographies/coordinates",
-                params={"x": lon, "y": lat, "benchmark": "Public_AR_Current", "vintage": "Current_Current", "layers": "Census Tracts", "format": "json"},
+                # Census2020 vintage: same 2020 tract boundaries ACS uses, plus 2020 counts (POP100, HU100, AREALAND), keyless
+                params={"x": lon, "y": lat, "benchmark": "Public_AR_Current", "vintage": "Census2020_Current", "layers": "Census Tracts", "format": "json"},
             )
             tracts = res.json()["result"]["geographies"].get("Census Tracts") or []
             if tracts:
                 t = tracts[0]
-                out["tract"] = {"state": t["STATE"], "county": t["COUNTY"], "tract": t["TRACT"], "name": t["NAME"]}
+                out["tract"] = {"state": t["STATE"], "county": t["COUNTY"], "tract": t["TRACT"], "name": t["NAME"], **_tract_counts(t)}
             if out["tract"] and settings.census_api_key:
                 t = out["tract"]
                 res = await client.get(
@@ -263,7 +289,10 @@ async def census_profile(lat: float, lon: float) -> dict:
                 out["status"] = "used"
                 out["note"] = "ACS 2019-2023 5-year estimates for the census tract"
             elif out["tract"]:
-                out["note"] = "Tract identified; demographics need a free CENSUS_API_KEY (api.census.gov/data/key_signup.html)"
+                t = out["tract"]
+                counts = (f"2020 Census: {t['population_2020']:,} residents" + (f" ({t['density_per_sq_mi']:,.0f} per sq mi)" if t.get("density_per_sq_mi") is not None else "") + "; "
+                          if t.get("population_2020") is not None else "")
+                out["note"] = f"Tract identified; {counts}income and age need a free CENSUS_API_KEY (api.census.gov/data/key_signup.html)"
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as err:
         out["note"] = f"Census lookup failed: {err}"
     db.cache_set(key, out)
