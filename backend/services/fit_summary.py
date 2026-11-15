@@ -55,7 +55,7 @@ def tiles(prop: dict, feature: dict | None, intent: Intent) -> list[dict]:
         name = str(best.get("suite") or "")
         suite = f"Suite {name}" if name and len(name) <= 8 else "Listed suite"  # CoStar suite names can be long ("Open-Plan for +15")
         out.append(_tile("space", "Suggested space", "space", f"{best['sqft']:,.0f} sq ft", sub=suite, hint=
-                         (f"Suite {name}: " if name and suite == "Listed suite" else "") + f"the CoStar listing here closest to your ~{target:,} sq ft ({best.get('use') or 'use not stated'}" + (f", available {str(best['available_on'])[:7]}" if best.get("available_on") else "") + ").",
+                         (f"Suite {name}: the" if name and suite == "Listed suite" else "The") + f" CoStar listing here closest to your ~{target:,} sq ft ({best.get('use') or 'use not stated'}" + (f", available {str(best['available_on'])[:7]}" if best.get("available_on") else "") + ").",
                          source="CoStar listing", status="good"))
     elif fields.get("space_count"):
         out.append(_tile("space", "Suggested space", "space", "None fit", sub=f"{fields['space_count']} listed, none {lo:,}–{hi:,} sq ft", hint=f"CoStar lists {fields['space_count']} space(s) here ({fields.get('available_sqft') or 0:,.0f} sq ft), none in your size range; ask about dividing or combining.", source="CoStar listings", status="warn"))

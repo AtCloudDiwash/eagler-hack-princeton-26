@@ -431,3 +431,21 @@ def test_panel_tiles_answer_the_users_request(monkeypatch: pytest.MonkeyPatch):
     assert (by_id["street"]["value"], by_id["street"]["sub"]) == ("Yes", "1st floor") and by_id["budget"]["label"] == "Your budget"
     assert all(len(r["value"]) <= 12 for r in rows)  # headlines fit the card; context goes in `sub`
     assert by_id["prior"]["missing"] and all(r["value"] for r in rows)
+
+
+def test_a_failed_scan_lookup_retries_instead_of_unlinking(monkeypatch: pytest.MonkeyPatch):
+    import db
+    import main
+    from services import costar, matterport, scan_identity
+
+    monkeypatch.setattr(costar, "match", lambda *a, **k: {"matterport_scans": [{"id": "LobbyScan01", "caption": "Lobby"}]})
+    monkeypatch.setattr(db, "save_property", lambda prop, raw: None)
+    monkeypatch.setattr(matterport, "has_credentials", lambda: True)
+
+    async def slow(p: dict, **k: Any) -> dict:
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(scan_identity, "choose_scan", slow)
+    prop = {"id": "x", "lat": 29.75, "lon": -95.36, "matterport_model_id": "LobbyScan01"}
+    out = asyncio.run(main._replace_amenity_scan(dict(prop), None))
+    assert out["matterport_model_id"] == "LobbyScan01" and not out.get("matterport_lookup_done")

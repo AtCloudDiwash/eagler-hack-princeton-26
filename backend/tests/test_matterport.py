@@ -598,3 +598,11 @@ def test_apartment_unit_tours_are_never_the_commercial_space():
     assert scan_identity.default_scan(rec) is None
     unit = scan_identity.assess("x", {"name": "1BR, 1BA - 1x1 Traditional", "lat": 29.85058, "lon": -95.53322}, PROP)
     assert unit["verdict"] == "residential" and "apartment" in unit["reason"]
+
+
+def test_search_results_shape_summarizes():
+    """Model search results give floors as {"count": n} and no processing date; summarize must cope."""
+    core = {"id": "x", "name": "Suite 1080", "state": "active", "floors": {"count": 2}, "address": {"address": "1301 Fannin"}, "geolocation": {"lat": "29.75", "long": "-95.36"}}
+    ident = matterport.summarize({"model_id": "x", "core": core})["identity"]
+    assert ident["floor_count"] == 2 and ident["name"] == "Suite 1080" and ident["lat"] == 29.75
+    assert "floors { count }" in scan_identity.SEARCH_QUERY and "floors { id }" not in scan_identity.SEARCH_QUERY

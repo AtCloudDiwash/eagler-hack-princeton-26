@@ -96,11 +96,13 @@ async def _replace_amenity_scan(prop: dict, raw: dict | None) -> dict:
     found = None
     if matterport.has_credentials():
         try:
-            r = await asyncio.wait_for(scan_identity.choose_scan({**prop, "matterport_model_id": probe}), timeout=6)
+            r = await asyncio.wait_for(scan_identity.choose_scan({**prop, "matterport_model_id": probe}), timeout=12)
             if r.get("switched") and r.get("verdict") in ("verified", "likely"):
                 found = r
         except Exception as err:  # noqa: BLE001 - the panel must open regardless
-            log.warning("scan lookup failed for %s: %s", prop.get("id"), err)
+            # A failed or timed-out lookup is not "nothing found": leave the building as it is and retry next time.
+            log.warning("scan lookup failed for %s (will retry): %s", prop.get("id"), err)
+            return prop
     if found:
         out.update(matterport_model_id=found["model_id"], matterport_auto_model_id=found["model_id"],
                    matterport_note=f"Auto-linked '{found.get('name')}': {found['reason'].split(' The linked scan')[0]}")

@@ -383,7 +383,8 @@ def summarize(raw: dict) -> dict:
     ins = raw.get("insights") or {}
     pi_rooms = {r["id"]: r for r in ins.get("rooms") or [] if r.get("id")}
     floor_dims = {f["id"]: f.get("dimensionEstimates") or {} for f in ins.get("floors") or [] if f.get("id")}
-    floors = sorted(core.get("floors") or [], key=lambda f: f.get("sequence") or 0)
+    floor_list = core.get("floors") if isinstance(core.get("floors"), list) else []  # search results give {"count": n}
+    floors = sorted(floor_list, key=lambda f: f.get("sequence") or 0)
     floor_label = {f["id"]: f.get("label") or f"Floor {(f.get('sequence') or 0) + 1}" for f in floors}
 
     rooms, hidden = [], 0
@@ -457,7 +458,8 @@ def summarize(raw: dict) -> dict:
             "presented_by": (core.get("publication") or {}).get("presentedBy"),
             "captured": _capture_date(core),
             "modified": (core.get("modified") or "")[:10] or None,
-            "floor_count": len(core.get("floors") or []) or None,
+            # full model: a list of floors; search results: {"count": n}
+            "floor_count": (core["floors"].get("count") if isinstance(core.get("floors"), dict) else len(core.get("floors") or [])) or None,
         },
         "insights_available": bool(ins),
         "insights_note": raw.get("insights_note"),

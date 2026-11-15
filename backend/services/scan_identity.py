@@ -51,7 +51,7 @@ _RANK = {"verified": 0, "likely": 1, "unknown": 2, "amenity": 3, "residential": 
 
 SEARCH_QUERY = """
 query TurnkeyScanSearch($q: String!) {
-  models(query: $q, pageSize: 10) { results { id name state created modified floors { id } address { address locality administrativeArea postalCode } geolocation { lat long } } }
+  models(query: $q, pageSize: 10) { results { id name state floors { count } address { address locality administrativeArea postalCode } geolocation { lat long } } }
 }
 """
 
@@ -276,9 +276,15 @@ async def _best_alternative(prop: dict, linked: str, candidates: list[dict], sea
         log.info("scan identity batch failed: %s", err)
     if search_address:
         try:
-            for mid, ident in (await search_by_address(prop)).items():
-                if mid != linked and mid not in identities:
-                    identities[mid] = ident
+            found = {mid: ident for mid, ident in (await search_by_address(prop)).items() if mid != linked and mid not in identities}
+            # Search results carry no capture date (only the full model does): re-read them with the identity query.
+            try:
+                full = await fetch_identities(list(found)[:MAX_ALTERNATIVES])
+            except (httpx.HTTPError, matterport.MatterportError) as err:
+                log.info("identity re-read for search hits failed: %s", err)
+                full = {}
+            for mid, ident in found.items():
+                identities[mid] = full.get(mid) or ident
         except (httpx.HTTPError, matterport.MatterportError) as err:
             log.info("scan address search failed: %s", err)
     assessed = [assess(mid, ident, prop) for mid, ident in identities.items() if ident]
@@ -309,7 +315,8 @@ async def choose_scan(prop: dict, candidates: list | None = None, *, allow_switc
             log.warning("choose_scan failed: %s", err)
             best, checked = None, 0
         hit = {"best": best, "checked": checked}
-        db.cache_set(key, hit)
+        if checked:  # a search that failed or reached no scan is not "nothing found": don't remember it
+            db.cache_set(key, hit)
     out["alternatives_checked"] = hit["checked"]
     best = hit["best"]
     if not best:
