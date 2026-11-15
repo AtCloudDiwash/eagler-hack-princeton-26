@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { BusinessTypeInfo, Candidate, ChatTurn, Neighborhood, PropertyDetail, SearchResponse } from "@/lib/api-types";
+import type { BusinessTypeInfo, Candidate, ChatTurn, Neighborhood, PropertyDetail, SearchResponse, Place, MapAction } from "@/lib/api-types";
 import { buildingColor, fmtDistance, fmtFootprint } from "@/lib/format";
 import { heightFor, type LngLat } from "@/lib/geo";
 import { useMedia } from "@/lib/useMedia";
@@ -43,7 +43,7 @@ function foundMessage(r: SearchResponse): string {
 /** The matches the agent can talk about (it never sees more than this). */
 function matchSummary(r: SearchResponse): Record<string, unknown>[] {
   return r.candidates.slice(0, 12).map((c) => ({
-    title: candidateTitle(c), fit: c.match_score, building_type: c.building_type, stories: c.stories_est,
+    id: c.id, lat: c.lat, lon: c.lon, title: candidateTitle(c), fit: c.match_score, building_type: c.building_type, stories: c.stories_est,
     listed_space: c.best_space ? { suite: c.best_space.suite, sqft: c.best_space.sqft, floor: c.best_space.floor, rent_per_sqft_yr: c.best_space.rent_per_sqft_yr } : null,
     spaces_on_market: c.space_count, reasons: c.match_reasons.slice(0, 3),
   }));
@@ -72,6 +72,11 @@ export default function DiscoveryPage() {
   const [neighborhood, setNeighborhood] = useState<Neighborhood | null>(null);
   const [nbLoading, setNbLoading] = useState(false);
   const [nbError, setNbError] = useState<string | null>(null);
+  const [chatPlaces, setChatPlaces] = useState<Place[] | null>(null);
+  const [chatAreas, setChatAreas] = useState<GeoJSON.FeatureCollection | undefined>();
+  const [chatFit, setChatFit] = useState<{ points: LngLat[]; key: string } | null>(null);
+  const [zoomCommand, setZoomCommand] = useState<{ delta: number; key: string } | null>(null);
+  const mapView = useRef<{ lat: number; lon: number; zoom: number } | null>(null);
   const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null);
 
   const [requirements, setRequirements] = useState("");
@@ -95,6 +100,9 @@ export default function DiscoveryPage() {
 
   const selectCandidate = useCallback(
     (c: Candidate, opts?: { radius?: number }) => {
+      setChatPlaces(null);
+      setChatAreas(undefined);
+      setChatFit(null);
       setSelected(c);
       setDetail(null);
       setDetailError(null);
@@ -162,6 +170,31 @@ export default function DiscoveryPage() {
     }
   }
 
+  function applyMapAction(action: MapAction) {
+    const key = `chat-${Date.now()}`;
+    if (action.kind === "zoom") setZoomCommand({ delta: action.zoom_delta ?? 0, key });
+    if (action.layer) setLayer(action.layer);
+    if (action.tilt != null) setTilt(action.tilt);
+    if (action.kind === "clear" || action.kind === "fit") {
+      setChatPlaces(null); setChatAreas(undefined); setVisibleGroups(null); setChatFit(null);
+    }
+    if (action.kind === "fit" && result) setChatFit({ points: result.candidates.map((c) => [c.lon, c.lat]), key });
+    if (action.places) {
+      setChatPlaces(action.places); setChatAreas(undefined);
+      setVisibleGroups(new Set(action.groups));
+      setChatFit({ points: action.places.map((p) => [p.lon, p.lat]), key });
+    }
+    if (action.areas) {
+      setChatAreas(action.areas); setChatPlaces([]); setVisibleGroups(null);
+      const points = action.areas.features.flatMap((f) => f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.flatMap((p) => p[0]) : []) as LngLat[];
+      setChatFit({ points, key });
+    }
+    if (action.focus) {
+      setChatFit(null);
+      setFocus({ ...action.focus, zoom: 17, key });
+    }
+  }
+
   /** A follow-up on the current results: the agent changes the search (and it re-runs) or answers a question. */
   async function runRefine(message: string) {
     if (!result) return;
@@ -174,9 +207,12 @@ export default function DiscoveryPage() {
     setRefining(true);
     setSearchError(null);
     try {
-      const r = await api.refine({ intent: result.intent, message, history, matches: matchSummary(result) }, ctrl.signal);
+      const center = selected ? { lat: selected.lat, lon: selected.lon } : mapView.current ?? result.location ?? undefined;
+      const r = await api.refine({ intent: result.intent, message, history, matches: matchSummary(result), property_id: selected?.id, center }, ctrl.signal);
+      if (r.map_action) applyMapAction(r.map_action);
       const changes = r.changes.length ? r.changes : undefined;
       if (r.result) {
+        setChatPlaces(null); setChatAreas(undefined); setChatFit(null); setVisibleGroups(null);
         setSelected(null);
         setDetail(null);
         setNeighborhood(null);
@@ -269,6 +305,7 @@ export default function DiscoveryPage() {
     setRequirements("");
     setAnalyzeError(null);
     setAnalyzing(false);
+    setChatPlaces(null); setChatAreas(undefined); setChatFit(null);
     setRadius(400);
     setFitKey(null);
     setRiseKey(null);
@@ -303,7 +340,11 @@ export default function DiscoveryPage() {
         layer={layer}
         tilt={tilt}
         buildings={buildings}
-        places={selected ? neighborhood?.places : undefined}
+        places={chatPlaces ?? (selected ? neighborhood?.places : undefined)}
+        searchAreas={chatAreas}
+        zoomCommand={zoomCommand}
+        onViewChange={(view) => { mapView.current = view; }}
+        highlightGroups={chatPlaces ? [...new Set(chatPlaces.map((p) => p.group))] : undefined}
         visibleGroups={visibleGroups}
         ring={selected ? { center: [selected.lon, selected.lat], radius, color: "#a78bfa" } : null}
         ringKey={selected?.id}
@@ -317,9 +358,9 @@ export default function DiscoveryPage() {
           if (c) selectCandidate(c);
         }}
         focus={focus}
-        fit={fitKey && !selected ? { points: fitPoints, key: fitKey } : null}
+        fit={chatFit ?? (fitKey && !selected ? { points: fitPoints, key: fitKey } : null)}
         padding={padding}
-        markers={
+        markers={[...(chatPlaces ?? []).slice(0, 8).map((p) => ({ id: `chat-${p.id}`, lon: p.lon, lat: p.lat, node: <div className="glass rounded-lg px-2 py-1 text-xs text-slate-100">{p.name || p.group.replaceAll("_", " ")} · {fmtDistance(p.distance_m)}</div> })), ...(
           hovered
             ? [
                 {
@@ -339,7 +380,7 @@ export default function DiscoveryPage() {
                   ),
                 },
               ]
-            : []
+            : [])]
         }
       />
 

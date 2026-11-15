@@ -167,8 +167,20 @@ export type SearchResponse = {
 export type ChatTurn = { role: "user" | "agent"; text: string; changes?: string[]; failed?: boolean };
 
 /** POST /api/search/refine: a follow-up either changes the search (re-run, new results) or is answered. */
+export type MapAction = {
+  kind: "places" | "areas" | "focus" | "zoom" | "layer" | "tilt" | "fit" | "clear";
+  places?: Place[];
+  groups?: string[];
+  areas?: GeoJSON.FeatureCollection;
+  focus?: { lat: number; lon: number };
+  zoom_delta?: number;
+  layer?: "aerial" | "map";
+  tilt?: boolean;
+};
+
 export type RefineResponse = {
-  action: "refine" | "answer";
+  action: "refine" | "answer" | "map";
+  map_action?: MapAction | null;
   reply: string;
   changes: string[]; // what changed in the search ("60 seats", "+ On-site parking (must)", "Budget $8,000 monthly")
   result: SearchResponse | null; // new results when action === "refine"

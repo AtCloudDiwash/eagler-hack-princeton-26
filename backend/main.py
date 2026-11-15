@@ -121,6 +121,10 @@ async def refine_search(req: RefineRequest) -> RefineResponse:
 
     if not req.message.strip():
         raise HTTPException(400, "Message is empty")
+    from services import discovery_chat
+    map_reply = await discovery_chat.respond(req)
+    if map_reply is not None:
+        return map_reply
     out = await refine.refine(req.intent, req.message.strip(), req.history, req.matches)
     result = await discovery.search(req.message, intent=out["intent"]) if out["action"] == "refine" else None
     return RefineResponse(action=out["action"], reply=out["reply"], changes=out["changes"], result=result)

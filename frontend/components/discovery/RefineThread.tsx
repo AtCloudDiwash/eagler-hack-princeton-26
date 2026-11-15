@@ -59,7 +59,7 @@ export default function RefineThread({ turns, thinking, onNewSearch }: Props) {
               )}
               {thinking && (
                 <p className="flex items-center gap-2 text-[12px] text-slate-500">
-                  <Spinner className="h-3 w-3" /> Updating your search…
+                  <Spinner className="h-3 w-3" /> Working on your request…
                 </p>
               )}
               <div ref={endRef} />

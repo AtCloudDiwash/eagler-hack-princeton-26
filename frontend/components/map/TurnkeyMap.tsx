@@ -28,6 +28,9 @@ type Props = {
   layer: BaseLayer;
   buildings?: MapBuilding[];
   places?: Place[];
+  searchAreas?: FC;
+  zoomCommand?: { delta: number; key: string } | null;
+  onViewChange?: (view: { lat: number; lon: number; zoom: number }) => void;
   visibleGroups?: Set<string> | null; // null = all
   highlightGroups?: string[]; // glowing groups (agent is looking at them)
   ring?: MapRing | null;
@@ -110,6 +113,10 @@ export default function TurnkeyMap(p: Props) {
   }, [p.parcel]);
 
   // ---------- camera
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && loaded && p.zoomCommand) map.easeTo({ zoom: Math.max(2, Math.min(21, map.getZoom() + p.zoomCommand.delta)), duration: 600 });
+  }, [p.zoomCommand, loaded]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded || !p.focus) return;
@@ -227,6 +234,7 @@ export default function TurnkeyMap(p: Props) {
       maxPitch={75}
       style={{ position: "absolute", inset: 0 }}
       interactiveLayerIds={p.onSelect ? ["tk-cand-ext"] : []}
+      onMove={(e) => p.onViewChange?.({ lat: e.viewState.latitude, lon: e.viewState.longitude, zoom: e.viewState.zoom })}
       onMouseMove={p.onHover ? onMove : undefined}
       onMouseLeave={() => p.onHover?.(null)}
       onClick={onClick}
@@ -275,6 +283,10 @@ export default function TurnkeyMap(p: Props) {
         <Layer id="tk-nb-ext" type="fill-extrusion" paint={{ "fill-extrusion-color": ["get", "color"], "fill-extrusion-height": ["get", "h"], "fill-extrusion-opacity": 0.28 }} />
       </Source>
 
+      <Source id="tk-search-areas" type="geojson" data={p.searchAreas ?? EMPTY_FC}>
+        <Layer id="tk-search-areas-fill" type="fill" paint={{ "fill-color": "#fbbf24", "fill-opacity": 0.2 }} />
+        <Layer id="tk-search-areas-line" type="line" paint={{ "line-color": "#fbbf24", "line-width": 2 }} />
+      </Source>
       <Source id="tk-places" type="geojson" data={places}>
         <Layer id="tk-places-glow" type="circle" filter={["==", ["get", "hl"], 1]} paint={{ "circle-color": PLACE_COLOR, "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 7, 18, 16], "circle-blur": 0.9, "circle-opacity": 0.5 }} />
         <Layer
