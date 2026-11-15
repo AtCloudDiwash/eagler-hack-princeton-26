@@ -25,7 +25,8 @@ class Intent(BaseModel):
     seats: int | None = None
     sqft: int | None = None
     requirements: list[str] = []
-    budget: Budget | None = None
+    budget: Budget | None = None  # the most recently stated budget (primary)
+    budgets: list[Budget] = []  # every stated budget, one per period (e.g. $9k/month AND $80k upfront)
     parser: Literal["llm", "rules"] = "rules"
 
 

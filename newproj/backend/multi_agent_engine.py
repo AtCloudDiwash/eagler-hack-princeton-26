@@ -178,9 +178,9 @@ def merge_metrics(ctx: RunContext, reports: dict[str, AgentReport], log_: EventL
     est = _evidence_data(ctx, "estimate_costs")
     if est:
         eid, data = est[-1]
-        if ctx.intent.get("budget"):
-            check = cost_engine.budget_check(data, ctx.intent["budget"], ctx.intent["business_type"])
-            override("occupancy_cost", cost_engine.budget_status(check), f"the estimate is '{check['status']}' your stated budget", [eid])
+        if cost_engine.user_budgets(ctx.intent):
+            check = cost_engine.worst(cost_engine.budget_checks(data, ctx.intent, ctx.intent["business_type"]))
+            override("occupancy_cost", cost_engine.budget_status(check), f"the estimate is '{check['status']}' your stated {check['period']} budget", [eid])
         else:
             override("occupancy_cost", cost_engine.cost_status(data), "the cost engine benchmark says otherwise", [eid])
         if "conversion_risk" in ctx.business["metrics"]:
@@ -502,7 +502,10 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
 
         cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
-        cost_public["budget"] = cost_engine.budget_check(cost_data, ctx.intent.get("budget"), ctx.intent["business_type"])
+        checks = cost_engine.budget_checks(cost_data, ctx.intent, ctx.intent["business_type"])
+        primary = ctx.intent.get("budget")
+        cost_public["budget"] = next((c for c in checks if primary and c["period"] == primary["period"]), checks[0])
+        cost_public["budgets"] = checks  # every stated budget (e.g. monthly and upfront), each checked
         req_checks = await requirement_checks(ctx)
         if req_checks:
             summary = ", ".join(f"{c['requirement']}: {c['status']}" for c in req_checks)

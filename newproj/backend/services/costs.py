@@ -124,6 +124,22 @@ def budget_check(costs: dict, budget: dict | None, business_type: str) -> dict:
     return {"source": source, "period": period, "amount": amount, "compare_low": low, "compare_high": high, "status": status, "note": note}
 
 
+def user_budgets(intent: dict) -> list[dict]:
+    """Every budget the user stated (one per period), falling back to the single primary budget."""
+    return list(intent.get("budgets") or ([intent["budget"]] if intent.get("budget") else []))
+
+
+def budget_checks(costs: dict, intent: dict, business_type: str) -> list[dict]:
+    """One check per stated budget; with none stated, a single check against a typical budget."""
+    budgets = user_budgets(intent)
+    return [budget_check(costs, b, business_type) for b in budgets] if budgets else [budget_check(costs, None, business_type)]
+
+
+def worst(checks: list[dict]) -> dict:
+    order = {"over": 0, "partly": 1, "within": 2}
+    return min(checks, key=lambda c: order[c["status"]])
+
+
 def budget_status(check: dict) -> str:
     return {"within": "strong", "partly": "adequate", "over": "weak"}[check["status"]]
 

@@ -43,7 +43,8 @@ export type Intent = {
   seats: number | null;
   sqft: number | null;
   requirements: string[]; // extra needs pulled from the query ("parking", "accessible")
-  budget: Budget | null; // stated in the query ("$8k/month", "budget of $300k"), else null
+  budget: Budget | null; // the most recently stated budget ("$8k/month", "budget of $300k"), else null
+  budgets?: Budget[]; // every stated budget, one per period (e.g. $9k/month AND $80k upfront)
   parser: "llm" | "rules";
 };
 
@@ -197,6 +198,8 @@ export type Costs = {
   monthly_occupancy: { low: number; high: number } | null; // rent + NNN + amortized fit-out
   upfront: { low: number; high: number };
   assumptions: string[];
+  /** Every stated budget checked (same shape as `budget`), e.g. monthly AND upfront. */
+  budgets?: NonNullable<Costs["budget"]>[];
   /** Estimate vs the user's budget, or vs a typical budget for this use + size when none was given. */
   budget?: {
     source: "user" | "typical";

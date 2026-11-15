@@ -27,32 +27,62 @@ REQUIREMENT_WORDS = {
 
 
 _MULT = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}
-_BUDGET_RE = re.compile(
-    r"(?P<cue>budget(?:\s+(?:of|is|around|about))?\s*:?\s*|under\s+|below\s+|up\s+to\s+|max(?:imum)?\s+|less\s+than\s+|no\s+more\s+than\s+)?"
+_MONEY_RE = re.compile(
     r"(?P<dollar>\$)?\s?(?P<num>\d[\d,]*(?:\.\d+)?)\s*(?P<mult>k|m|thousand|million)?\b"
+    r"(?P<unit>\s*(?:dollars?|usd|bucks)\b)?"
     r"(?P<tail>(?:\s*(?:/|per|a|an|each)\s*|\s+)(?P<per>month|mo|monthly|year|yr|annually|annum)\b)?",
     re.I,
 )
+_CUES = ("budget", "under", "below", "max", "up to", "less than", "no more than", "spend", "afford", "within", "cap of", "at most")
+_NOT_MONEY = re.compile(r"\s*-?\s*(?:sq\.?\s*ft|sf\b|square|sqft|seat|seater|cover|people|persons?|employees?|staff|stor(?:y|ies)|floors?|minutes?|mins?\b|km\b|miles?\b|meters?\b|m\b)", re.I)
+
+
+def parse_budgets(text: str) -> list[Budget]:
+    """Every budget stated in the text, at most one per period (a later mention of the same period wins).
+    Money needs a $ sign, a 'dollars'/'USD' unit, 'budget' just before it, or a k/thousand amount after a cue
+    like 'under' / 'max' / 'no more than'. Seats, square feet, distances and staff counts are never money."""
+    found: dict[str, Budget] = {}
+    for m in _MONEY_RE.finditer(text):
+        dollar, unit, mult = m.group("dollar"), m.group("unit"), (m.group("mult") or "").lower()
+        rest = text[m.end("num"):]
+        if not dollar and not unit and _NOT_MONEY.match(rest if not mult else text[m.end("mult"):]):
+            continue
+        if mult == "m" and not dollar and not unit:
+            continue  # "500 m" is a distance, not $500 million
+        before = text[max(0, m.start() - 28): m.start()].lower()
+        is_money = bool(dollar or unit or "budget" in before or (mult and any(c in before for c in _CUES)))
+        if not is_money:
+            continue
+        amount = float(m.group("num").replace(",", "")) * _MULT.get(mult, 1)
+        if amount < 100:
+            continue
+        per = (m.group("per") or "").lower()
+        after = re.split(r"[,;.]| and | but ", text[m.end(): m.end() + 30].lower())[0]  # only words tied to this amount
+        if per.startswith(("y", "ann")) or "per year" in after or "a year" in after:
+            period = "annual"
+        elif any(w in after for w in ("upfront", "up front", "one-time", "one time", "build", "total", "to open")):
+            period = "upfront"
+        elif per.startswith(("mo", "month")) or any(w in after for w in ("monthly", "a month", "per month", "rent")):
+            period = "monthly"
+        else:
+            period = "upfront"
+        found.pop(period, None)  # keep insertion order = order of the latest mention
+        found[period] = Budget(amount=amount, period=period, text=m.group(0).strip())
+    return list(found.values())
 
 
 def parse_budget(query: str) -> Budget | None:
-    """Budget stated in the query ("$8k/month", "budget of $300,000", "under 5000 a month"). Needs a $ sign or
-    a budget cue so seat counts and square footage are never mistaken for money."""
-    for m in _BUDGET_RE.finditer(query):
-        if not (m.group("dollar") or (m.group("cue") and "budget" in m.group("cue").lower())):
-            continue
-        amount = float(m.group("num").replace(",", "")) * _MULT.get((m.group("mult") or "").lower(), 1)
-        per = (m.group("per") or "").lower()
-        after = query[m.end(): m.end() + 30].lower()
-        if per.startswith(("mo", "month")) or "monthly" in after or "rent" in after:
-            period = "monthly"
-        elif per.startswith(("y", "ann")):
-            period = "annual"
-        else:
-            period = "upfront"
-        if amount >= 100:
-            return Budget(amount=amount, period=period, text=m.group(0).strip())
-    return None
+    """The first budget stated in the query (see parse_budgets)."""
+    budgets = parse_budgets(query)
+    return budgets[0] if budgets else None
+
+
+def merge_budgets(earlier: list[Budget], later: list[Budget]) -> list[Budget]:
+    """One budget per period; the later text wins for the same period."""
+    merged = {b.period: b for b in earlier}
+    for b in later:
+        merged[b.period] = b
+    return list(merged.values())
 
 
 def parse_rules(query: str) -> Intent:
@@ -68,6 +98,7 @@ def parse_rules(query: str) -> Intent:
     sqft = re.search(r"(\d[\d,]{2,7})\s*(?:sq\.?\s*ft|sf\b|square\s*feet|sqft)", q)
     loc = re.search(r"\b(?:in|near|around|at)\s+([A-Za-z][A-Za-z .,'-]{1,60}?)(?:[.?!]|$|\s+(?:with|for|that|which|and|under|below)\b)", query)
     reqs = sorted({v for k, v in REQUIREMENT_WORDS.items() if k in q})
+    budgets = parse_budgets(query)
     return Intent(
         business_type=best,
         business_label=types[best]["label"],
@@ -75,7 +106,8 @@ def parse_rules(query: str) -> Intent:
         seats=int(seats.group(1)) if seats else None,
         sqft=int(sqft.group(1).replace(",", "")) if sqft else None,
         requirements=reqs,
-        budget=parse_budget(query),
+        budget=budgets[0] if budgets else None,
+        budgets=budgets,
         parser="rules",
     )
 
@@ -117,8 +149,9 @@ async def parse(query: str) -> Intent:
         seats=out.seats or rules.seats,
         sqft=out.sqft or rules.sqft,
         requirements=_dedupe_requirements([*rules.requirements, *[r.strip() for r in out.requirements if r.strip()][:6]]),
-        budget=(Budget(amount=out.budget_amount, period=out.budget_period or "upfront", text=rules.budget.text if rules.budget else "")
-                if out.budget_amount and out.budget_amount >= 100 else rules.budget),
+        budget=(llm_budget := (Budget(amount=out.budget_amount, period=out.budget_period or "upfront", text=rules.budget.text if rules.budget else "")
+                               if out.budget_amount and out.budget_amount >= 100 else None)) or rules.budget,
+        budgets=merge_budgets([llm_budget] if llm_budget and llm_budget.period not in {b.period for b in rules.budgets} else [], rules.budgets),
         parser="llm",
     )
 
@@ -138,11 +171,19 @@ async def refine(intent: Intent, query: str, extra: str | None) -> Intent:
     extra_rules = parse_rules(extra)
     full = await parse(combine_request(query, extra))  # LLM over the combined text (falls back to rules)
     from_llm = full.parser == "llm"
-    budget = parse_budget(extra) or intent.budget or (full.budget if from_llm else None)
+    base_budgets = intent.budgets or ([intent.budget] if intent.budget else [])
+    extra_budgets = parse_budgets(extra)
+    if not extra_budgets and from_llm and full.budget:
+        # The LLM read a budget from the combined text that isn't one of the search's: it came from the extra text.
+        if not any(b.period == full.budget.period and abs(b.amount - full.budget.amount) < 1 for b in base_budgets):
+            extra_budgets = [full.budget]
+    budgets = merge_budgets(base_budgets, extra_budgets)
+    budget = extra_budgets[-1] if extra_budgets else intent.budget
     return intent.model_copy(update={
         "seats": extra_rules.seats or (full.seats if from_llm and full.seats != intent.seats else None) or intent.seats,
         "sqft": extra_rules.sqft or (full.sqft if from_llm and full.sqft != intent.sqft else None) or intent.sqft,
         "budget": budget,
+        "budgets": budgets,
         "requirements": _dedupe_requirements([*intent.requirements, *full.requirements, *extra_rules.requirements]),
         "parser": "llm" if from_llm else intent.parser,
     })

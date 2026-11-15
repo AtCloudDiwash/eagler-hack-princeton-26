@@ -66,7 +66,8 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     base = (
         f"Assess financial feasibility for: \"{ctx.query}\".\n"
         f"Space need: ~{ctx.target_sqft:,} sq ft ({ctx.target_basis}). Building footprint: {ctx.property.get('area_sqft') or 'unknown'} sq ft.\n"
-        + (f"USER'S BUDGET: ${ctx.intent['budget']['amount']:,.0f} ({ctx.intent['budget']['period']}). Judge feasibility against it.\n" if ctx.intent.get("budget") else "The user did not state a budget; judge against typical budgets for this business.\n")
+        + ("USER'S BUDGET: " + " and ".join(f"${b['amount']:,.0f} {b['period']}" for b in costs.user_budgets(ctx.intent)) + ". Judge feasibility against each.\n"
+           if costs.user_budgets(ctx.intent) else "The user did not state a budget; judge against typical budgets for this business.\n")
         + f""
         f"Findings from other agents (cite their evidence ids when they trigger a cost):\n{upstream}\n\n"
         "Steps: check the rent assumption and available cost items, decide which items the evidence triggers "

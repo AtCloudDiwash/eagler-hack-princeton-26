@@ -370,3 +370,33 @@ def test_visual_matching_reranks_buildings_that_look_right(monkeypatch):
     monkeypatch.setattr(visual, "search_cells", broken)
     note = asyncio.run(visual.apply([c], Intent(requirements=["parking"]), 29.76, -95.36, 1600))
     assert "unavailable" in note and c["match_score"] == 70
+
+
+def test_extra_budget_is_never_ignored_and_both_budgets_are_checked(monkeypatch):
+    import asyncio
+
+    from services import intent as intent_mod
+    from services.intent import parse_budgets
+
+    async def rules_only(q):
+        return intent_mod.parse_rules(q)
+
+    monkeypatch.setattr(intent_mod, "parse", rules_only)
+    # The user's real case: search budget $9k/month, extra text "budget is under 80k dollars".
+    query = "Dental clinic in Houston with parking, budget $9k/month"
+    base = intent_mod.parse_rules(query)
+    refined = asyncio.run(intent_mod.refine(base, query, "budget is under 80k dollars"))
+    assert {(b.period, b.amount) for b in refined.budgets} == {("monthly", 9000), ("upfront", 80000)}
+    assert refined.budget.amount == 80000  # the later text is the primary budget
+    # Same period in the extra text replaces the search's.
+    refined2 = asyncio.run(intent_mod.refine(base, query, "actually no more than 7k a month"))
+    assert [(b.period, b.amount) for b in refined2.budgets] == [("monthly", 7000)]
+
+    est = costs.estimate("medical_office", 2200, "houston-tx", [])
+    checks = costs.budget_checks(est, refined.model_dump(), "dental_clinic")
+    assert {c["period"] for c in checks} == {"monthly", "upfront"} and costs.worst(checks)["status"] in {"over", "partly", "within"}
+
+    # Seats, square feet, distances and headcounts are never money.
+    for text in ["40-seat restaurant, 2,000 sq ft, within 500 m of transit", "office for 12 people on 3 floors"]:
+        assert parse_budgets(text) == []
+    assert [(b.period, b.amount) for b in parse_budgets("$150k to open, $8k a month")] == [("upfront", 150000), ("monthly", 8000)]

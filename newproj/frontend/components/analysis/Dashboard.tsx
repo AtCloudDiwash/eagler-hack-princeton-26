@@ -293,6 +293,18 @@ function BudgetCard({ costs }: { costs: Costs | null }) {
         <span>$0</span>
         <span>▲ budget</span>
       </div>
+      {(costs.budgets ?? []).filter((x) => x.period !== b.period).map((x) => {
+        const xu = BUDGET_UI[x.status];
+        return (
+          <div key={x.period} className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-[11px] ring-1 ring-inset ring-white/[0.06]">
+            <span className="text-slate-300">
+              Also: <span className="font-semibold text-slate-100">{fmtMoney(x.amount)}</span> {periodLabel(x.period)}
+              <span className="text-slate-500"> · estimate {fmtRange(x.compare_low, x.compare_high)}</span>
+            </span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${xu.cls}`}>{xu.label}</span>
+          </div>
+        );
+      })}
       {costs.monthly_occupancy && b.period !== "monthly" && (
         <div className="mt-3 text-[12px] text-slate-300">
           {fmtRange(costs.monthly_occupancy.low, costs.monthly_occupancy.high)} <span className="text-[11px] text-slate-500">per month to occupy</span>
