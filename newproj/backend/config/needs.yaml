@@ -1,0 +1,169 @@
+# Needs a user can state in their request, beyond business type, size and headcount. The intent parser
+# recognises them (keywords below, plus the LLM), marks each as a must-have or nice-to-have, and every
+# need is routed to the agent that checks it. Add a need by adding an entry; no code changes.
+#
+#   label      readable name (UI chips, agent prompts)
+#   keywords   phrases that signal the need (lower-case, matched on word starts)
+#   owner      agent that verifies it: vexcel | neighborhood | compliance | cost | matterport
+#   check      optional deterministic site check in services/program.py (ground_floor, parking,
+#              paved_area, timeline, size)
+#   min_paved_sqft, paved_reason   for check: paved_area — the paving the need requires, and why
+#   triggers   what this need sets in motion (shown to the user and to the owner agent)
+
+parking:
+  label: On-site parking
+  keywords: [parking, parking lot, park cars, parking spaces]
+  owner: compliance
+  check: parking
+  triggers: Off-street parking minimums for the use, plus customer convenience; compared with paved area on the parcel.
+
+accessibility:
+  label: Accessible (ADA)
+  keywords: [accessible, accessibility, ada, wheelchair, no stairs, step-free]
+  owner: compliance
+  check: ground_floor
+  triggers: Accessible entrance, route and restrooms (2010 ADA Standards / Texas Accessibility Standards).
+
+ground_floor:
+  label: Ground floor / street level
+  keywords: [ground floor, ground-floor, street level, street-level, first floor, walk-in]
+  owner: vexcel
+  check: ground_floor
+  triggers: Customer-facing space on the level of the street entrance.
+
+storefront:
+  label: Storefront visibility
+  keywords: [storefront, visibility, visible, signage, corner, frontage, drive-by, main street]
+  owner: neighborhood
+  triggers: Street frontage, signage and drive-by or walk-by exposure.
+
+foot_traffic:
+  label: Foot traffic
+  keywords: [foot traffic, walk-in traffic, busy street, pedestrian, walkable]
+  owner: neighborhood
+  triggers: Nearby offices, shops, transit and residents that generate walk-in customers.
+
+transit:
+  label: Near transit
+  keywords: [transit, metro, light rail, bus, subway, train station]
+  owner: neighborhood
+  triggers: Bus and rail stops within walking distance for customers and staff.
+
+existing_kitchen:
+  label: Existing kitchen / second-generation space
+  keywords: [kitchen, hood, second generation, second-generation, 2nd gen, former restaurant, turnkey, walk-in cooler, walk-in freezer]
+  owner: matterport
+  triggers: An existing hood, grease interceptor and gas line can save tens of thousands in build-out.
+
+gas:
+  label: Gas service
+  keywords: [gas line, natural gas, gas service, gas stove]
+  owner: matterport
+  triggers: Gas service for cooking or heating; confirm the meter and line size with the utility.
+
+drive_thru:
+  label: Drive-thru
+  keywords: [drive-thru, drive thru, drive-through, drive through]
+  owner: vexcel
+  check: paved_area
+  min_paved_sqft: 4000
+  paved_reason: a drive-thru lane needs room to stack ~8 cars around the building
+  triggers: A stacking lane around the building (typically room for 8+ cars) and a pickup window.
+
+patio:
+  label: Outdoor patio / seating
+  keywords: [patio, outdoor seating, terrace, outdoor dining, beer garden, rooftop]
+  owner: vexcel
+  check: paved_area
+  min_paved_sqft: 300
+  paved_reason: outdoor seating needs open paved or landscaped area
+  triggers: Outdoor area on the parcel; outdoor seating can add to required occupant load and restrooms.
+
+alcohol:
+  label: Serves alcohol
+  keywords: [bar, alcohol, beer, wine, liquor, cocktail, brewery, byob, taproom]
+  owner: compliance
+  triggers: >-
+    A state liquor permit (in Texas, TABC) and local distance rules from schools, churches and hospitals
+    (Texas Alcoholic Beverage Code §109.33 lets cities set 300 ft limits). Check before signing.
+
+late_hours:
+  label: Late-night hours
+  keywords: [late night, late-night, open late, 24/7, 24 hours, overnight, after midnight]
+  owner: neighborhood
+  triggers: Nearby residents and noise rules; deed or lease restrictions on operating hours.
+
+live_music:
+  label: Live music / events
+  keywords: [live music, dj, events, karaoke, concerts, dance floor]
+  owner: compliance
+  triggers: Higher assembly occupant load (standing space), noise ordinance and sound permits.
+
+loading:
+  label: Loading / deliveries
+  keywords: [loading dock, loading, deliveries, delivery trucks, freight, roll-up door]
+  owner: vexcel
+  check: paved_area
+  min_paved_sqft: 1000
+  paved_reason: trucks need a loading area
+  triggers: Truck access and a loading area or dock on the parcel.
+
+storage:
+  label: Storage space
+  keywords: [storage, stockroom, warehouse space, back room, inventory]
+  owner: matterport
+  triggers: Back-of-house storage share of the floor plan.
+
+private_rooms:
+  label: Private rooms / offices
+  keywords: [private office, private offices, conference room, meeting room, treatment room, exam room, operatory, operatories]
+  owner: matterport
+  triggers: Enclosed rooms in the layout; adding walls is cheaper than moving plumbing.
+
+showers_lockers:
+  label: Showers / locker rooms
+  keywords: [shower, showers, locker, lockers, changing room]
+  owner: matterport
+  triggers: Extra plumbing fixtures and drainage, one of the largest gym build-out costs.
+
+high_ceiling:
+  label: High ceilings
+  keywords: [high ceiling, high ceilings, tall ceiling, open ceiling, clear height, double height]
+  owner: matterport
+  triggers: Clear height for equipment, racks or exhaust ducts.
+
+natural_light:
+  label: Natural light
+  keywords: [natural light, windows, daylight, sunlight, bright]
+  owner: matterport
+  triggers: Glazing and window exposure in the layout.
+
+xray:
+  label: X-ray / imaging
+  keywords: [x-ray, xray, imaging, panoramic, cbct, radiograph]
+  owner: compliance
+  triggers: State X-ray registration and possible lead shielding in walls.
+
+heavy_power:
+  label: Heavy power / 3-phase
+  keywords: [3-phase, three-phase, 3 phase, high voltage, heavy equipment, kiln]
+  owner: matterport
+  triggers: Electrical service size; upgrading service is slow and costly.
+
+low_cost:
+  label: Low cost
+  keywords: [cheap, affordable, low cost, low-cost, budget-friendly, inexpensive]
+  owner: cost
+  triggers: Favour lower rent bands and second-generation space.
+
+quiet:
+  label: Quiet area
+  keywords: [quiet, calm, peaceful, low noise]
+  owner: neighborhood
+  triggers: Fewer bars, highways and busy commercial strips nearby.
+
+nearby_customers:
+  label: Close to target customers
+  keywords: [customers, near students, near offices, near families, near campus, near downtown, residential area]
+  owner: neighborhood
+  triggers: Demand sources for this business within its catchment radius.

@@ -1,0 +1,77 @@
+# Code requirements that follow from a space's occupancy group and occupant load, used by
+# services/program.py to turn "what the user wants to open" into concrete requirements.
+#
+# Values are from the 2021 International Building Code (IBC) and International Plumbing Code (IPC),
+# the model codes most US cities adopt with local amendments. They are planning-level checks: the
+# architect's code analysis and the local building department decide. Each item carries its citation.
+#
+#   label                     readable name of the occupancy group
+#   single_exit_max_load      largest occupant load allowed with one exit (IBC Table 1006.2.1 / 1006.3.4)
+#   sprinklers                triggers for an automatic sprinkler system (IBC §903.2)
+#   fixtures                  minimum plumbing fixtures (IPC Table 2902.1); "per" = occupants per fixture,
+#                             applied to each sex (IPC §403.1.1 assumes a 50/50 split). Tiers: [[up_to, per], ...]
+#   unisex_max_load           at or below this occupant load, separate men's/women's facilities are not
+#                             required (IPC §2902.2 exceptions); one all-gender restroom can serve everyone
+
+A-2:
+  label: "Assembly A-2 (food and drink)"
+  single_exit_max_load: 49
+  sprinklers:
+    fire_area_over_sqft: 5000
+    occupant_load_at_least: 100
+    citation: "IBC 2021 §903.2.1.2"
+  fixtures:
+    water_closets: {tiers: [[null, 75]], citation: "IPC 2021 Table 2902.1 (restaurants, 1 per 75 per sex)"}
+    lavatories: {tiers: [[null, 200]], citation: "IPC 2021 Table 2902.1 (1 per 200 per sex)"}
+    drinking_fountains_per: 500
+    service_sink: true
+  unisex_max_load: 15
+
+A-3:
+  label: "Assembly A-3 (gymnasiums, studios)"
+  single_exit_max_load: 49
+  sprinklers:
+    fire_area_over_sqft: 12000
+    occupant_load_at_least: 300
+    citation: "IBC 2021 §903.2.1.3"
+  fixtures:
+    water_closets: {men: [[null, 125]], women: [[null, 65]], citation: "IPC 2021 Table 2902.1 (gymnasiums: 1 per 125 men, 1 per 65 women)"}
+    lavatories: {tiers: [[null, 200]], citation: "IPC 2021 Table 2902.1 (1 per 200 per sex)"}
+    drinking_fountains_per: 500
+    service_sink: true
+  unisex_max_load: 15
+
+B:
+  label: "Business B (offices, clinics, small assembly under 50)"
+  single_exit_max_load: 49
+  sprinklers:
+    fire_area_over_sqft: null
+    occupant_load_at_least: null
+    note: "Not required by the occupancy alone (IBC §903.2.2 covers ambulatory care facilities only); the building may still require one."
+    citation: "IBC 2021 §903.2.2"
+  fixtures:
+    water_closets: {tiers: [[50, 25], [null, 50]], citation: "IPC 2021 Table 2902.1 (1 per 25 for the first 50, then 1 per 50)"}
+    lavatories: {tiers: [[80, 40], [null, 80]], citation: "IPC 2021 Table 2902.1 (1 per 40 for the first 80, then 1 per 80)"}
+    drinking_fountains_per: 100
+    service_sink: true
+  unisex_max_load: 25
+
+M:
+  label: "Mercantile M (retail)"
+  single_exit_max_load: 49
+  sprinklers:
+    fire_area_over_sqft: 12000
+    occupant_load_at_least: null
+    citation: "IBC 2021 §903.2.7"
+  fixtures:
+    water_closets: {tiers: [[null, 500]], citation: "IPC 2021 Table 2902.1 (1 per 500 per sex)"}
+    lavatories: {tiers: [[null, 750]], citation: "IPC 2021 Table 2902.1 (1 per 750 per sex)"}
+    drinking_fountains_per: 1000
+    service_sink: true
+  unisex_max_load: 100
+
+_citations:
+  occupant_load: "IBC 2021 Table 1004.5 (occupant load factors)"
+  exits: "IBC 2021 Table 1006.2.1 / §1006.3.4 (single exit allowed up to 49 occupants)"
+  small_assembly: "IBC 2021 §303.1.1 (assembly spaces under 50 occupants are classified Group B)"
+  accessible_route: "2010 ADA Standards §206 / Texas Accessibility Standards (accessible route to public spaces)"

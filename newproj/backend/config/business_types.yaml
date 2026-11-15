@@ -7,8 +7,18 @@
 #   sizing               sqft_per_seat (whole space incl. kitchen/back of house), default size,
 #                        ideal_min/ideal_max sqft for the usable space
 #   suitable_building_types / acceptable_building_types   Vexcel building-type.class values
+#   costar_property_types  CoStar propertyType names whose listed spaces can host this use
 #   default_radius_m, radius_reason   catchment used for neighborhood analysis
 #   place_roles          which place groups (place_groups.yaml) mean demand / competition / access
+#   program              what the user's request implies (services/program.py):
+#     drivers            counts in the request that size the space: field, label, keywords, sqft_each,
+#                        base_sqft, why. The first driver the user gives a number for sets the size.
+#     occupancy          IBC occupancy group (config/occupancy_codes.yaml), optional small_group used
+#                        below 50 occupants (IBC §303.1.1), load_factors: share of floor area by function
+#                        and its sq ft per person (IBC Table 1004.5)
+#     ground_floor       required | preferred | any
+#     min_ceiling_ft     planning threshold, with ceiling_reason
+#     buildout_months    typical [low, high] months from lease signing to opening
 #   metrics              metric id -> {weight, why}
 
 restaurant:
@@ -17,7 +27,21 @@ restaurant:
   keywords: [restaurant, cafe, café, diner, bistro, eatery, bar, pizzeria, bakery, coffee shop, taqueria, food]
   zoning_use: restaurant
   sizing: {sqft_per_seat: 35, default_seats: 40, ideal_min_sqft: 1200, ideal_max_sqft: 4500}
+  program:
+    drivers:
+      - {field: seats, label: seats, keywords: [seat, seats, seater, cover, covers, guest, guests, diner, diners], sqft_each: 35, base_sqft: 0, why: "~35 sq ft per seat covers dining, kitchen, restrooms and storage"}
+    occupancy:
+      group: A-2
+      small_group: B
+      load_factors:
+        - {label: dining area, share: 0.6, sqft_per_person: 15}
+        - {label: kitchen and back of house, share: 0.4, sqft_per_person: 200}
+    ground_floor: required
+    min_ceiling_ft: 10
+    ceiling_reason: Hood exhaust ducts and makeup air need room above the kitchen ceiling.
+    buildout_months: [4, 8]
   suitable_building_types: [commercial]
+  costar_property_types: [GeneralRetail, MixedUse, Flex, Office, SportsAndEntertainment, Specialty]  # CoStar propertyType names that can host this use
   acceptable_building_types: [multiple_family, condo_apartment]
   default_radius_m: 500
   radius_reason: >-
@@ -28,6 +52,7 @@ restaurant:
     demand: [offices, lodging, education, entertainment, retail]
     access: [transit, parking]
   metrics:
+    occupancy_requirements: {weight: 5, why: "Seats and staff set the occupancy class: 50+ people means assembly rules (two exits, more restrooms) and 100+ means sprinklers."}
     permitted_use: {weight: 14, why: "A restaurant needs food-service use allowed at the address before anything else matters."}
     hvac_ventilation: {weight: 13, why: "Commercial kitchens need a hood exhaust path to the roof and extra HVAC capacity; retrofitting both is one of the biggest restaurant build-out costs."}
     customer_demand: {weight: 12, why: "Covers per day drive restaurant revenue; offices, hotels and residents within walking distance supply them."}
@@ -49,10 +74,22 @@ restaurant:
 dental_clinic:
   label: Dental clinic
   icon: tooth
-  keywords: [dental, dentist, orthodontist, clinic, medical office, doctor, physician, medical, healthcare]
+  keywords: [dental office, dental practice, dental, dentist, orthodontist, clinic, medical office, medical practice, doctor, physician, medical, healthcare]
   zoning_use: medical_office
   sizing: {sqft_per_seat: 0, default_sqft: 2200, ideal_min_sqft: 1500, ideal_max_sqft: 4000}
+  program:
+    drivers:
+      - {field: chairs, label: operatories, keywords: [chair, chairs, operatory, operatories, treatment room, treatment rooms, op, ops], sqft_each: 400, base_sqft: 400, why: "~400 sq ft per operatory including its share of sterilization, lab and corridors, plus ~400 sq ft of reception and office"}
+    occupancy:
+      group: B
+      load_factors:
+        - {label: clinic, share: 1.0, sqft_per_person: 150}
+    ground_floor: preferred
+    min_ceiling_ft: 9
+    ceiling_reason: Standard clinic ceilings fit operatory lights and ducts.
+    buildout_months: [3, 6]
   suitable_building_types: [commercial]
+  costar_property_types: [Office, Healthcare, GeneralRetail, MixedUse, Flex]  # CoStar propertyType names that can host this use
   acceptable_building_types: [multiple_family, condo_apartment]
   default_radius_m: 1500
   radius_reason: >-
@@ -63,6 +100,7 @@ dental_clinic:
     demand: [residential_services, retail, offices, education]
     access: [parking, transit]
   metrics:
+    occupancy_requirements: {weight: 4, why: "Operatory count drives restroom, exit and accessibility needs for patients."}
     permitted_use: {weight: 14, why: "Medical/dental use must be allowed (clinic class) at the address."}
     medical_infrastructure: {weight: 13, why: "Operatories need sinks at every chair, vacuum/compressed air and dedicated circuits; retrofits are expensive."}
     accessibility_ada: {weight: 10, why: "Patients include elderly and mobility-impaired people; accessible entry, restrooms and parking are essential."}
@@ -85,7 +123,21 @@ gym:
   keywords: [gym, fitness, crossfit, yoga, pilates, studio, boxing, martial arts]
   zoning_use: gym
   sizing: {sqft_per_seat: 0, default_sqft: 5000, ideal_min_sqft: 2500, ideal_max_sqft: 15000}
+  program:
+    drivers:
+      - {field: class_size, label: people per class, keywords: [classes of, class of, person classes, person class, people per class, per class, class size, students per class], sqft_each: 50, base_sqft: 600, why: "~50 sq ft per person in an exercise room (the code's occupant load factor) plus ~600 sq ft of lobby, lockers and office"}
+      - {field: members, label: members, keywords: [member, members, membership], sqft_each: 10, base_sqft: 0, why: "~10 sq ft per member is a common club planning rule of thumb"}
+    occupancy:
+      group: A-3
+      small_group: B
+      load_factors:
+        - {label: exercise floor, share: 1.0, sqft_per_person: 50}
+    ground_floor: preferred
+    min_ceiling_ft: 12
+    ceiling_reason: Overhead lifts, rigs and jump work need 12+ ft clear; dropped weights favour slab-on-grade floors.
+    buildout_months: [3, 6]
   suitable_building_types: [commercial]
+  costar_property_types: [Flex, Industrial, GeneralRetail, MixedUse, SportsAndEntertainment, Office]  # CoStar propertyType names that can host this use
   acceptable_building_types: []
   default_radius_m: 1200
   radius_reason: >-
@@ -96,6 +148,7 @@ gym:
     demand: [residential_services, offices, education, retail]
     access: [parking, transit]
   metrics:
+    occupancy_requirements: {weight: 5, why: "Class size and floor area set the occupant load: 50+ people means assembly rules, two exits and more restrooms."}
     size_fit: {weight: 14, why: "Equipment floors and classes need large, open floor area."}
     structural_floor: {weight: 13, why: "Dropped weights and impact need a ground-floor slab, ideally with tall clear height."}
     permitted_use: {weight: 12, why: "Recreation/assembly use must be allowed at the address."}
@@ -118,7 +171,19 @@ office:
   keywords: [office, startup, agency, coworking, headquarters, firm, consultancy]
   zoning_use: office
   sizing: {sqft_per_seat: 0, default_sqft: 3000, ideal_min_sqft: 1000, ideal_max_sqft: 20000}
+  program:
+    drivers:
+      - {field: employees, label: people, keywords: [employee, employees, people, person, staff, team, desk, desks, workstation, workstations, seat, seats], sqft_each: 175, base_sqft: 0, why: "~150-200 sq ft per person including meeting rooms, kitchen and circulation"}
+    occupancy:
+      group: B
+      load_factors:
+        - {label: office, share: 1.0, sqft_per_person: 150}
+    ground_floor: any
+    min_ceiling_ft: 9
+    ceiling_reason: Standard office ceilings.
+    buildout_months: [2, 4]
   suitable_building_types: [commercial]
+  costar_property_types: [Office, Flex, MixedUse, Healthcare]  # CoStar propertyType names that can host this use
   acceptable_building_types: [multiple_family, condo_apartment]
   default_radius_m: 800
   radius_reason: >-
@@ -128,6 +193,7 @@ office:
     demand: [food_drink, retail, lodging]
     access: [transit, parking]
   metrics:
+    occupancy_requirements: {weight: 3, why: "Headcount sets restroom count and whether one exit is enough."}
     permitted_use: {weight: 12, why: "Office use must be allowed at the address."}
     size_fit: {weight: 13, why: "Roughly 150-250 sq ft per employee."}
     accessibility_transit: {weight: 13, why: "Commute options shape hiring and retention."}
@@ -148,7 +214,19 @@ retail:
   keywords: [retail, store, shop, boutique, showroom]
   zoning_use: retail
   sizing: {sqft_per_seat: 0, default_sqft: 2000, ideal_min_sqft: 800, ideal_max_sqft: 8000}
+  program:
+    drivers: []
+    occupancy:
+      group: M
+      load_factors:
+        - {label: sales floor, share: 0.8, sqft_per_person: 60}
+        - {label: stockroom, share: 0.2, sqft_per_person: 300}
+    ground_floor: required
+    min_ceiling_ft: 10
+    ceiling_reason: Fixtures, signage and merchandising read better with 10+ ft ceilings.
+    buildout_months: [2, 4]
   suitable_building_types: [commercial]
+  costar_property_types: [GeneralRetail, MixedUse, Flex, Office]  # CoStar propertyType names that can host this use
   acceptable_building_types: [multiple_family, condo_apartment]
   default_radius_m: 800
   radius_reason: >-
@@ -158,6 +236,7 @@ retail:
     demand: [food_drink, offices, lodging, residential_services, entertainment]
     access: [parking, transit]
   metrics:
+    occupancy_requirements: {weight: 3, why: "Sales-floor size sets occupant load, exits and restroom needs."}
     customer_demand: {weight: 15, why: "Foot traffic and nearby shoppers drive sales."}
     permitted_use: {weight: 12, why: "Retail use must be allowed at the address."}
     occupancy_cost: {weight: 13, why: "Rent per sq ft must fit expected sales per sq ft."}

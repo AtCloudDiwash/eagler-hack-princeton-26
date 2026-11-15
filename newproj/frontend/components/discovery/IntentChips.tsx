@@ -12,6 +12,8 @@ const MODE: Record<SearchResponse["data_mode"], { label: string; cls: string }> 
   osm_only: { label: "OpenStreetMap only", cls: "text-amber-300" },
 };
 
+const COUNT_LABEL: Record<string, string> = { seats: "seats", staff: "staff", chairs: "operatories", class_size: "per class", members: "members", employees: "people" };
+
 /** What we understood from the query, as compact chips; caveats tucked behind an info toggle. */
 export default function IntentChips({ result }: { result: SearchResponse }) {
   const { intent } = result;
@@ -25,12 +27,12 @@ export default function IntentChips({ result }: { result: SearchResponse }) {
           <Store size={11} className="text-teal-300" />
           {intent.business_label}
         </span>
-        {intent.seats != null && (
-          <span className={chip}>
+        {Object.entries(intent.occupancy ?? (intent.seats != null ? { seats: intent.seats } : {})).map(([k, n]) => (
+          <span key={k} className={chip}>
             <Users size={11} className="text-teal-300" />
-            {intent.seats} seats
+            {n} {COUNT_LABEL[k] ?? k.replace("_", " ")}
           </span>
-        )}
+        ))}
         {intent.sqft != null && (
           <span className={chip}>
             <Ruler size={11} className="text-teal-300" />
