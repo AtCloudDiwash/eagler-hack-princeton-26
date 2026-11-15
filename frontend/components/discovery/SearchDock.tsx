@@ -167,7 +167,7 @@ export default function SearchDock({ query, setQuery, onSearch, loading, idle, m
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKey}
-          placeholder={refining ? "Refine: bigger, cheaper, ground floor, near transit… or ask about the matches" : "What do you want to open, and where?"}
+          placeholder={refining ? "Ask what's nearby, or refine: bigger, cheaper, near transit…" : "What do you want to open, and where?"}
           aria-label={refining ? "Refine the search or ask about the matches" : "Describe your business and location"}
           className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-slate-50 placeholder:text-slate-500 focus:outline-none"
         />

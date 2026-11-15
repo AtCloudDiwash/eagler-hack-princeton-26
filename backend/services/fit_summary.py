@@ -53,10 +53,12 @@ def tiles(prop: dict, feature: dict | None, intent: Intent) -> list[dict]:
     # 1. the space we suggest for this request
     if best.get("sqft"):
         name = str(best.get("suite") or "")
-        suite = f"Suite {name}" if name and len(name) <= 8 else "Listed suite"  # CoStar suite names can be long ("Open-Plan for +15")
-        out.append(_tile("space", "Suggested space", "space", f"{best['sqft']:,.0f} sq ft", sub=suite, hint=
-                         (f"Suite {name}: the" if name and suite == "Listed suite" else "The") + f" CoStar listing here closest to your ~{target:,} sq ft ({best.get('use') or 'use not stated'}" + (f", available {str(best['available_on'])[:7]}" if best.get("available_on") else "") + ").",
-                         source="CoStar listing", status="good"))
+        suite = f"Suite {name}" if name and len(name) <= 8 else name or (f"{best['floor']} space" if best.get('floor') else "Listed space")
+        portion = best.get("suggested_portion")
+        hint = (f"Proposed {best['sqft']:,.0f} sq ft portion of {suite}, advertised at {best['sqft_min']:,.0f}–{best['sqft_max']:,.0f} sq ft. Division and exact area need landlord confirmation."
+                if portion else f"{suite}: {best['sqft']:,.0f} rentable sq ft for your ~{target:,} sq ft request ({best.get('use') or 'use not stated'}).")
+        out.append(_tile("space", "Suggested space", "space", f"{best['sqft']:,.0f} sq ft", sub=suite,
+                         hint=hint, source="CoStar listing", status="warn" if portion or not lo <= best['sqft'] <= hi else "good"))
     elif fields.get("space_count"):
         out.append(_tile("space", "Suggested space", "space", "None fit", sub=f"{fields['space_count']} listed, none {lo:,}–{hi:,} sq ft", hint=f"CoStar lists {fields['space_count']} space(s) here ({fields.get('available_sqft') or 0:,.0f} sq ft), none in your size range; ask about dividing or combining.", source="CoStar listings", status="warn"))
     else:
@@ -67,7 +69,7 @@ def tiles(prop: dict, feature: dict | None, intent: Intent) -> list[dict]:
     fp = known.get("footprint_sqft", {}).get("value") or prop.get("area_sqft")
     if sqft:
         ratio = sqft / target
-        out.append(_tile("size", "Size vs your need", "floors", f"{ratio:.0%}", sub=f"of ~{target:,} sq ft", hint=f"{sqft:,.0f} sq ft listed vs your {lo:,}–{hi:,} sq ft range.", source="CoStar listing", status="good" if lo <= sqft <= hi else "warn"))
+        out.append(_tile("size", "Size vs your need", "floors", f"{ratio:.0%}", sub=f"of ~{target:,} sq ft", hint=f"{sqft:,.0f} sq ft {'proposed portion (confirm division)' if best.get('suggested_portion') else 'listed'} vs your {lo:,}–{hi:,} sq ft range.", source="CoStar listing", status="good" if lo <= sqft <= hi and not best.get("suggested_portion") else "warn"))
     elif fp:
         ratio = fp / target
         out.append(_tile("size", "Size vs your need", "floors", f"{ratio:.1f}×", sub="one floor vs your need (est.)", hint=f"One floor (aerial footprint {fp:,.0f} sq ft) vs your ~{target:,} sq ft; you would lease part of the building (unverified: no listing).",

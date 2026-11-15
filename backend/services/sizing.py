@@ -246,11 +246,12 @@ def fit(size: dict, *, best_space: dict | None = None, closest_space_sqft: float
     rng = [lo, hi]
     if best_space and best_space.get("sqft"):
         sq = best_space["sqft"]
+        upper = best_space.get("sqft_max") or sq
         low = best_space.get("sqft_min") or sq
         effective = min(max(target, low), sq) if low < sq else sq  # a divisible listing can be leased at your size
         score = band_score(effective, lo, hi)
         suite = f"Suite {best_space['suite']}" if best_space.get("suite") else "The listed space"
-        size_txt = f"{low:,.0f}-{sq:,.0f}" if low < sq else f"{sq:,.0f}"
+        size_txt = f"{low:,.0f}-{upper:,.0f}" if low < upper else f"{sq:,.0f}"
         return SizeFit(score, _status(score), f"{suite} is {size_txt} rentable sq ft, {_relation(effective, lo, hi, target)} (CoStar listing).",
                        {"basis": "costar_listing", "sqft": sq, "sqft_min": low if low < sq else None, "range": rng})
     if interior_sqft:

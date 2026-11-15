@@ -66,6 +66,8 @@ def prescreen(c: dict, intent: Intent, program: dict | None = None, feature: dic
         rent = f" at ${best['rent_per_sqft_yr']:.2f}/sq ft/yr" if best.get("rent_per_sqft_yr") else ""
         floor = f", {best['floor'].lower()}" if best.get("floor") else ""
         sq = f"{best['sqft_min']:,.0f}-{best['sqft']:,.0f}" if best.get("sqft_min") else f"{best['sqft']:,.0f}"
+        if best.get("suggested_portion"):
+            sq = f"{best['sqft']:,.0f} proposed ({best['sqft_min']:,.0f}–{best['sqft_max']:,.0f} advertised; confirm division)"
         reasons.insert(0, f"On the market (CoStar): {('Suite ' + str(best['suite'])) if best.get('suite') else 'a space'} with {sq} rentable sq ft{floor}{rent}")
         if best.get("ground_floor") is False and ground_required:
             score -= 20
