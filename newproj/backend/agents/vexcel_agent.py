@@ -6,10 +6,11 @@ from datetime import date
 from statistics import mean
 from typing import Literal
 
-from agents.base import AgentReport, RunContext, ToolBudget, deterministic_report, run_agent, tracked_tool
+from agents.base import AgentReport, RunContext, ToolBudget, building_facts_result, deterministic_report, run_agent, tracked_tool
 from config import roof_condition_labels
 from schemas import AgentFinding, AgentMetricAssessment
 from services.vexcel import FIELD_NOTES, primary_structure, stories_estimate
+from services.verdicts import size_assessment
 
 SOURCE = "Vexcel /property/extract (AI-detected from aerial imagery)"
 ROLE = (
@@ -39,24 +40,36 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
             "stories_estimate": stories_estimate(s),
             "structures_on_parcel": parcel.get("structure.count"),
         }
+        recorded = ((ctx.building or {}).get("facts") or {}).get("stories") or {}
+        if recorded.get("source") == "CoStar":
+            data["stories_recorded"] = recorded["value"]  # CoStar beats roof height ÷ ~13 ft
+        if (data["roof_height_ft"] or 0) and (data["footprint_area_sqft"] or 0) and parcel.get("parcel-source") == "Voronoi":
+            data["parcel_note"] = "Parcel boundary is a synthetic (Voronoi) estimate; lot area and on-parcel paving are unreliable."
+        stories = f"{data['stories_recorded']} stories (CoStar)" if data.get("stories_recorded") else f"~{data['stories_estimate'] or '?'} stories (estimate)"
         return {
-            "summary": f"{data['building_type'] or 'unknown'} building, {data['footprint_area_sqft'] or '?'} sq ft footprint, ~{data['stories_estimate'] or '?'} stories",
+            "summary": f"{data['building_type'] or 'unknown'} building, {data['footprint_area_sqft'] or '?'} sq ft footprint, {stories}",
             "data": data,
             "guidance": [FIELD_NOTES["building-type.class"], FIELD_NOTES["footprint.area"], FIELD_NOTES["roof-characteristics.height"]],
         }
 
     @tool
-    def check_size_fit(leased_floor_sqft: int | None = None) -> dict:
-        """Compare the user's space need with this building. Optionally pass the floor area you assume the
-        user would lease (defaults to the ground-floor footprint, capped at 3x the need)."""
+    def check_size_fit() -> dict:
+        """Compare the user's space need (their program's size range) with this building: a CoStar-listed
+        suite when there is one, otherwise the ground-floor footprint and stories. Uses the same thresholds
+        as the engine's size verdict."""
         footprint = s.get("footprint.area")
         stories = stories_estimate(s) or 1
         if not footprint:
             return {"summary": "Footprint area unavailable; size fit cannot be computed", "data": None}
         total = footprint * stories
-        leased = leased_floor_sqft or min(footprint, ctx.target_sqft * 3)
+        leased = min(footprint, ctx.target_sqft * 3)
         ratio = footprint / ctx.target_sqft
-        verdict = "fits" if 0.85 <= ratio <= 3 else "much larger than needed (suite lease assumed)" if ratio > 3 else "smaller than needed"
+        size = (ctx.program or {}).get("size") or {}
+        target, lo, hi = size.get("target_sqft", ctx.target_sqft), size.get("min_sqft", round(ctx.target_sqft * 0.85)), size.get("max_sqft", round(ctx.target_sqft * 1.3))
+        p = ctx.property
+        assessed = size_assessment(target, lo, hi, best_space=p.get("best_space"), space_count=p.get("space_count") or 0, available_sqft=p.get("available_sqft"),
+                                   footprint_sqft=footprint, stories=stories, ground_floor_required=((ctx.program or {}).get("building") or {}).get("ground_floor") == "required")
+        verdict = f"{assessed[0]} — {assessed[1]}" if assessed else "unknown"
         return {
             "summary": f"Ground floor {footprint:,.0f} sq ft vs need ~{ctx.target_sqft:,} sq ft ({ratio:.1f}x): {verdict}",
             "data": {
@@ -68,6 +81,8 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
                 "ratio_ground_floor_to_need": round(ratio, 2),
                 "assumed_leased_sqft": round(leased),
                 "ideal_range_sqft": [ctx.business["sizing"]["ideal_min_sqft"], ctx.business["sizing"]["ideal_max_sqft"]],
+                "program_range_sqft": [lo, hi],
+                "size_verdict": assessed[0] if assessed else None,
             },
             "guidance": ["Ground-floor space matters for customer-facing uses; upper floors rarely suit restaurants or gyms.", FIELD_NOTES["footprint.area"]],
         }
@@ -82,12 +97,12 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
             label = roof_condition_labels().get(int(cond)) if isinstance(cond, (int, float)) else None
             return {"summary": f"Roof condition {cond}/5 ({label}), {s.get('roof-characteristics.material.class')} {s.get('roof-characteristics.shape.value')} roof", "data": data, "guidance": [FIELD_NOTES["roof-characteristics.condition"], FIELD_NOTES["roof-characteristics.shape.value"]]}
         if focus == "defects":
-            data = pick("roof-defects")
+            data = {k: v for k, v in pick("roof-defects").items() if v not in (False, 0, 0.0)}  # ~45 keys, mostly "not detected"
             found = sorted({k.split(".")[1] for k, v in data.items() if k.endswith(".detected") and v is True and k.count(".") == 2})
             return {"summary": f"Roof defects detected: {', '.join(found) or 'none'}", "data": data, "guidance": [FIELD_NOTES["roof-defects"]]}
         data = pick("roof-objects")
         return {
-            "summary": f"Rooftop: {s.get('roof-objects.ac-unit.count')} AC units detected, {s.get('roof-objects.roof-vent.count')} vents, solar {'yes' if s.get('roof-objects.solar.value') else 'no'}, {s.get('roof-objects.skylight.count')} skylights",
+            "summary": f"Rooftop: {s.get('roof-objects.ac-unit.count')} AC units detected, {s.get('roof-objects.roof-vent.count')} vents, solar {'yes' if (s.get('roof-objects.solar-panel-photovoltaic.count') or 0) > 0 else 'not detected'}, {s.get('roof-objects.skylight.count')} skylights",
             "data": data,
             "guidance": [FIELD_NOTES["roof-objects.ac-unit.count"], FIELD_NOTES["roof-objects.roof-vent.count"]],
         }
@@ -131,7 +146,15 @@ def build_tools(ctx: RunContext, budget: ToolBudget) -> list:
         hits = {k: v for k, v in {**parcel, **s}.items() if k.startswith(field) and k != "structures" and "wkt" not in k}
         return {"summary": f"{len(hits)} fields matching '{field}'", "data": hits or None}
 
-    return [get_building_overview, check_size_fit, inspect_roof, inspect_site_paving, compare_with_neighbors, get_imagery_metadata, lookup_vexcel_field]
+    @tool
+    def get_building_facts(group: Literal["building", "site", "space"]) -> dict:
+        """Recorded facts from the CoStar building record: 'building' (year built, renovations, class, condition,
+        stories, ceiling height, elevators), 'site' (parking spaces, zoning, sprinklers) or 'space' (prior
+        build-out / second-generation use, CAM). Recorded data beats aerial inference."""
+        return building_facts_result(ctx, group)
+
+    tools = [get_building_overview, check_size_fit, inspect_roof, inspect_site_paving, compare_with_neighbors, get_imagery_metadata, lookup_vexcel_field]
+    return [*tools, get_building_facts] if (ctx.building or {}).get("facts") else tools
 
 
 def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
@@ -147,11 +170,11 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
-async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None) -> AgentReport:
+async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None, metric_ids: list[str] | None = None) -> AgentReport:
     if not ctx.feature:
         return _no_vexcel_report(ctx)
-    budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "vexcel", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+    budget = ToolBudget(budget_limit, ctx.shared.setdefault("seen:vexcel", {}))
+    return await run_agent(ctx, "vexcel", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget, metric_ids=metric_ids)
 
 
 def _no_vexcel_report(ctx: RunContext) -> AgentReport:

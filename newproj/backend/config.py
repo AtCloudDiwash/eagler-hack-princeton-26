@@ -41,12 +41,20 @@ class Settings:
     census_api_key = _key("CENSUS_API_KEY")
     matterport_api_key = _key("MATTERPORT_API_KEY")
     matterport_api_secret = _key("MATTERPORT_API_SECRET")
+    # Optional sandbox token (sees only the account's demo model): for development and the query contract test.
+    matterport_sandbox_api_key = _key("MATTERPORT_SANDBOX_API_KEY")
+    matterport_sandbox_api_secret = _key("MATTERPORT_SANDBOX_API_SECRET")
     database_path = Path(os.getenv("DATABASE_PATH") or "./turnkey.db")
-    cors_origins = [o.strip() for o in (os.getenv("CORS_ORIGINS") or "http://localhost:3000").split(",") if o.strip()]
+    _origins = [o.strip() for o in (os.getenv("CORS_ORIGINS") or "http://localhost:3000,http://localhost:3001").split(",") if o.strip()]
+    # localhost and 127.0.0.1 are the same machine but different browser origins: allow both spellings.
+    cors_origins = list(dict.fromkeys(_origins + [o.replace("//localhost", "//127.0.0.1") for o in _origins] + [o.replace("//127.0.0.1", "//localhost") for o in _origins]))
     # Agent limits: keep investigations purposeful and bounded.
     agent_max_model_calls = int(os.getenv("AGENT_MAX_MODEL_CALLS") or 8)
     agent_max_tool_calls = int(os.getenv("AGENT_MAX_TOOL_CALLS") or 8)
     agent_timeout_s = float(os.getenv("AGENT_TIMEOUT_S") or 240)
+    # Whole-analysis deadline: agents, follow-ups and the narrative all fit inside it (follow-ups are skipped
+    # when little time is left). Generous by default so normal analyses are unaffected.
+    analysis_timeout_s = float(os.getenv("ANALYSIS_TIMEOUT_S") or 900)
     http_user_agent = "turnkey-matchmaker/0.1 (hackathon prototype)"
 
     @property
@@ -90,6 +98,14 @@ def place_groups() -> dict[str, dict]:
 
 def costs_config() -> dict:
     return load_yaml("costs.yaml")
+
+
+def occupancy_codes() -> dict[str, dict]:
+    return load_yaml("occupancy_codes.yaml")
+
+
+def needs_registry() -> dict[str, dict]:
+    return load_yaml("needs.yaml")
 
 
 def jurisdictions() -> dict[str, dict]:

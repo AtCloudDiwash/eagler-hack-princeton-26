@@ -9,6 +9,7 @@ JSON Schema to the CLI. Subclasses only implement how to build the command and r
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import json
 import os
@@ -274,6 +275,7 @@ class CLIChatModel(BaseChatModel):
             self._sem = _shared_semaphore(self.provider_name, self.max_concurrency)
         async with self._sem:
             tmp, schema_path, work, out = self._prepare(schema)
+            proc = None
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *self._command(work, schema, schema_path, out),
@@ -282,9 +284,13 @@ class CLIChatModel(BaseChatModel):
                 try:
                     stdout, stderr = await asyncio.wait_for(proc.communicate(prompt.encode()), timeout=self.timeout_s)
                 except asyncio.TimeoutError as err:
-                    proc.kill()
-                    await proc.wait()
                     raise LLMProviderError(f"{self.provider_name} timed out after {self.timeout_s:.0f}s") from err
                 return self._extract(proc.returncode or 0, stdout.decode(errors="replace"), stderr.decode(errors="replace"), out, schema)
             finally:
+                # Also runs when the caller is cancelled (agent timeout): never leave a CLI running on our quota.
+                if proc is not None and proc.returncode is None:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    with contextlib.suppress(BaseException):
+                        await asyncio.wait_for(proc.wait(), timeout=5)
                 tmp.cleanup()

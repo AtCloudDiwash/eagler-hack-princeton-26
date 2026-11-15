@@ -117,6 +117,6 @@ def task_prompt(ctx: RunContext, focus: str | None = None) -> str:
     return base
 
 
-async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None) -> AgentReport:
-    budget = ToolBudget(budget_limit)
-    return await run_agent(ctx, "neighborhood", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget)
+async def run(ctx: RunContext, budget_limit: int = 7, focus: str | None = None, metric_ids: list[str] | None = None) -> AgentReport:
+    budget = ToolBudget(budget_limit, ctx.shared.setdefault("seen:neighborhood", {}))
+    return await run_agent(ctx, "neighborhood", ROLE, task_prompt(ctx, focus), build_tools(ctx, budget), budget, metric_ids=metric_ids)

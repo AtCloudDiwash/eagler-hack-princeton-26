@@ -35,7 +35,16 @@ _on_fallback: ContextVar[Callable[[str], None] | None] = ContextVar("llm_on_fall
 
 
 class AllProvidersFailedError(LLMProviderError):
-    """Every configured provider failed for this call."""
+    """Every configured provider failed for this call.
+
+    `exhausted` is True only when every provider is now marked unavailable (usage limit, not installed,
+    not logged in): retrying is pointless and the analysis should stop. Otherwise the failure was specific
+    to this call (bad JSON, a timeout) and only the calling agent should fail.
+    """
+
+    def __init__(self, message: str, exhausted: bool = False) -> None:
+        super().__init__(message)
+        self.exhausted = exhausted
 
 
 def track_usage() -> dict[str, int]:
@@ -107,6 +116,9 @@ class FallbackChat(BaseChatModel):
     def _next_available(self, after: int) -> str | None:
         return next((n for n in self.providers[after + 1:] if _available(n)[0]), None)
 
+    def _all_unavailable(self) -> bool:
+        return not any(_available(n)[0] for n in self.providers)
+
     def _note(self, name: str, reason: str, nxt: str | None) -> None:
         cb = _on_fallback.get()
         if cb and nxt:
@@ -137,7 +149,7 @@ class FallbackChat(BaseChatModel):
                 continue
             self._record(name)
             return result
-        raise AllProvidersFailedError("All LLM providers failed — " + " | ".join(errors))
+        raise AllProvidersFailedError("All LLM providers failed — " + " | ".join(errors), exhausted=self._all_unavailable())
 
     def _try_sync(self, call: Callable[[BaseChatModel], Any]) -> Any:
         errors: list[str] = []
@@ -157,7 +169,7 @@ class FallbackChat(BaseChatModel):
                 continue
             self._record(name)
             return result
-        raise AllProvidersFailedError("All LLM providers failed — " + " | ".join(errors))
+        raise AllProvidersFailedError("All LLM providers failed — " + " | ".join(errors), exhausted=self._all_unavailable())
 
     # ---- LangChain API
     async def _agenerate(self, messages: list[BaseMessage], stop: list[str] | None = None, run_manager: AsyncCallbackManagerForLLMRun | None = None, **kwargs: Any) -> ChatResult:

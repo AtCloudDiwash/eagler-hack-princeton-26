@@ -92,7 +92,7 @@ def test_intent_rules():
     assert (i.business_type, i.seats, i.location_text) == ("restaurant", 40, "Houston")
     assert target_sqft(i)[0] == 40 * 35
     d = parse_rules("I need a commercial property for a dental clinic near Midtown Houston with parking")
-    assert d.business_type == "dental_clinic" and "parking" in d.requirements
+    assert d.business_type == "dental_clinic" and "parking" in {n.id for n in d.needs} and "On-site parking" in d.requirements
 
 
 def test_parse_text_report_accepts_json_text():
@@ -115,6 +115,7 @@ def test_engine_rules_take_precedence_over_agents():
     from multi_agent_engine import EventLog, merge_metrics
 
     ctx = _ctx()
+    ctx.jurisdiction_key, ctx.jurisdiction = rules.jurisdiction_for("Nowhere", "Nebraska")  # no verified rule set -> unknown
     eid = ctx.evidence.add("compliance", "check_permitted_use", "x", "unknown", {"status": "unknown", "id": "permitted_use", "rule": "r", "detail": "d"})
     rep = AgentReport(agent="compliance", label="Compliance Agent", status="completed", metric_assessments=[
         AgentMetricAssessment(metric_id="permitted_use", status="strong", rationale="I think it's fine", evidence_ids=[eid]),
@@ -169,10 +170,12 @@ def test_cost_tool_drops_invented_evidence_ids():
 
     ctx = _ctx()
     real = ctx.evidence.add("vexcel", "inspect_roof", "x", "0 AC units detected", {})
+    unshared = ctx.evidence.add("neighborhood", "count_places", "x", "not handed to the Cost Agent", {})
+    ctx.shared["visible:cost"] = {real}  # the engine shares upstream findings' evidence with the Cost Agent
     tools = {t.name: t for t in build_tools(ctx, ToolBudget(5))}
     out = json.loads(tools["estimate_costs"].invoke({"leased_sqft": 1400, "adders": [
         {"id": "hvac_rtu", "quantity": 1, "reason": "no units", "evidence_ids": [real, "none"]},
-        {"id": "roof_repair", "quantity": 1, "reason": "guess", "evidence_ids": ["none"]},
+        {"id": "roof_repair", "quantity": 1, "reason": "guess", "evidence_ids": ["none", unshared]},
     ]}))
     lines = {l["id"]: l for l in out["data"]["fitout"]["line_items"]}
     assert lines["hvac_rtu"]["evidence_ids"] == [real] and lines["roof_repair"]["evidence_ids"] == []

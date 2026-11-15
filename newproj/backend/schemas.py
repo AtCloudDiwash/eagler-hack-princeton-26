@@ -18,15 +18,28 @@ class Budget(BaseModel):
     text: str = ""
 
 
+class Need(BaseModel):
+    id: str  # key in config/needs.yaml
+    label: str
+    priority: Literal["must", "nice"] = "nice"
+
+
 class Intent(BaseModel):
     business_type: str = "restaurant"
     business_label: str = "Restaurant"
     location_text: str | None = None
     seats: int | None = None
     sqft: int | None = None
-    requirements: list[str] = []
+    requirements: list[str] = []  # readable labels of everything asked for (needs + free-text extras)
     budget: Budget | None = None
     parser: Literal["llm", "rules"] = "rules"
+    # Space program inputs (services/program.py)
+    occupancy: dict[str, int] = {}  # counts stated in the request: seats, chairs, members, class_size, employees, staff
+    needs: list[Need] = []  # recognised needs (config/needs.yaml), must-have or nice-to-have
+    open_within_months: int | None = None  # "open by spring", "within 3 months"
+    tenure: Literal["lease", "buy"] = "lease"
+    near: list[str] = []  # places the user wants to be close to ("near Rice University")
+    avoid: list[str] = []  # things to stay away from ("not next to a bar")
 
 
 class Candidate(BaseModel):
@@ -36,14 +49,25 @@ class Candidate(BaseModel):
     footprint: dict | None = None
     parcel: dict | None = None
     building_type: str | None = None
-    area_sqft: float | None = None
+    area_sqft: float | None = None  # BUILDING FOOTPRINT: the building's outline from above (~one floor), not the parcel or a leasable suite
+    floor_area_est_sqft: float | None = None  # footprint × estimated stories (rough total floor area of the building)
+    parcel_sqft: float | None = None  # the property: lot/parcel area
     roof_condition: float | None = None
     roof_condition_label: str | None = None
     stories_est: int | None = None
     match_score: int = 0
     match_reasons: list[str] = []
-    source: Literal["vexcel", "osm", "demo"] = "vexcel"
+    source: Literal["vexcel", "osm", "demo", "costar"] = "vexcel"
     address: str | None = None
+    # CoStar (sponsor kit): the leasing figures Vexcel can't measure
+    costar_id: int | None = None
+    building_name: str | None = None
+    rentable_sqft: float | None = None  # Rentable Building Area (RBA; GLA for retail): the whole building's rentable area
+    rentable_basis: str | None = None  # "RBA" | "GLA"
+    available_sqft: float | None = None  # sum of spaces on the market (not lease-pending)
+    space_count: int = 0  # spaces on the market
+    best_space: dict | None = None  # the listed suite closest to the user's size: suite, floor, sqft, rent_per_sqft_yr
+    asking_rent_per_sqft_yr: list[float] | None = None  # [low, high] across listed spaces
 
 
 class SearchRequest(BaseModel):
@@ -56,6 +80,11 @@ class SearchResponse(BaseModel):
     data_mode: Literal["vexcel_live", "vexcel_demo", "osm_only"]
     candidates: list[Candidate]
     notes: list[str] = []
+    program: dict | None = None  # what the request implies: size, occupancy, code needs, building needs
+
+
+class MatterportLinkRequest(BaseModel):
+    tour: str = Field(description="Matterport showcase URL (…/show/?m=<id>) or bare model id")
 
 
 class AnalysisRequest(BaseModel):
@@ -88,9 +117,17 @@ class AgentFinding(BaseModel):
     metric_ids: list[str] = Field(default_factory=list)
 
 
+class NeedCheck(BaseModel):
+    need_id: str = Field(description="Id of a stated need you were asked to check (from NEEDS YOU MUST CHECK)")
+    status: Literal["met", "unmet", "unknown"] = Field(description="'met'/'unmet' only with evidence; otherwise 'unknown'")
+    detail: str = Field(default="", description="One sentence: what the evidence shows, or how to verify it")
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
 class AgentOutput(BaseModel):
     summary: str = Field(description="2-3 sentence conclusion for the user's purpose")
     metric_assessments: list[AgentMetricAssessment] = Field(default_factory=list)
+    needs: list[NeedCheck] = Field(default_factory=list, description="One entry per stated need you were asked to check")
     findings: list[AgentFinding] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list, description="Important questions the data cannot answer")
     contradictions: list[str] = Field(default_factory=list, description="Conflicting signals in the evidence")
@@ -126,6 +163,7 @@ class AgentReport(BaseModel):
     tool_calls: int = 0
     duration_s: float = 0
     error: str | None = None
+    needs: list[NeedCheck] = []  # one per stated need this agent owns (unknown when it did not report it)
     # internal: raw assessments (merged into metrics by the engine; not part of the public contract)
     metric_assessments: list[AgentMetricAssessment] = Field(default_factory=list, exclude=True)
 
