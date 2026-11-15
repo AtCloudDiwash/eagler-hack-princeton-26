@@ -53,8 +53,11 @@ cp backend/.env.example backend/.env
 | `CLAUDE_CODE_OAUTH_TOKEN` | Docker only | Lets Claude Code work inside the container (`claude setup-token`); or set `ANTHROPIC_API_KEY`. |
 | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | No | Default `http://localhost:11434`, `qwen3:8b` (Docker uses `host.docker.internal`). |
 | `CENSUS_API_KEY` | No | Free key from https://api.census.gov/data/key_signup.html; enables tract demographics. |
-| `MATTERPORT_API_KEY` / `_SECRET` | No | Enables the optional interior agent (needs a tour linked to the property). |
+| `MATTERPORT_API_KEY` / `_SECRET` | No | Matterport API token id / secret. Enables the interior agent for tours linked on the building panel (the 3D tour embeds without them). Offline: `python scripts/record_matterport_fixture.py <tour url>`. |
+| CoStar kit (file, not a key) | No | Rentable area, spaces for lease, asking rents, and the building record the agents use (year built, class, parking spaces, sprinklers, zoning, prior build-out). Run `cd backend && .venv/bin/python scripts/build_costar_index.py ~/Downloads/costar-hackathon-kit` once; writes `backend/fixtures/costar_index.json` (gitignored). |
+| `MATTERPORT_SANDBOX_API_KEY` / `_SECRET` | No | Optional sandbox token (sees only the account's demo model). Use it for development and `tests/test_matterport_contract.py`, which checks our GraphQL queries still validate; keep the full token for the demo machine only (Matterport tokens can make purchases). |
 | `AGENT_MAX_MODEL_CALLS`, `AGENT_TIMEOUT_S` | No | Bounds on each agent's investigation. |
+| `ANALYSIS_TIMEOUT_S` | No | Deadline for a whole analysis (default 900 s); agents, follow-ups and the narrative fit inside it. |
 
 Never commit `backend/.env`; it is gitignored and excluded from Docker images.
 

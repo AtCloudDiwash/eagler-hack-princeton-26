@@ -15,3 +15,6 @@ frontend/.next/
 .DS_Store
 # Licensed Vexcel API responses: never commit (record locally with backend/scripts/record_demo_fixture.py)
 backend/fixtures/vexcel_*.json
+# Recorded Matterport scans (owner data): never commit (record with backend/scripts/record_matterport_fixture.py)
+backend/fixtures/matterport/
+backend/fixtures/costar_index.json

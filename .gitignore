@@ -47,6 +47,8 @@ npm-debug.log*
 **/playwright-report/
 # Licensed Vexcel API responses (record locally, never commit)
 newproj/backend/fixtures/vexcel_*.json
+newproj/backend/fixtures/matterport/
+newproj/backend/fixtures/costar_index.json
 # Local tooling / OS
 .claude/
 .idea/
