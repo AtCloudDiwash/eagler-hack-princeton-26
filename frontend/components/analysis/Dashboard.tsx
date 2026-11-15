@@ -200,20 +200,21 @@ function ReasonList({ title, icon, color, items, empty }: { title: string; icon:
             const isOpen = open === i;
             return (
               <motion.li key={i} variants={stagger.item}>
-                <button onClick={() => setOpen(isOpen ? null : i)} className="w-full rounded-xl bg-white/[0.03] p-3 text-left ring-1 ring-inset ring-white/[0.05] transition hover:bg-white/[0.05]">
-                  <div className="flex items-start gap-2.5">
+                {/* The row toggles; evidence chips are their own buttons, so they sit beside (not inside) the toggle. */}
+                <div className="rounded-xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.05] transition hover:bg-white/[0.05]">
+                  <button onClick={() => setOpen(isOpen ? null : i)} aria-expanded={isOpen} className="flex w-full items-start gap-2.5 p-3 text-left">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-medium text-slate-100">{rest.length ? name : "Finding"}</div>
                       <p className={`mt-0.5 text-[12px] leading-snug text-slate-400 ${isOpen ? "" : "line-clamp-2"}`}>{body}</p>
-                      {isOpen && r.evidence_ids.length > 0 && (
-                        <div className="mt-1.5">
-                          <EvidenceChips ids={r.evidence_ids} />
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {isOpen && r.evidence_ids.length > 0 && (
+                    <div className="-mt-1.5 pb-3 pl-7 pr-3">
+                      <EvidenceChips ids={r.evidence_ids} />
+                    </div>
+                  )}
+                </div>
               </motion.li>
             );
           })}
