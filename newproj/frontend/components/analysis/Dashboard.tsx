@@ -132,13 +132,13 @@ export default function Dashboard({ analysis, onReplay, demo = false }: { analys
               </div>
             )}
             {rec.dealbreakers.length > 0 && (
-              <div className="relative mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200 ring-1 ring-inset ring-rose-400/25">Dealbreaker: {rec.dealbreakers.join(" · ")}</div>
+              <div className="relative mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200 ring-1 ring-inset ring-rose-400/25">Why the verdict is limited: {rec.dealbreakers.join(" · ")}</div>
             )}
           </div>
           <BudgetCard costs={result.costs} />
         </motion.section>
 
-        {result.requirement_checks && result.requirement_checks.length > 0 && <RequirementChecks checks={result.requirement_checks} />}
+        <RequirementChecks checks={result.requirement_checks ?? []} request={analysis.base_query ?? analysis.query} extra={analysis.extra_requirements ?? null} />
 
         {/* Pros / cons */}
         <section className="grid gap-3 md:grid-cols-2">
@@ -362,15 +362,24 @@ const REQ_UI = {
 } as const;
 
 /** The user's own stated needs (search + extra requirements), each met / not met / unverified, expandable. */
-function RequirementChecks({ checks }: { checks: NonNullable<AnalysisResult["requirement_checks"]> }) {
+/** The user's request (search prompt + extra requirements) and how each stated need was judged. These checks
+ *  count toward the score and an unmet one caps the verdict. */
+function RequirementChecks({ checks, request, extra }: { checks: NonNullable<AnalysisResult["requirement_checks"]>; request: string; extra: string | null }) {
   const [open, setOpen] = useState<string | null>(null);
   const current = checks.find((c) => c.requirement === open);
   return (
     <section className="glass rounded-3xl p-4 sm:p-5">
-      <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-slate-300">
-        <BadgeCheck size={14} className="text-teal-300" /> Your requirements
-        <span className="font-normal text-slate-500">· judged against the gathered evidence</span>
+      <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-slate-300">
+        <BadgeCheck size={14} className="text-teal-300" /> Your request
+        <span className="font-normal text-slate-500">· what this analysis was judged against</span>
       </div>
+      <p className="text-[13px] leading-relaxed text-slate-200">“{request}”</p>
+      {extra && <p className="mt-1 text-[12px] text-slate-400">Extra requirements: {extra}</p>}
+      {checks.length === 0 ? (
+        <p className="mt-2 text-[11px] text-slate-500">No specific needs were picked out of your request, so it was judged on the standard checks for this business.</p>
+      ) : (
+        <p className="mb-2 mt-3 text-[11px] text-slate-500">Each need below counts toward the score; an unmet one caps the verdict.</p>
+      )}
       <div className="flex flex-wrap gap-2">
         {checks.map((c) => {
           const ui = REQ_UI[c.status];

@@ -278,19 +278,25 @@ class _RequirementChecks(BaseModel):
     checks: list[_RequirementCheck]
 
 
-async def requirement_checks(ctx: RunContext) -> list[dict]:
-    """Judge each need the user stated (search prompt + extra requirements) against the gathered evidence.
-    Python validates citations: met/unmet without real evidence becomes unknown."""
+async def requirement_checks(ctx: RunContext, reports: dict[str, AgentReport] | None = None, metrics: list[MetricResult] | None = None) -> list[dict]:
+    """Judge each need the user stated (search prompt + extra requirements) against the gathered evidence and
+    the agents' cited findings. Python validates citations: met/unmet without real evidence becomes unknown."""
     needs = [r for r in ctx.intent.get("requirements") or [] if r.strip()]
     if not needs:
         return []
     evidence = "\n".join(f"{e.id} [{e.tool}]: {e.summary}" for e in ctx.evidence.all())
+    findings = "\n".join(
+        f"- [{name}] {f.title}: {f.detail} (evidence {', '.join(f.evidence_ids) or 'none'})"
+        for name, r in (reports or {}).items() for f in r.findings
+    )
+    judged = "\n".join(f"- {m.name}: {m.status}. {m.rationale[:200]} (evidence {', '.join(m.evidence_ids) or 'none'})" for m in metrics or [] if m.status != "unknown")
     prompt = (
         f"User's request: \"{ctx.query}\"\n"
-        "For EACH stated requirement below, decide whether the selected property meets it, using ONLY the evidence "
-        "listed (cite ids). Use 'met' or 'unmet' only when evidence directly supports it; otherwise 'unknown' and say "
-        "how the user could verify it.\n"
-        f"Requirements: {json.dumps(needs)}\n\nEVIDENCE:\n{evidence}"
+        "For EACH stated requirement below, decide whether the selected property meets it. Use the evidence and the "
+        "agents' cited findings and metric judgments; cite evidence ids. Use 'met' or 'unmet' only when evidence "
+        "supports it (an agent finding counts if it cites evidence); otherwise 'unknown' and say how to verify it.\n"
+        f"Requirements: {json.dumps(needs)}\n\nAGENT FINDINGS:\n{findings or '(none)'}\n\nMETRIC JUDGMENTS:\n{judged or '(none)'}"
+        f"\n\nEVIDENCE:\n{evidence}"
     )
     valid = ctx.evidence.ids()
     try:
@@ -328,11 +334,15 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
         "costs": {"upfront": costs["upfront"], "monthly": costs["monthly_occupancy"]} if costs else None,
         "budget": costs.get("budget") if costs else None,
         "user_requirements": [{"requirement": c["requirement"], "status": c["status"], "why": c["rationale"]} for c in req_checks or []],
+        "verdict_caps": rec.get("caps", []),
     }
     prompt = (
         "You are the lead analyst. Write the final recommendation for the user from this scored analysis. "
-        "The headline must be specific to this property and business, in the form '<decisive strength(s)>, but <main risk or unknown>', in your own words. "
-        "Do not change the verdict or invent numbers; mention the 2-3 decisive factors and the most important thing to verify.\n"
+        "Judge it against what the user asked for: their request and stated requirements come first. "
+        "The headline must be specific to this property and business, in the form '<decisive strength(s)>, but <main risk or unknown>', in your own words; "
+        "if a stated requirement or budget is unmet, that IS the main risk and must be named. "
+        "In the explanation, say plainly which of the user's requirements are met, unmet or still unverified, then the 2-3 other decisive factors "
+        "and the most important thing to verify. Do not change the verdict (verdict_caps explains any cap) or invent numbers.\n"
         + json.dumps(digest, default=str)
     )
     try:
@@ -342,9 +352,11 @@ async def narrative(ctx: RunContext, rec: dict, metrics: list[MetricResult], rep
     except Exception as err:  # noqa: BLE001
         log.warning("narrative failed: %s", err)
         top = sorted([m for m in metrics if m.status != "unknown"], key=lambda m: -m.weight)[:3]
+        needs = " ".join(f"Your requirement '{c['requirement']}': {c['status']}." for c in req_checks or [])
+        caps = " ".join(rec.get("caps", []))
         return (
             f"{rec['label']} for a {ctx.business['label'].lower()} (score {rec['score']}, confidence {rec['confidence']}%).",
-            " ".join(f"{m.name}: {m.status}." for m in top) + " (Narrative generation unavailable; summary built from scored metrics.)",
+            " ".join(x for x in (caps, needs, " ".join(f"{m.name}: {m.status}." for m in top)) if x) + " (Narrative generation unavailable; summary built from scored metrics.)",
         )
 
 
@@ -513,23 +525,28 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
         if followups_run:
             metrics, conflicts = merge_metrics(ctx, reports, log_)
 
-        # ---- score (Python) + evidence quality
-        rec = scoring.overall(_scoring_rows(metrics))
-        if "evidence_quality" in ctx.business["metrics"]:
-            eq = scoring.evidence_quality_status(rec["confidence"])
-            metrics.append(MetricResult(id="evidence_quality", name="Evidence quality", category="common", group="Confidence", owner_agent="engine", weight=0, status=eq, score=float(scoring.STATUS_POINTS[eq]), why_it_matters=ctx.business["metrics"]["evidence_quality"]["why"], rationale=f"{rec['confidence']}% of the weighted metrics are backed by verified evidence.", evidence_ids=[]))
-        log_.emit("engine", "validation", f"Scored {len(metrics)} metrics in Python: score {rec['score']}, confidence {rec['confidence']}% → {rec['label']}")
-
+        # ---- the user's stated requirements and budgets, judged BEFORE scoring so they count
         cost_data = _evidence_data(ctx, "estimate_costs")[-1][1]
         cost_public = {k: v for k, v in cost_data.items() if not k.startswith("_")}
         checks = cost_engine.budget_checks(cost_data, ctx.intent, ctx.intent["business_type"])
         primary = ctx.intent.get("budget")
         cost_public["budget"] = next((c for c in checks if primary and c["period"] == primary["period"]), checks[0])
         cost_public["budgets"] = checks  # every stated budget (e.g. monthly and upfront), each checked
-        req_checks = await requirement_checks(ctx)
+        req_checks = await requirement_checks(ctx, reports, metrics)
         if req_checks:
             summary = ", ".join(f"{c['requirement']}: {c['status']}" for c in req_checks)
             log_.emit("engine", "validation", f"Checked your stated requirements — {summary}")
+
+        # ---- score (Python): metrics + your requirements, then caps for unmet needs / blown budgets
+        rec = scoring.overall(_scoring_rows(metrics) + scoring.requirement_rows(req_checks))
+        rec = scoring.cap_for_requirements(rec, req_checks, checks)
+        for reason in rec["caps"]:
+            log_.emit("engine", "validation", f"Verdict capped at '{rec['label']}': {reason}")
+        if "evidence_quality" in ctx.business["metrics"]:
+            eq = scoring.evidence_quality_status(rec["confidence"])
+            metrics.append(MetricResult(id="evidence_quality", name="Evidence quality", category="common", group="Confidence", owner_agent="engine", weight=0, status=eq, score=float(scoring.STATUS_POINTS[eq]), why_it_matters=ctx.business["metrics"]["evidence_quality"]["why"], rationale=f"{rec['confidence']}% of the weighted metrics are backed by verified evidence.", evidence_ids=[]))
+        log_.emit("engine", "validation", f"Scored {len(metrics)} metrics in Python: score {rec['score']}, confidence {rec['confidence']}% → {rec['label']}")
+
         log_.emit("engine", "thinking", "Writing the final recommendation from the scored results")
         headline, explanation = await narrative(ctx, rec, metrics, reports, cost_public, req_checks)
 
@@ -568,7 +585,7 @@ async def run_analysis(analysis_id: str, req: AnalysisRequest) -> None:
             "recommendation": {
                 "verdict": rec["verdict"], "label": rec["label"], "score": rec["score"], "confidence": rec["confidence"],
                 "headline": headline, "explanation": explanation, "key_reasons": key_reasons(metrics),
-                "dealbreakers": [f"{reg[b]['name']} is a blocker" for b in rec["blockers"]],
+                "dealbreakers": [f"{reg[b]['name']} is a blocker" for b in rec["blockers"]] + rec["caps"],
             },
             "metrics": [m.model_dump() for m in metrics],
             "agents": [reports[a].model_dump() for a in ("vexcel", "neighborhood", "compliance", "cost", "matterport") if a in reports],

@@ -173,15 +173,32 @@ COMMON_RULES = """How to investigate:
 5. Separate facts (directly in tool data) from inferences (your reasoning) and assumptions (gaps you filled).
 6. "Not detected in imagery" is NOT the same as "absent". Treat it as an open question and say how to verify it.
 7. If evidence is insufficient, use status "unknown", add the question to missing_information, and suggest how to resolve it in followups.
-8. Explain why each finding matters for the user's specific business, not in general.
+8. Explain why each finding matters for the user's specific business and stated requirements, not in general.
 9. Finish by returning your structured report (AgentOutput) with one metric assessment per assigned metric id."""
 
 
 QUICK_RULES = """
 QUICK MODE (the user asked for a fast answer):
 - The key evidence for your metrics is already gathered below the request (cite its E-ids). Call a tool only if
-  something critical for THIS business is still missing.
-- Keep the report brief: at most 3 findings, one-sentence details and rationales, at most 3 missing_information items."""
+  something critical for THIS business, or one of the user's stated requirements, is still missing evidence.
+- Keep the report brief: at most 3 findings plus one 'Requirement: ...' finding per stated requirement in your domain,
+  one-sentence details and rationales, at most 3 missing_information items."""
+
+
+def requirements_brief(ctx: RunContext) -> str:
+    """The user's stated needs and budgets as the investigation's primary goals (they are scored and can cap
+    the verdict, so agents must look for evidence on the ones in their domain)."""
+    needs = [r for r in ctx.intent.get("requirements") or [] if r.strip()]
+    budgets = [f"${b['amount']:,.0f} {b['period']}" for b in ctx.intent.get("budgets") or [] if b.get("amount")]
+    if not needs and not budgets:
+        return ""
+    lines = [f"- {n}" for n in needs] + [f"- budget: {b}" for b in budgets]
+    return (
+        "\nTHE USER'S STATED REQUIREMENTS (primary goals; each one is checked and an unmet one caps the verdict):\n"
+        + "\n".join(lines)
+        + "\nFor every requirement your tools can speak to, gather evidence and add a finding titled "
+        "'Requirement: <requirement>' that says met / not met / unclear, citing evidence ids. Skip ones outside your domain.\n"
+    )
 
 
 def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], budget: int) -> str:
@@ -191,21 +208,23 @@ def system_prompt(agent: str, role: str, ctx: RunContext, metrics: list[dict], b
         f"USER'S ORIGINAL REQUEST (keep it central to every judgment): \"{ctx.query}\"\n"
         f"Business: {ctx.business['label']}. Space need: ~{ctx.target_sqft:,} sq ft ({ctx.target_basis}).\n"
         + (f"Extra requirements from the user: {ctx.extra_requirements}\n" if ctx.extra_requirements and ctx.extra_requirements not in ctx.query else "")
-        + (f"Requirements mentioned: {', '.join(ctx.intent.get('requirements') or [])}\n" if ctx.intent.get("requirements") else "")
+        + requirements_brief(ctx)
         + f"\nYOUR METRICS (assess every one):\n{metrics_brief(metrics)}\n\n"
         + COMMON_RULES.format(budget=budget)
         + (QUICK_RULES if ctx.mode == "quick" else "")
     )
 
 
-async def _extract_output(transcript: str, metrics: list[dict], evidence: list[Evidence]) -> AgentOutput:
+async def _extract_output(transcript: str, metrics: list[dict], evidence: list[Evidence], request: str = "") -> AgentOutput:
     """Constrained-JSON fallback: turn an agent's notes + evidence into a valid AgentOutput."""
     ev = "\n".join(f"{e.id} [{e.tool}]: {e.summary}" for e in evidence) or "(no evidence collected)"
     prompt = (
-        "Convert this investigation into the required JSON report. Use ONLY the evidence listed; cite its ids. "
+        (f"The user's request and stated requirements (judge everything against these):\n{request}\n\n" if request else "")
+        + "Convert this investigation into the required JSON report. Use ONLY the evidence listed; cite its ids. "
         f"Give exactly one metric assessment for each of these metric ids: {', '.join(m['id'] for m in metrics)}. "
         "Use status 'unknown' where the evidence does not settle a metric. Include 2-5 findings (what matters most "
-        "for the user's business, each with why_it_matters and evidence ids) and list what the data cannot answer.\n\n"
+        "for the user's business, each with why_it_matters and evidence ids; one per stated requirement the evidence speaks to, "
+        "titled 'Requirement: <requirement>') and list what the data cannot answer.\n\n"
         f"EVIDENCE:\n{ev}\n\nINVESTIGATION NOTES:\n{transcript[-6000:]}"
     )
     llm = chat_model().with_structured_output(AgentOutput, method="json_schema")
@@ -325,7 +344,7 @@ async def run_agent(
         if evidence or messages:
             ctx.emit(agent, "validation", "No structured report returned; extracting one from the investigation (constrained JSON)", None)
             try:
-                output = await _extract_output(_transcript(messages), metrics, evidence)
+                output = await _extract_output(_transcript(messages), metrics, evidence, f"\"{ctx.query}\"\n" + requirements_brief(ctx))
                 status = "partial" if error else "completed"
             except AllProvidersFailedError:
                 raise

@@ -145,6 +145,7 @@ function SearchCompare({ id }: { id: string }) {
   const [selected, setSelected] = useState<string[] | null>(null);
   const [details, setDetails] = useState<Record<string, Analysis>>({});
   const [starting, setStarting] = useState<string | null>(null);
+  const [extra, setExtra] = useState<string | null>(null); // extra requirements for new analyses (editable)
 
   useEffect(() => {
     let alive = true;
@@ -192,6 +193,9 @@ function SearchCompare({ id }: { id: string }) {
   const latest = group.analyses[0];
   const toggle = (x: string) => setSelected((s) => (s!.includes(x) ? s!.filter((y) => y !== x) : s!.length >= MAX ? s : [...s!, x]));
   const cols = selected.map((x) => details[x]).filter((a): a is Analysis => !!a && !!a.result);
+  const extraValue = extra ?? latest?.extra_requirements ?? "";
+  // Buildings judged against different extra requirements aren't scored on the same terms.
+  const extrasUsed = Array.from(new Set(completed.map((a) => (a.extra_requirements ?? "").trim())));
 
   async function analyzeToo(propertyId: string) {
     if (!group) return;
@@ -202,7 +206,7 @@ function SearchCompare({ id }: { id: string }) {
         intent: group.intent,
         property_id: propertyId,
         radius_m: 500,
-        requirements: latest?.extra_requirements ?? undefined,
+        requirements: extraValue.trim() || undefined,
         mode: latest?.mode ?? "deep",
         search_id: group.legacy ? undefined : group.id,
       });
@@ -219,6 +223,11 @@ function SearchCompare({ id }: { id: string }) {
         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-300/80">{group.intent.business_label} · same search</div>
         <h1 className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-50">{group.query}</h1>
         {latest?.extra_requirements && <p className="mt-1 text-sm text-slate-400">Extra requirements: {latest.extra_requirements}</p>}
+        {extrasUsed.length > 1 && (
+          <p className="mt-1 text-xs text-amber-200/80">
+            These analyses used different extra requirements ({extrasUsed.map((e) => (e ? `“${e}”` : "none")).join(" vs ")}), so their scores are not judged on the same terms.
+          </p>
+        )}
       </div>
 
       <div className="glass rounded-2xl p-3">
@@ -268,6 +277,15 @@ function SearchCompare({ id }: { id: string }) {
           <div className="mb-2 px-1 text-[11px] font-semibold text-slate-300">
             More buildings from this search <span className="font-normal text-slate-500">· analyzed with the same request{latest?.mode === "quick" ? " (Quick)" : ""}</span>
           </div>
+          <label className="mb-2 block px-1 text-[11px] text-slate-400">
+            Extra requirements for these analyses
+            <input
+              value={extraValue}
+              onChange={(e) => setExtra(e.target.value)}
+              placeholder="e.g. budget $6k/month, outdoor patio"
+              className="mt-1 w-full rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-xs text-slate-100 ring-1 ring-inset ring-white/[0.08] placeholder:text-slate-600 focus:outline-none focus:ring-teal-300/40"
+            />
+          </label>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {remaining.slice(0, 12).map((c, i) => (
               <div key={c.id} className="flex items-center gap-3 rounded-xl bg-white/[0.03] p-2.5 ring-1 ring-inset ring-white/[0.06]">
