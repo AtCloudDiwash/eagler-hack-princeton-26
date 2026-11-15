@@ -140,7 +140,8 @@ def get_search(search_id: str) -> dict:
     if not search and not analyses:
         raise HTTPException(404, "Unknown search")
     if search:
-        candidates = [c for c, _ in filter(None, (db.get_property(pid) for pid in search["candidate_ids"]))]
+        scores = search.get("scores") or {}
+        candidates = [{**c, **scores.get(c["id"], {})} for c, _ in filter(None, (db.get_property(pid) for pid in search["candidate_ids"]))]
         query, intent, location = search["query"], search["intent"], search["location"]
     else:  # legacy group: no stored candidate list, only the analyzed buildings
         first = analyses[-1]

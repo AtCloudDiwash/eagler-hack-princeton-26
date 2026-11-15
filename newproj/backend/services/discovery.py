@@ -7,6 +7,8 @@ say so. CoStar listings are not connected in this build (noted in the response).
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
 
 import httpx
@@ -22,17 +24,19 @@ SEARCH_BOX_M = 1600
 DEMO_CENTER = (29.7560, -95.3650)
 
 
-def prescreen(c: dict, intent: Intent) -> tuple[int, list[str]]:
-    """Deterministic 0-100 pre-screen (type 35, size 35, roof 20, data 10). Not the agent analysis."""
+def prescreen(c: dict, intent: Intent, center: tuple[float, float] | None = None) -> tuple[int, list[str]]:
+    """Deterministic 0-100 pre-screen (type 30, size 30, closeness 15, roof 15, data 10). Not the agent analysis.
+    Size is scored on a curve around the target (a near-exact fit beats "big enough"), and closeness to the place
+    the user searched counts, so candidates don't all tie at ~95."""
     cfg = business(intent.business_type)
     target, _ = target_sqft(intent)
-    score, reasons = 0, []
+    score, reasons = 0.0, []
     btype = c.get("building_type")
     if btype in cfg["suitable_building_types"]:
-        score += 35
+        score += 30
         reasons.append(f"{btype.replace('_', ' ').title()} building suits a {cfg['label'].lower()}")
     elif btype in cfg.get("acceptable_building_types", []):
-        score += 15
+        score += 13
         reasons.append(f"{btype.replace('_', ' ')} building: possible ground-floor commercial, verify")
     elif btype:
         reasons.append(f"{btype.replace('_', ' ')} building is an unusual fit")
@@ -40,25 +44,54 @@ def prescreen(c: dict, intent: Intent) -> tuple[int, list[str]]:
     area = c.get("area_sqft")
     if area:
         ratio = area / target
-        if 0.85 <= ratio <= 3:
-            score += 35
+        if 1 <= ratio <= 2:
+            score += 30
             reasons.append(f"{area:,.0f} sq ft footprint fits ~{target:,} sq ft need")
-        elif ratio > 3:
-            score += 22
+        elif 0.85 <= ratio < 1 or 2 < ratio <= 4:
+            score += 25
+            reasons.append(f"{area:,.0f} sq ft footprint for ~{target:,} sq ft need" + (": would lease part of it" if ratio > 2 else ""))
+        elif ratio > 4:
+            score += 18 if ratio <= 15 else 12
             reasons.append(f"Large {area:,.0f} sq ft building: would lease a suite")
         else:
-            score += round(35 * max(0.0, ratio - 0.4) / 0.45)
+            score += 30 * max(0.0, ratio - 0.4) / 0.6
             reasons.append(f"{area:,.0f} sq ft may be small for ~{target:,} sq ft")
     cond = c.get("roof_condition")
     if isinstance(cond, (int, float)):
-        score += round(20 * (cond - 1) / 4)
+        score += 15 * (cond - 1) / 4
         if cond >= 4:
             reasons.append(f"Roof in {c.get('roof_condition_label', '').lower()} condition")
         elif cond <= 2:
             reasons.append(f"Roof condition {c.get('roof_condition_label', '').lower()} ({cond:g}/5)")
+    if center:
+        d = haversine_m(center[0], center[1], c["lat"], c["lon"])
+        score += 15 * max(0.0, 1 - d / 1200)
+        if d <= 400:
+            reasons.append(f"{d:,.0f} m from the place you searched")
     filled = sum(1 for k in ("building_type", "area_sqft", "roof_condition", "stories_est") if c.get(k) is not None)
-    score += round(10 * filled / 4)
-    return min(score, 100), reasons
+    score += 10 * filled / 4
+    return min(round(score), 100), reasons
+
+
+INNER_BOX_M = 700
+
+
+async def _vexcel_rings(lat: float, lon: float) -> list[dict]:
+    """Parcels around the point, closest first. Vexcel caps each request (total-records) and does not return
+    parcels nearest-first, so a single big box can miss the buildings next to the searched spot. An inner box
+    guarantees the close ones; the full box adds the rest. Both run in parallel."""
+    inner, outer = await asyncio.gather(
+        vexcel.property_extract(lat, lon, INNER_BOX_M, limit=200, calculated=True),
+        vexcel.property_extract(lat, lon, SEARCH_BOX_M, limit=300, calculated=True),
+    )
+    seen, merged = set(), []
+    for f in [*inner, *outer]:
+        fid = f.get("id") or json.dumps(f.get("geometry"), sort_keys=True)[:200]
+        if fid not in seen:
+            seen.add(fid)
+            merged.append(f)
+    c = lambda f: centroid(f.get("geometry")) or (90.0, 0.0)  # noqa: E731 - no geometry sorts last
+    return sorted(merged, key=lambda f: haversine_m(lat, lon, *c(f)))
 
 
 async def _osm_buildings(lat: float, lon: float) -> list[dict]:
@@ -118,19 +151,24 @@ async def search(query: str) -> SearchResponse:
     if not location_text:
         location_text = "Houston, TX"
         notes.append("No location in the query, so the search defaults to Houston, TX (inside Vexcel coverage).")
-    place = await external.geocode(location_text)
+    try:
+        place = await external.geocode(location_text)
+    except httpx.HTTPError as err:
+        return SearchResponse(intent=intent, location=None, data_mode="osm_only", candidates=[], notes=[f"The place lookup (OpenStreetMap) is unavailable right now ({type(err).__name__}). Try again in a few seconds."])
     if not place:
         return SearchResponse(intent=intent, location=None, data_mode="osm_only", candidates=[], notes=[f"Could not find “{location_text}”. Try adding the state."])
     lat, lon = place["lat"], place["lon"]
     covered = in_coverage(lat, lon)
-    location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered}
+    location = {"name": place["name"], "lat": lat, "lon": lon, "coverage": covered, "display_name": place.get("display_name")}
+    if place.get("biased_to") or (place.get("display_name") and place["name"].lower() not in location_text.lower()):
+        notes.append(f"“{location_text}” was matched to {', '.join((place.get('display_name') or place['name']).split(', ')[:3])}. Add the city if you meant somewhere else.")
 
     raws: dict[str, dict | None] = {}
     candidates: list[dict] = []
     data_mode = "osm_only"
     if settings.vexcel_api_key and covered:
         try:
-            features = await vexcel.property_extract(lat, lon, SEARCH_BOX_M, limit=300, calculated=True)
+            features = await _vexcel_rings(lat, lon)
             data_mode = "vexcel_live"
             for f in features:
                 c = vexcel.summarize_feature(f)
@@ -172,13 +210,15 @@ async def search(query: str) -> SearchResponse:
         seen_ids.add(c["id"])
         if c.get("building_type") and c["building_type"] not in allowed:
             continue
+        if (not c.get("lat") and not c.get("lon")) or (not c.get("building_type") and not c.get("area_sqft")):
+            continue  # no structure (empty lot / parking) or no geometry
         if c.get("_too_low"):
             continue  # roof under 8 ft: canopy/kiosk/shed rather than a leasable building
-        c["match_score"], c["match_reasons"] = prescreen(c, intent)
+        c["match_score"], c["match_reasons"] = prescreen(c, intent, (lat, lon))
         eligible.append(c)
     if data_mode != "osm_only":
         # Visual needs ("outdoor patio", "parking lot"...) re-rank by similarity in Vexcel imagery.
-        note = await visual.apply(eligible, intent, lat, lon, SEARCH_BOX_M)
+        note = await visual.apply(eligible, intent, lat, lon, SEARCH_BOX_M, query)
         if note:
             notes.append(note)
     scored = [Candidate(**c) for c in eligible]
@@ -188,5 +228,6 @@ async def search(query: str) -> SearchResponse:
         db.save_property(c.model_dump(), raws.get(c.id))
     notes.append("Listings/asking rents (CoStar) are not connected; candidates are existing buildings that suit the use, not confirmed vacancies.")
     search_id = uuid.uuid4().hex[:12]
-    db.save_search(search_id, query, intent.model_dump(), location, data_mode, [c.id for c in top])
+    db.save_search(search_id, query, intent.model_dump(), location, data_mode, [c.id for c in top],
+                   {c.id: {"match_score": c.match_score, "match_reasons": c.match_reasons} for c in top})
     return SearchResponse(intent=intent, location=location, data_mode=data_mode, candidates=top, notes=notes, search_id=search_id)

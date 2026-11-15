@@ -7,6 +7,7 @@ Results are cached in SQLite (OSM/Census data are openly licensed).
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Any
 
@@ -14,7 +15,7 @@ import httpx
 
 import db
 from config import place_groups, settings
-from services.geo import haversine_m
+from services.geo import COVERAGE, haversine_m, in_coverage
 
 HEADERS = {"User-Agent": settings.http_user_agent, "Accept-Language": "en"}
 _nominatim_lock = asyncio.Lock()
@@ -38,15 +39,44 @@ async def _nominatim(path: str, params: dict) -> Any:
         return res.json()
 
 
+_PLACEISH = {"neighbourhood", "suburb", "quarter", "city_district", "borough", "hamlet", "village", "town", "city",
+             "locality", "university", "college", "park", "district", "commercial", "retail", "residential"}
+_STATE_HINT = re.compile(r",|\b[A-Z]{2}\b|\b(?:texas|california)\b")  # case-sensitive: "TX", not "in"
+_ALIASES = [(re.compile(r"\bDTLA\b", re.I), "Downtown Los Angeles"), (re.compile(r"\bLA\b"), "Los Angeles"),
+            (re.compile(r"\b(?:HTX|H-Town)\b", re.I), "Houston")]
+
+
+def expand_aliases(text: str) -> str:
+    for pattern, full in _ALIASES:
+        text = pattern.sub(full, text)
+    return text
+
+
+def _hit(h: dict, text: str, biased_to: str | None = None) -> dict:
+    return {"name": h.get("display_name", text).split(",")[0], "display_name": h.get("display_name"), "lat": float(h["lat"]),
+            "lon": float(h["lon"]), "type": h.get("addresstype") or h.get("type"), "biased_to": biased_to}
+
+
 async def geocode(text: str) -> dict | None:
-    key = f"geocode:{text.lower().strip()}"
+    """Place name -> point. Ambiguous names ("Montrose", "the Heights", "Midtown") prefer the Vexcel-covered
+    metros (Houston, Los Angeles): an in-coverage match among the top results wins, and a bare name with no
+    state that only matched elsewhere is retried inside each covered metro (neighbourhood-like places only)."""
+    text = expand_aliases(text.strip())
+    key = f"geocode:v2:{text.lower()}"
     if (hit := db.cache_get(key, 7 * 86400)) is not None:
         return hit or None
-    hits = await _nominatim("search", {"q": text, "limit": 1, "countrycodes": "us", "addressdetails": 1})
-    result = None
-    if hits:
-        h = hits[0]
-        result = {"name": h.get("display_name", text).split(",")[0], "display_name": h.get("display_name"), "lat": float(h["lat"]), "lon": float(h["lon"]), "type": h.get("type")}
+    hits = await _nominatim("search", {"q": text, "limit": 5, "countrycodes": "us", "addressdetails": 1})
+    covered = [h for h in hits if in_coverage(float(h["lat"]), float(h["lon"]))]
+    result = _hit(covered[0], text) if covered else _hit(hits[0], text) if hits else None
+    top = hits[0] if hits else None
+    big_city = top is not None and (top.get("addresstype") in {"city", "state"} and float(top.get("importance") or 0) >= 0.6)
+    if not covered and not big_city and not _STATE_HINT.search(text):
+        for area in COVERAGE:
+            box = f"{area['west']},{area['north']},{area['east']},{area['south']}"
+            local = await _nominatim("search", {"q": text, "limit": 1, "countrycodes": "us", "viewbox": box, "bounded": 1, "addressdetails": 1})
+            if local and (local[0].get("addresstype") or local[0].get("type")) in _PLACEISH:
+                result = _hit(local[0], text, area["name"])
+                break
     db.cache_set(key, result or {})
     return result
 

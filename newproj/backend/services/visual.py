@@ -23,18 +23,20 @@ def config() -> dict:
     return load_yaml("visual_search.yaml")
 
 
-def visual_phrases(intent: Intent) -> list[tuple[str, str]]:
-    """(need, phrase) pairs for the visual needs in the request, de-duplicated by phrase, capped."""
+def visual_phrases(intent: Intent, query: str = "") -> list[tuple[str, str]]:
+    """(need, phrase) pairs for the visual needs in the request, de-duplicated by phrase, capped. The user's own
+    words are scanned too, so the visual ranking doesn't depend on how the LLM phrased the requirements."""
     cfg = config()
     out: list[tuple[str, str]] = []
     seen: set[str] = set()
-    for need in intent.requirements:
+    for need in [*intent.requirements, query]:
         low = need.lower()
         for keyword, phrase in cfg["phrases"].items():
             if keyword in low and phrase not in seen:
                 seen.add(phrase)
-                out.append((need, phrase))
-                break
+                out.append((need if need != query else keyword, phrase))
+                if need != query:
+                    break
     return out[: cfg["max_phrases"]]
 
 
@@ -94,9 +96,9 @@ def percentiles(scores: list[float]) -> list[int]:
     return out
 
 
-async def apply(candidates: list[dict], intent: Intent, lat: float, lon: float, box_m: float) -> str | None:
+async def apply(candidates: list[dict], intent: Intent, lat: float, lon: float, box_m: float, query: str = "") -> str | None:
     """Blend visual similarity into each candidate's match_score in place. Returns a note for the UI."""
-    phrases = visual_phrases(intent)
+    phrases = visual_phrases(intent, query)
     weight = float(config()["weight"])
     if not phrases or weight <= 0 or not candidates:
         return None

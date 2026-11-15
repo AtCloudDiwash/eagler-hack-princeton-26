@@ -140,12 +140,15 @@ export default function DiscoveryPage() {
     setNeighborhood(null);
     try {
       const r = await api.search(q, ctrl.signal);
-      setResult(r);
+      setResult({ ...r, query: q });
       setFitKey(`${q}-${Date.now()}`);
       setRiseKey(`${q}-${Date.now()}`);
       if (r.candidates.length === 0 && r.location) setFocus({ lat: r.location.lat, lon: r.location.lon, zoom: 14.5, key: `loc-${Date.now()}` });
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setSearchError((e as Error).message);
+      if ((e as Error).name !== "AbortError") {
+        setSearchError((e as Error).message);
+        setResult(null); // don't leave the previous search's buildings on screen as if they answered this one
+      }
     } finally {
       if (searchAbort.current === ctrl) setSearching(false);
     }
@@ -186,7 +189,8 @@ export default function DiscoveryPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const { id } = await api.startAnalysis({ query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined, mode, search_id: result.search_id ?? undefined });
+      // The query that produced these results (the box may have been edited since), so query and intent match.
+      const { id } = await api.startAnalysis({ query: result.query ?? query, intent: result.intent, property_id: selected.id, radius_m: radius, requirements: requirements.trim() || undefined, mode, search_id: result.search_id ?? undefined });
       router.push(`/analysis/${id}`);
     } catch (e) {
       setAnalyzeError((e as Error).message);

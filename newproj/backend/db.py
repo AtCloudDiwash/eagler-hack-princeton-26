@@ -62,6 +62,9 @@ def conn() -> sqlite3.Connection:
         for col, ddl in (("mode", "TEXT NOT NULL DEFAULT 'deep'"), ("search_id", "TEXT"), ("base_query", "TEXT"), ("extra_requirements", "TEXT")):
             if col not in cols:
                 _conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {ddl}")
+        # Per-search match scores (the shared properties row is overwritten by every search of the same area).
+        if "scores" not in {r[1] for r in _conn.execute("PRAGMA table_info(searches)")}:
+            _conn.execute("ALTER TABLE searches ADD COLUMN scores TEXT")
         _conn.commit()
     return _conn
 
@@ -118,10 +121,11 @@ def create_analysis(analysis_id: str, query: str, intent: dict, prop: dict, radi
     )
 
 
-def save_search(search_id: str, query: str, intent: dict, location: dict | None, data_mode: str, candidate_ids: list[str]) -> None:
+def save_search(search_id: str, query: str, intent: dict, location: dict | None, data_mode: str, candidate_ids: list[str], scores: dict | None = None) -> None:
+    """scores: {candidate_id: {"match_score", "match_reasons"}} for THIS search."""
     _exec(
-        "INSERT OR REPLACE INTO searches (id, query, intent, location, data_mode, candidate_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (search_id, query, json.dumps(intent), json.dumps(location), data_mode, json.dumps(candidate_ids), datetime.now(timezone.utc).isoformat()),
+        "INSERT OR REPLACE INTO searches (id, query, intent, location, data_mode, candidate_ids, created_at, scores) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (search_id, query, json.dumps(intent), json.dumps(location), data_mode, json.dumps(candidate_ids), datetime.now(timezone.utc).isoformat(), json.dumps(scores or {})),
     )
 
 
@@ -132,6 +136,7 @@ def get_search(search_id: str) -> dict | None:
     return {
         "id": row["id"], "query": row["query"], "intent": json.loads(row["intent"]), "location": json.loads(row["location"] or "null"),
         "data_mode": row["data_mode"], "candidate_ids": json.loads(row["candidate_ids"]), "created_at": row["created_at"],
+        "scores": json.loads(row["scores"] or "{}") if "scores" in row.keys() else {},
     }
 
 

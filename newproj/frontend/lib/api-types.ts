@@ -74,6 +74,7 @@ export type SearchResponse = {
   candidates: Candidate[];
   notes: string[]; // human-readable caveats ("Outside Vexcel coverage: footprints from OpenStreetMap")
   search_id?: string | null; // groups analyses of buildings from this search (Compare)
+  query?: string; // client-side: the exact text that produced this result (sent with Analyze)
 };
 
 export type KeyFact = { group: string; label: string; value: string; note?: string | null };

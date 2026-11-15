@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+import db
 from config import business_types
 from schemas import Budget, Intent
 from services.llm import chat_model
@@ -85,24 +86,67 @@ def merge_budgets(earlier: list[Budget], later: list[Budget]) -> list[Budget]:
     return list(merged.values())
 
 
+_LOC_PREP = re.compile(r"\b(?:in|near|around|at|by)\s+", re.I)
+_LOC_STOP = re.compile(
+    r"[.?!;]|\s+(?:in|near|around|at|by)\s+"
+    r"|,?\s+(?:with|for|that|which|and|under|below|budget|max|within|where|so|but|need|needs|want|wants|having|has|have|ideally|preferably)\b"
+    r"|,?\s*\$|\s+\d[\d,]*\s*(?:[- ]?seat|seater|sq|sf\b|square|k\b|people|employees|staff)",
+    re.I,
+)
+
+
+def parse_location(query: str) -> str | None:
+    """The place in the query: the text after in/at/near/around, cut at the next clause. With several
+    candidates ("interested in opening a bakery in Pasadena", "restaurant in houston near offices") a capitalized
+    one wins, then one after in/at (near/around usually describe a need), then the last one."""
+    cands = []
+    for i, m in enumerate(_LOC_PREP.finditer(query)):
+        rest = query[m.end():]
+        stop = _LOC_STOP.search(rest)
+        text = (rest[: stop.start()] if stop else rest).strip(" ,.'-")
+        if 2 <= len(text) <= 60 and (text[0].isalpha() or text[0].isdigit()):
+            in_at = m.group(0).strip().lower() in {"in", "at"}
+            cands.append(((text[0].isupper() or text[0].isdigit()), in_at, i, text))
+    return max(cands)[3] if cands else None
+
+
+_NEED_SPLIT = re.compile(r"[,;\n]|\.\s|\s+(?:and|also|plus|as well as)\s+", re.I)
+_NEED_FILLER = re.compile(r"^(?:and|also|we|i|it|the place|the space|space|must|should|would|need(?:s)? to|need(?:s)?|want(?:s)?|have to|has to|like|prefer(?:ably)?|ideally|must have|should have|have|got|a|an|to be|be|having|with)\b\s*", re.I)
+
+
+def split_needs(text: str) -> list[str]:
+    """Free-text extra requirements -> short need phrases (used when the LLM is unavailable), e.g.
+    "need a grease trap, near offices and walkable" -> ["grease trap", "near offices", "walkable"]. Budgets are
+    parsed separately and skipped here."""
+    out = []
+    for part in _NEED_SPLIT.split(text or ""):
+        phrase = part.strip(" .!?:-")
+        for _ in range(4):
+            phrase = _NEED_FILLER.sub("", phrase).strip(" .!?:-")
+        if not phrase or "$" in phrase or parse_budgets(phrase) or len(phrase) < 3:
+            continue
+        out.append(phrase[:60].lower())
+    return out
+
+
 def parse_rules(query: str) -> Intent:
     q = query.lower()
     types = business_types()
     best, best_pos = "restaurant", 10**9
     for key, cfg in types.items():
         for kw in cfg["keywords"]:
-            m = re.search(rf"\b{re.escape(kw.lower())}", q)
+            m = re.search(rf"\b{re.escape(kw.lower())}(?:s|es)?\b", q)
             if m and m.start() < best_pos:
                 best, best_pos = key, m.start()
     seats = re.search(r"(\d{1,4})\s*[- ]?\s*(?:seat|seater|cover)", q)
     sqft = re.search(r"(\d[\d,]{2,7})\s*(?:sq\.?\s*ft|sf\b|square\s*feet|sqft)", q)
-    loc = re.search(r"\b(?:in|near|around|at)\s+([A-Za-z][A-Za-z .,'-]{1,60}?)(?:[.?!]|$|\s+(?:with|for|that|which|and|under|below)\b)", query)
+    loc = parse_location(query)
     reqs = sorted({v for k, v in REQUIREMENT_WORDS.items() if k in q})
     budgets = parse_budgets(query)
     return Intent(
         business_type=best,
         business_label=types[best]["label"],
-        location_text=loc.group(1).strip(" ,.") if loc else None,
+        location_text=loc,
         seats=int(seats.group(1)) if seats else None,
         sqft=int(sqft.group(1).replace(",", "")) if sqft else None,
         requirements=reqs,
@@ -122,7 +166,22 @@ class _LLMIntent(BaseModel):
     budget_period: Literal["monthly", "upfront", "annual"] | None = Field(default=None, description="monthly (rent/occupancy per month), annual, or upfront (one-time build-out/total)")
 
 
+_PARSE_CACHE_S = 24 * 3600
+
+
 async def parse(query: str) -> Intent:
+    """Rules + LLM. A successful LLM parse is cached per normalized query, so re-running a search gives the same
+    intent (and skips the LLM call)."""
+    key = "intent:v2:" + " ".join(query.lower().split())
+    if hit := db.cache_get(key, _PARSE_CACHE_S):
+        return Intent(**hit)
+    intent = await _parse_uncached(query)
+    if intent.parser == "llm":
+        db.cache_set(key, intent.model_dump())
+    return intent
+
+
+async def _parse_uncached(query: str) -> Intent:
     rules = parse_rules(query)
     types = business_types()
     allowed = ", ".join(f"{k} ({v['label']})" for k, v in types.items())
@@ -148,7 +207,7 @@ async def parse(query: str) -> Intent:
         location_text=out.location or rules.location_text,
         seats=out.seats or rules.seats,
         sqft=out.sqft or rules.sqft,
-        requirements=_dedupe_requirements([*rules.requirements, *[r.strip() for r in out.requirements if r.strip()][:6]]),
+        requirements=_dedupe_requirements([*rules.requirements, *[r.strip() for r in out.requirements if r.strip()][:12]]),
         budget=(llm_budget := (Budget(amount=out.budget_amount, period=out.budget_period or "upfront", text=rules.budget.text if rules.budget else "")
                                if out.budget_amount and out.budget_amount >= 100 else None)) or rules.budget,
         budgets=merge_budgets([llm_budget] if llm_budget and llm_budget.period not in {b.period for b in rules.budgets} else [], rules.budgets),
@@ -184,7 +243,8 @@ async def refine(intent: Intent, query: str, extra: str | None) -> Intent:
         "sqft": extra_rules.sqft or (full.sqft if from_llm and full.sqft != intent.sqft else None) or intent.sqft,
         "budget": budget,
         "budgets": budgets,
-        "requirements": _dedupe_requirements([*intent.requirements, *full.requirements, *extra_rules.requirements]),
+        "requirements": _dedupe_requirements([*intent.requirements, *full.requirements, *extra_rules.requirements,
+                                              *([] if from_llm else split_needs(extra))]),
         "parser": "llm" if from_llm else intent.parser,
     })
 

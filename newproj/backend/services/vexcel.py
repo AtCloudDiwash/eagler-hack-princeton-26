@@ -40,8 +40,11 @@ async def _get(path: str, params: dict[str, Any], expect_json: bool = True) -> A
     hit = _mem_cache.get(key)
     if hit and time.time() - hit[0] < _CACHE_TTL_S:
         return hit[1]
-    async with httpx.AsyncClient(timeout=20) as client:
-        res = await client.get(f"{settings.vexcel_base_url}{path}", params=params, headers={"X-API-KEY": settings.vexcel_api_key or ""})
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            res = await client.get(f"{settings.vexcel_base_url}{path}", params=params, headers={"X-API-KEY": settings.vexcel_api_key or ""})
+    except httpx.HTTPError as err:  # timeouts / connection errors: callers fall back like any other Vexcel failure
+        raise VexcelError(0, f"request failed ({type(err).__name__})") from err
     if res.status_code != 200:
         try:
             message = res.json().get("message") or res.text[:200]
@@ -93,7 +96,13 @@ async def property_extract(lat: float, lon: float, box_m: float, limit: int = 10
     if calculated:
         params["include"] = "precomputed,calculated"
     data = await _get("/property/extract", params)
-    return data.get("features", [])
+    # Vexcel does not return parcels nearest-first; sort so callers that truncate keep the closest ones.
+    return sorted(data.get("features", []), key=lambda f: _feature_distance(lat, lon, f))
+
+
+def _feature_distance(lat: float, lon: float, feature: dict) -> float:
+    c = centroid(feature.get("geometry"))
+    return haversine_m(lat, lon, *c) if c else float("inf")
 
 
 # ---------------------------------------------------------------- interpretation helpers
@@ -114,6 +123,13 @@ def stories_estimate(structure: dict | None) -> int | None:
     if isinstance(height, (int, float)) and height >= 8:  # lower values are canopies or bad elevation data
         return max(1, round(height / 13))
     return None
+
+
+def _too_low(s: dict) -> bool:
+    """Canopy / kiosk / shed: roof under 8 ft on a small footprint. Large footprints with a low or negative height
+    are real buildings with bad elevation data, so they are kept (stories then stay unknown)."""
+    height, area = s.get("roof-characteristics.height"), s.get("footprint.area")
+    return isinstance(height, (int, float)) and height < 8 and not (isinstance(area, (int, float)) and area >= 2500)
 
 
 def summarize_feature(feature: dict, source: str = "vexcel") -> dict:
@@ -137,7 +153,7 @@ def summarize_feature(feature: dict, source: str = "vexcel") -> dict:
         "stories_est": stories_estimate(s),
         "source": source,
         "address": None,
-        **({"_too_low": True} if isinstance(s.get("roof-characteristics.height"), (int, float)) and s["roof-characteristics.height"] < 8 else {}),
+        **({"_too_low": True} if _too_low(s) else {}),
     }
 
 
